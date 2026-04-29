@@ -1,4 +1,4 @@
-import { $ } from './utils.js';
+import { $, $$ } from './utils.js';
 import { resetFilters } from './filters.js';
 import { renderChart } from './chart.js';
 
