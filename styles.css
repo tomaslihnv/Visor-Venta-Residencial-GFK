@@ -28,12 +28,12 @@ code { background: #eef2ff; padding: 1px 5px; border-radius: 4px; font-size: 0.9
 }
 .topbar-actions { display: flex; align-items: center; gap: 12px; }
 .file-btn {
-  background: #3b82f6; color: #fff;
+  background: #22c55e; color: #fff;
   padding: 8px 14px; border-radius: 6px;
   font-weight: 500; font-size: 13px;
   cursor: pointer; transition: background 0.15s;
 }
-.file-btn:hover { background: #2563eb; }
+.file-btn:hover { background: #16a34a; }
 .file-name { font-size: 12px; color: #94a3b8; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ghost-btn {
   background: transparent; color: #cbd5e1;
