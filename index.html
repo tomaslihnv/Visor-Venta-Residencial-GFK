@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visor Venta Residencial</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <h1>Visor Venta Residencial</h1>
+    </div>
+    <div class="topbar-actions">
+      <label class="file-btn">
+        <input type="file" id="fileInput" accept=".xlsx,.xls" hidden />
+        <span>Cargar Excel</span>
+      </label>
+      <span id="fileName" class="file-name"></span>
+      <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2>Filtros</h2>
+        <span id="filterCount" class="badge">0 / 0</span>
+      </div>
+      <div id="filtersContainer" class="filters">
+        <p class="hint">Cargá un Excel para empezar.</p>
+      </div>
+    </aside>
+
+    <section class="content">
+      <div id="dropzone" class="dropzone">
+        <div class="dropzone-inner">
+          <h2>Arrastrá tu Excel acá</h2>
+          <p>o usá el botón <strong>Cargar Excel</strong>. Se lee la hoja <code>Datos</code>.</p>
+        </div>
+      </div>
+
+      <div id="dashboard" class="dashboard hidden">
+        <div class="kpis" id="kpis"></div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="tabla">Tabla</button>
+          <button class="tab" data-tab="grafico">Gráfico</button>
+          <button class="tab" data-tab="mapa">Mapa</button>
+        </div>
+
+        <!-- TAB: TABLA -->
+        <div class="tab-panel active" data-panel="tabla">
+          <div class="panel-toolbar">
+            <input type="text" id="searchInput" placeholder="Buscar en la tabla..." />
+            <div class="toolbar-right">
+              <span id="rowCount" class="muted"></span>
+              <button id="exportCsvBtn" class="primary-btn">Exportar CSV</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="dataTable">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination">
+            <button id="prevPage">‹ Anterior</button>
+            <span id="pageInfo"></span>
+            <button id="nextPage">Siguiente ›</button>
+            <select id="pageSize">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- TAB: GRAFICO -->
+        <div class="tab-panel" data-panel="grafico">
+          <div class="chart-controls">
+            <div class="ctrl">
+              <label>Tipo</label>
+              <select id="chartType">
+                <option value="bar">Barras</option>
+                <option value="line">Líneas</option>
+                <option value="scatter">Dispersión</option>
+                <option value="pie">Torta</option>
+              </select>
+            </div>
+            <div class="ctrl">
+              <label>Eje X</label>
+              <select id="chartX"></select>
+            </div>
+            <div class="ctrl">
+              <label>Eje Y</label>
+              <select id="chartY"></select>
+            </div>
+            <div class="ctrl">
+              <label>Agregación</label>
+              <select id="chartAgg">
+                <option value="count">Conteo</option>
+                <option value="sum">Suma</option>
+                <option value="avg" selected>Promedio</option>
+                <option value="min">Mínimo</option>
+                <option value="max">Máximo</option>
+                <option value="median">Mediana</option>
+              </select>
+            </div>
+            <div class="ctrl">
+              <label>Agrupar por (color)</label>
+              <select id="chartGroup">
+                <option value="">— Ninguno —</option>
+              </select>
+            </div>
+            <div class="ctrl">
+              <label>Orden</label>
+              <select id="chartSort">
+                <option value="value-desc">Valor (desc)</option>
+                <option value="value-asc">Valor (asc)</option>
+                <option value="label-asc">Etiqueta A-Z</option>
+                <option value="label-desc">Etiqueta Z-A</option>
+              </select>
+            </div>
+            <button id="exportPngBtn" class="primary-btn">Exportar PNG</button>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="mainChart"></canvas>
+          </div>
+        </div>
+
+        <!-- TAB: MAPA -->
+        <div class="tab-panel" data-panel="mapa">
+          <div class="map-placeholder">
+            <h3>Mapa</h3>
+            <p>Aún no detecté columnas de latitud/longitud en tus datos. Cuando incluyas <code>lat</code> y <code>lng</code> (o <code>latitud</code> / <code>longitud</code>), los pinches aparecen acá automáticamente.</p>
+          </div>
+          <div id="map" class="map hidden"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Libs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <script src="script.js"></script>
+</body>
+</html>
