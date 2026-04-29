@@ -113,6 +113,36 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   padding: 16px; position: relative;
 }
 
+/* ========== Distribución — marcadores ========== */
+.distrib-marker-group { min-width: 180px; }
+.marker-add { display: flex; gap: 6px; align-items: center; }
+.marker-add input[type="number"] {
+  width: 90px; padding: 5px 8px;
+  border: 1px solid #d1d5db; border-radius: 5px; font-size: 13px;
+}
+.marker-btn {
+  padding: 5px 10px; border-radius: 5px; border: none;
+  font-size: 16px; font-weight: 700; cursor: pointer; line-height: 1;
+}
+.pct-btn   { background: #fee2e2; color: #b91c1c; }
+.pct-btn:hover   { background: #fecaca; }
+.price-btn { background: #dcfce7; color: #15803d; }
+.price-btn:hover { background: #bbf7d0; }
+.marker-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; min-height: 24px; }
+.marker-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 12px;
+  font-size: 12px; font-weight: 600;
+}
+.pct-tag   { background: #fee2e2; color: #b91c1c; }
+.price-tag { background: #dcfce7; color: #15803d; }
+.marker-tag button {
+  background: none; border: none; cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 0;
+  color: inherit; opacity: 0.7;
+}
+.marker-tag button:hover { opacity: 1; }
+
 /* ========== Mapa ========== */
 .geocode-status {
   font-size: 12px; padding: 6px 12px; border-radius: 6px;

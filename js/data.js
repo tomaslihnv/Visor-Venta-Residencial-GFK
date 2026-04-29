@@ -83,7 +83,10 @@ function onDataLoaded(rows) {
 
   // Importar y llamar funciones de otros módulos
   import('./filters.js').then(({ buildFilters }) => buildFilters());
-  import('./chart.js').then(({ populateChartSelectors }) => populateChartSelectors());
+  import('./chart.js').then(({ populateChartSelectors, populateDistribSelectors }) => {
+    populateChartSelectors();
+    populateDistribSelectors();
+  });
   import('./filters.js').then(({ applyFilters }) => applyFilters());
 
   // Geocodificar direcciones si hay columna

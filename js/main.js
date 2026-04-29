@@ -13,6 +13,9 @@ $$('.tab').forEach(tab => {
     tab.classList.add('active');
     $(`.tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
     if (tab.dataset.tab === 'grafico') renderChart();
+    if (tab.dataset.tab === 'distribucion') {
+      import('./chart.js').then(({ renderDistrib }) => renderDistrib());
+    }
     if (tab.dataset.tab === 'mapa') {
       import('./map.js').then(({ renderMap }) => renderMap());
     }

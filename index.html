@@ -48,6 +48,7 @@
         <div class="tabs">
           <button class="tab active" data-tab="tabla">Tabla</button>
           <button class="tab" data-tab="grafico">Gráfico</button>
+          <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="mapa">Mapa</button>
         </div>
 
@@ -132,6 +133,41 @@
           </div>
         </div>
 
+        <!-- TAB: DISTRIBUCIÓN -->
+        <div class="tab-panel" data-panel="distribucion">
+          <div class="chart-controls">
+            <div class="ctrl">
+              <label>Columna</label>
+              <select id="distribCol"></select>
+            </div>
+            <div class="ctrl">
+              <label>Agrupar por</label>
+              <select id="distribGroup">
+                <option value="">— Ninguno —</option>
+              </select>
+            </div>
+            <div class="ctrl distrib-marker-group">
+              <label>Marcar percentil</label>
+              <div class="marker-add">
+                <input type="number" id="distribPctInput" min="1" max="99" step="1" placeholder="ej: 50">
+                <button id="distribAddPct" class="marker-btn pct-btn">+</button>
+              </div>
+              <div id="distribPctTags" class="marker-tags"></div>
+            </div>
+            <div class="ctrl distrib-marker-group">
+              <label>Marcar precio (UF)</label>
+              <div class="marker-add">
+                <input type="number" id="distribPriceInput" min="0" step="100" placeholder="ej: 4500">
+                <button id="distribAddPrice" class="marker-btn price-btn">+</button>
+              </div>
+              <div id="distribPriceTags" class="marker-tags"></div>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="distribChart"></canvas>
+          </div>
+        </div>
+
         <!-- TAB: MAPA -->
         <div class="tab-panel" data-panel="mapa">
           <div id="geocodeStatus" class="geocode-status"></div>
@@ -148,6 +184,7 @@
   <!-- Libs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 

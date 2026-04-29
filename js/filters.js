@@ -111,9 +111,11 @@ export function applyFilters() {
 
   // Llamar a render de otros módulos
   import('./table.js').then(({ renderTable }) => renderTable());
-  import('./chart.js').then(({ renderKpis, renderChart }) => {
+  import('./chart.js').then(({ renderKpis, renderChart, renderDistrib }) => {
     renderKpis();
-    renderChart();
+    const activeTab = $('.tab.active')?.dataset.tab;
+    if (activeTab === 'grafico') renderChart();
+    if (activeTab === 'distribucion') renderDistrib();
   });
 
   // Renderizar mapa si la tab está activa
