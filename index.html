@@ -136,7 +136,7 @@
         <div class="tab-panel" data-panel="mapa">
           <div class="map-placeholder">
             <h3>Mapa</h3>
-            <p>Aún no detecté columnas de latitud/longitud en tus datos. Cuando incluyas <code>lat</code> y <code>lng</code> (o <code>latitud</code> / <code>longitud</code>), los pinches aparecen acá automáticamente.</p>
+            <p>Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada <code>Dirección</code> (o similar), los proyectos aparecerán automáticamente en el mapa.</p>
           </div>
           <div id="map" class="map hidden"></div>
         </div>
@@ -150,6 +150,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
-  <script src="script.js"></script>
+  <!-- Módulos JS -->
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

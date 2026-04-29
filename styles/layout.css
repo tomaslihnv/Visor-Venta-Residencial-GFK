@@ -1,0 +1,80 @@
+/* ========== Layout ========== */
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: calc(100vh - 53px);
+  overflow: hidden;
+}
+.sidebar {
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+  padding: 16px;
+}
+.sidebar-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.sidebar-header h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+.badge {
+  background: #eff6ff; color: #1d4ed8;
+  padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600;
+}
+.filters .hint { color: #9ca3af; font-style: italic; font-size: 13px; }
+
+.filter-group {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #e5e7eb;
+}
+.filter-group:last-child { border-bottom: none; }
+.filter-group label.title {
+  display: block; font-size: 12px; font-weight: 600;
+  color: #374151; margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.filter-group select,
+.filter-group input[type="text"],
+.filter-group input[type="number"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 13px;
+  background: #fff;
+}
+.filter-group .multi {
+  max-height: 140px; overflow-y: auto;
+  border: 1px solid #d1d5db; border-radius: 5px;
+  padding: 6px; background: #fff;
+}
+.filter-group .multi label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 2px 0; cursor: pointer;
+}
+.filter-group .multi label:hover { color: #2563eb; }
+.range-row { display: flex; gap: 6px; align-items: center; }
+.range-row input { flex: 1; min-width: 0; }
+.range-row span { font-size: 11px; color: #9ca3af; }
+
+/* ========== Content ========== */
+.content {
+  overflow-y: auto;
+  padding: 20px;
+}
+.dropzone {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  transition: all 0.2s;
+}
+.dropzone.dragover { border-color: #3b82f6; background: #eff6ff; }
+.dropzone-inner { text-align: center; color: #64748b; }
+.dropzone-inner h2 { font-size: 22px; margin-bottom: 8px; color: #334155; }
+
+.hidden { display: none !important; }
