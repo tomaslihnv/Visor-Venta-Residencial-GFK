@@ -2,15 +2,16 @@
 .dashboard { display: flex; flex-direction: column; gap: 16px; height: 100%; }
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
 }
 .kpi-card {
   background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 .kpi-card .label { font-size: 11px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.05em; }
-.kpi-card .value { font-size: 22px; font-weight: 600; color: #0f172a; margin-top: 4px; }
+.kpi-card .label .keep-case { text-transform: none; }
+.kpi-card .value { font-size: 18px; font-weight: 600; color: #0f172a; margin-top: 4px; }
 .kpi-card .sub { font-size: 11px; color: #9ca3af; margin-top: 2px; }
 
 /* ========== Tabs ========== */
@@ -145,10 +146,61 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ========== Mapa ========== */
 .map-wrapper {
-  flex: 1; display: flex; flex-direction: column; gap: 0;
+  flex: 1; display: flex; flex-direction: row; gap: 0;
   min-height: 0; border-radius: 8px; overflow: hidden;
   border: 1px solid #e5e7eb;
 }
+.map-main {
+  flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+}
+
+/* Panel de ranking derecho */
+/* Resizer drag handle */
+.map-ranking-resizer {
+  width: 5px; flex-shrink: 0;
+  background: #e5e7eb;
+  cursor: col-resize;
+  transition: background 0.15s;
+  position: relative;
+}
+.map-ranking-resizer:hover,
+.map-ranking-resizer.dragging { background: #3b82f6; }
+
+.map-ranking {
+  width: 250px; flex-shrink: 0;
+  background: #fff;
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+  font-family: inherit;
+}
+.map-ranking-title {
+  padding: 10px 12px;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: #1e3a5f;
+  border-bottom: 2px solid #1e3a5f;
+  background: #fff;
+  position: sticky; top: 0; z-index: 1;
+  flex-shrink: 0;
+}
+.map-ranking-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.map-ranking-item:last-child { border-bottom: none; }
+.rk-pos {
+  font-size: 10px; font-weight: 700; color: #9ca3af;
+  float: right; margin-top: 1px;
+}
+.rk-name { font-size: 12px; font-weight: 600; color: #0f172a; }
+.rk-prop { font-size: 11px; color: #6b7280; margin-top: 1px; }
+.rk-metrics {
+  display: flex; flex-wrap: wrap; gap: 4px 10px;
+  margin-top: 5px;
+}
+.rk-metric { font-size: 11px; color: #475569; }
+.rk-metric span { color: #9ca3af; font-size: 10px; }
+.rk-ufm2 { font-weight: 700; color: #1e3a5f !important; }
 .map-wrapper.dark-mode {
   background: #0f172a;
   border-color: rgba(148, 163, 184, 0.28);

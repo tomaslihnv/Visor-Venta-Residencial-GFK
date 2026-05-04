@@ -192,11 +192,15 @@
             <p>Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada <code>Dirección</code> (o similar), los proyectos aparecerán automáticamente en el mapa.</p>
           </div>
           <div id="mapWrapper" class="map-wrapper hidden">
-            <div class="map-toolbar">
-              <button class="map-mode-btn active" data-mode="general">General</button>
-              <button class="map-mode-btn" data-mode="precio">De calor</button>
+            <div class="map-main">
+              <div class="map-toolbar">
+                <button class="map-mode-btn active" data-mode="general">General</button>
+                <button class="map-mode-btn" data-mode="precio">De calor</button>
+              </div>
+              <div id="map" class="map"></div>
             </div>
-            <div id="map" class="map"></div>
+            <div id="mapRankingResizer" class="map-ranking-resizer"></div>
+            <div id="mapRanking" class="map-ranking"></div>
           </div>
         </div>
       </div>

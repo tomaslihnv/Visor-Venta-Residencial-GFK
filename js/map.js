@@ -108,8 +108,43 @@ let mapInitialized = false;
 let legendControl = null;
 let countControl = null;
 
+function initRankingResize() {
+  const resizer = document.getElementById('mapRankingResizer');
+  const ranking = document.getElementById('mapRanking');
+  if (!resizer || !ranking) return;
+
+  let startX, startWidth;
+
+  resizer.addEventListener('mousedown', e => {
+    startX     = e.clientX;
+    startWidth = ranking.offsetWidth;
+    resizer.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    const onMove = e => {
+      const newWidth = Math.max(180, Math.min(680, startWidth + (startX - e.clientX)));
+      ranking.style.width = newWidth + 'px';
+      if (leafletMap) leafletMap.invalidateSize();
+    };
+
+    const onUp = () => {
+      resizer.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  });
+}
+
 function initLeafletMap() {
   leafletMap = L.map('map');
+  initRankingResize();
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
     maxZoom: 19,
@@ -276,6 +311,67 @@ export function renderMap() {
     mapInitialized = true;
   }
   setTimeout(() => leafletMap.invalidateSize(), 150);
+
+  renderRanking();
+}
+
+// ============== Ranking lateral ==============
+function renderRanking() {
+  const el = document.getElementById('mapRanking');
+  if (!el) return;
+
+  const edifCol   = state.columns.find(c => ['edificio', 'proyecto', 'building'].some(k => norm(c.name).includes(k)))?.name;
+  const propCol   = state.columns.find(c => ['propietario', 'owner', 'inmobiliaria'].some(k => norm(c.name).includes(k)))?.name;
+  const supCol    = state.columns.find(c =>
+    c.type === 'number' && ['útil', 'util', 'vendible', 'sup. út', 'sup út'].some(k => norm(c.name).includes(norm(k)))
+  )?.name;
+  const ufm2ColN  = findUfm2Col();
+  const ticketCol = state.columns.find(c => norm(c.name).includes('ticket'))?.name;
+
+  if (!edifCol || !ufm2ColN) { el.innerHTML = ''; return; }
+
+  const byEdif = {};
+  for (const r of state.filtered) {
+    const edif = String(r[edifCol] ?? '').trim();
+    if (!edif) continue;
+    if (!byEdif[edif]) byEdif[edif] = { prop: propCol ? r[propCol] : null, sups: [], ufm2s: [], tickets: [] };
+    const sup    = Number(r[supCol]);
+    const ufm2   = Number(r[ufm2ColN]);
+    const ticket = Number(r[ticketCol]);
+    if (supCol    && !isNaN(sup)    && sup > 0)    byEdif[edif].sups.push(sup);
+    if (!isNaN(ufm2)   && ufm2 > 0)   byEdif[edif].ufm2s.push(ufm2);
+    if (ticketCol && !isNaN(ticket) && ticket > 0) byEdif[edif].tickets.push(ticket);
+  }
+
+  const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+
+  const buildings = Object.entries(byEdif)
+    .map(([edif, d]) => ({
+      edif,
+      prop:   d.prop,
+      sup:    avg(d.sups),
+      ufm2:   avg(d.ufm2s),
+      ticket: avg(d.tickets),
+    }))
+    .filter(b => b.ufm2 !== null)
+    .sort((a, b) => b.ufm2 - a.ufm2);
+
+  el.innerHTML = `<div class="map-ranking-title">Edificios (${buildings.length}) &nbsp;·&nbsp; UF/<span style="text-transform:none">m²</span> ↓</div>`;
+
+  buildings.forEach((b, i) => {
+    const item = document.createElement('div');
+    item.className = 'map-ranking-item';
+    item.innerHTML = `
+      <span class="rk-pos">#${i + 1}</span>
+      <div class="rk-name">${b.edif}</div>
+      ${b.prop ? `<div class="rk-prop">${b.prop}</div>` : ''}
+      <div class="rk-metrics">
+        ${b.sup    !== null ? `<div class="rk-metric"><span>m² útil </span>${b.sup.toLocaleString('es-CL', { maximumFractionDigits: 1 })}</div>` : ''}
+        ${b.ticket !== null ? `<div class="rk-metric"><span>Ticket </span>${Math.round(b.ticket).toLocaleString('es-CL')} UF</div>` : ''}
+        ${b.ufm2   !== null ? `<div class="rk-metric rk-ufm2">${b.ufm2.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} UF/m²</div>` : ''}
+      </div>`;
+    el.appendChild(item);
+  });
 }
 
 // ============== Popup ==============

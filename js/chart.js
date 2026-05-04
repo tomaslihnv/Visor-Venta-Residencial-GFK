@@ -26,10 +26,18 @@ export function renderKpis() {
     kpis.push({ label: 'Disponibles', value: fmt(sum('Disponibles')), sub: 'unidades' });
   }
   if (state.columns.find(c => c.name === 'UF/m²')) {
-    kpis.push({ label: 'UF/m² promedio', value: fmt(avg('UF/m²')) });
+    const v = avg('UF/m²');
+    kpis.push({
+      label: 'UF/<span class="keep-case">m²</span> promedio',
+      value: v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    });
   }
   if (state.columns.find(c => c.name === 'Ticket UF')) {
-    kpis.push({ label: 'Ticket UF promedio', value: fmt(avg('Ticket UF')) });
+    const v = avg('Ticket UF');
+    kpis.push({
+      label: 'Ticket UF promedio',
+      value: Math.round(v).toLocaleString('es-CL'),
+    });
   }
   if (state.columns.find(c => c.name === '% Vendido')) {
     const a = avg('% Vendido');
