@@ -424,16 +424,19 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   border: 1px solid #e5e7eb; border-radius: 6px;
   padding: 8px; background: #f8fafc;
 }
-.mp-tipo-top {
-  display: flex; gap: 6px; align-items: center; margin-bottom: 6px;
+.mp-tipo-metrics { display: flex; flex-direction: column; gap: 5px; }
+.mp-tipo-name-wrap { display: flex; align-items: center; gap: 4px; }
+.mp-tipo-select {
+  width: 62px;
+  font-size: 12px;
+  padding: 3px 4px;
+  text-align: left;
 }
-.mp-tipo-name { flex: 1; font-weight: 600; }
 .mp-remove-tipo {
   background: none; border: none; color: #9ca3af;
   font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px;
 }
 .mp-remove-tipo:hover { color: #dc2626; }
-.mp-tipo-metrics { display: flex; flex-direction: column; gap: 5px; }
 .mp-metric-row {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
 }

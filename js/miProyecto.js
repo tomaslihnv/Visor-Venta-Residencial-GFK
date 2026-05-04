@@ -81,14 +81,17 @@ function _renderTipos() {
       `<option value="${opt}"${tipo.nombre === opt ? ' selected' : ''}>${opt}</option>`
     ).join('');
     card.innerHTML = `
-      <div class="mp-tipo-top">
-        <select class="mp-tipo-name mp-input">
-          <option value="">— Tipo —</option>
-          ${typeOptions}
-        </select>
-        <button class="mp-remove-tipo" data-id="${tipo.id}" title="Eliminar">×</button>
-      </div>
       <div class="mp-tipo-metrics">
+        <div class="mp-metric-row">
+          <span>Tipología</span>
+          <div class="mp-tipo-name-wrap">
+            <select class="mp-tipo-name mp-tipo-select mp-input">
+              <option value="">—</option>
+              ${typeOptions}
+            </select>
+            <button class="mp-remove-tipo" data-id="${tipo.id}" title="Eliminar">×</button>
+          </div>
+        </div>
         <label class="mp-metric-row">
           <span>Útil m²</span>
           <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
