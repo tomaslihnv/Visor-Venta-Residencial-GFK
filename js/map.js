@@ -179,12 +179,13 @@ export function renderMap() {
   placeholder.classList.add('hidden');
   wrapper.classList.remove('hidden');
 
-  if (!leafletMap) initLeafletMap();
-
-  markersLayer.clearLayers();
-
   const ufm2Col = findUfm2Col();
   const inPriceMode = mapMode === 'precio' && ufm2Col;
+  wrapper.classList.toggle('dark-mode', inPriceMode);
+
+  if (!leafletMap) initLeafletMap();
+  markersLayer.clearLayers();
+
 
   // Calcular rango de precios para la escala de color
   let priceMin = 0, priceMax = 1;
@@ -206,13 +207,15 @@ export function renderMap() {
     if (inPriceMode) {
       const prices = rows.map(r => Number(r[ufm2Col])).filter(v => !isNaN(v));
       const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
-      const color = avg !== null ? priceToColor(avg, priceMin, priceMax) : '#94a3b8';
+      const color = avg !== null ? priceToColor(avg, priceMin, priceMax) : '#60a5fa';
       marker = L.circleMarker([lat, lng], {
         radius: 9,
         fillColor: color,
-        color: 'rgba(0,0,0,0.25)',
-        weight: 1,
-        fillOpacity: 0.92,
+        color: '#ffffff',
+        weight: 1.5,
+        fillOpacity: 0.96,
+        opacity: 1,
+        className: 'price-marker',
       });
     } else {
       marker = L.marker([lat, lng]);
@@ -276,16 +279,71 @@ export function renderMap() {
 }
 
 // ============== Popup ==============
-const POPUP_FIELDS = ['Edificio', 'Propietario', 'Estado', 'Oferta total', '% Vendido', 'Vel. Venta (un./mes)', 'Promedio útil', 'Ticket UF', 'UF/m²'];
+const POPUP_FIELDS = [
+  { label: 'Edificio', keys: ['edificio'] },
+  { label: 'Propietario', keys: ['propietario'] },
+  { label: 'Estado', keys: ['estado'] },
+  { label: 'Oferta total', keys: ['oferta total', 'oferta'] },
+  { label: '% Vendido', keys: ['% vendido', 'pct vendido', 'vendido'] },
+  { label: 'Vel. Venta', keys: ['vel. venta', 'vel venta', 'vel. venta (un./mes)'] },
+  { label: 'Útil (m²)', keys: ['útil', 'promedio útil', 'sup útil', 'útil (m²)'] },
+  { label: 'UF/m²', keys: ['uf/m²', 'uf/m2', 'uf / m', 'uf/m'] },
+  { label: 'Ticket UF', keys: ['ticket uf', 'ticket'] },
+];
+
+function parsePopupNumber(value) {
+  if (value === null || value === undefined || value === '') return NaN;
+  if (typeof value === 'number') return value;
+  const text = String(value).trim().replace(/\s+/g, '');
+  if (text === '') return NaN;
+  const normalized = text.replace(/\./g, '').replace(/,/g, '.');
+  return Number(normalized);
+}
+
+function formatPopupValue(label, value) {
+  const num = parsePopupNumber(value);
+  if (label === '% Vendido') {
+    if (!Number.isFinite(num)) return String(value);
+    const pct = Math.abs(num) <= 1.05 ? num * 100 : num;
+    return `${pct.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  }
+  if (label === 'UF/m²') {
+    if (!Number.isFinite(num)) return `<strong>${String(value)}</strong>`;
+    return `<strong>${num.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</strong>`;
+  }
+  if (label === 'Ticket UF') {
+    if (!Number.isFinite(num)) return fmt(value);
+    return num.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+  }
+  if (label === 'Oferta total') {
+    if (!Number.isFinite(num)) return fmt(value);
+    return num.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+  }
+  if (label === 'Vel. Venta') {
+    if (!Number.isFinite(num)) return fmt(value);
+    return num.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  }
+  if (label === 'Útil (m²)') {
+    if (!Number.isFinite(num)) return fmt(value);
+    return `${num.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m²`;
+  }
+  return fmt(value);
+}
+
+function findPopupColumn(keys) {
+  const normalizedKeys = keys.map(k => norm(k));
+  const col = state.columns.find(c => normalizedKeys.some(key => norm(c.name).includes(key)));
+  return col?.name ?? null;
+}
 
 function buildPopup(row) {
-  const n = s => norm(s).replace(/\s+/g, ' ').trim();
   const rowsHtml = POPUP_FIELDS.map(field => {
-    const col = state.columns.find(c => n(c.name) === n(field));
-    if (!col) return '';
-    const v = row[col.name];
-    if (v === '' || v == null) return '';
-    return `<tr><td class="pp-key">${col.name}</td><td class="pp-val">${v}</td></tr>`;
+    const colName = findPopupColumn(field.keys);
+    if (!colName) return '';
+    const rawValue = row[colName];
+    if (rawValue === '' || rawValue == null) return '';
+    const formatted = formatPopupValue(field.label, rawValue);
+    return `<tr><td class="pp-key">${field.label}</td><td class="pp-val">${formatted}</td></tr>`;
   }).join('');
   return `<table class="map-popup">${rowsHtml}</table>`;
 }

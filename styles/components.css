@@ -149,6 +149,35 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   min-height: 0; border-radius: 8px; overflow: hidden;
   border: 1px solid #e5e7eb;
 }
+.map-wrapper.dark-mode {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.28);
+}
+.map-wrapper.dark-mode .leaflet-container {
+  background: #071212 !important;
+}
+.map-wrapper.dark-mode .leaflet-tile {
+  filter: brightness(.5) saturate(.35) hue-rotate(160deg);
+}
+.map-wrapper.dark-mode .leaflet-control-zoom a {
+  background: rgba(15,23,42,0.88) !important;
+  color: #f8fafc !important;
+  border-color: rgba(148,163,184,0.22) !important;
+}
+.map-wrapper.dark-mode .leaflet-control-zoom a:hover {
+  background: rgba(30,41,59,0.96) !important;
+}
+.map-wrapper.dark-mode .leaflet-control-attribution {
+  background: rgba(7,18,18,.85) !important;
+  color: #94a3b8 !important;
+  border: none !important;
+}
+.map-wrapper.dark-mode .leaflet-control-attribution a { color: #94a3b8 !important; }
+.map-wrapper.dark-mode .price-marker { filter: drop-shadow(0 0 12px rgba(255,255,255,0.18)); }
+.map-wrapper.dark-mode .map-toolbar {
+  background: rgba(15, 23, 42, 0.92);
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+}
 .map-toolbar {
   display: flex; gap: 6px; padding: 8px 10px;
   background: #f8fafc; border-bottom: 1px solid #e5e7eb;
@@ -158,6 +187,15 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   padding: 5px 14px; border-radius: 5px; border: 1px solid #d1d5db;
   font-size: 12px; font-weight: 500; cursor: pointer;
   background: #fff; color: #6b7280; transition: all 0.15s;
+}
+.map-wrapper.dark-mode .map-mode-btn {
+  background: rgba(15, 23, 42, 0.85);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.35);
+}
+.map-wrapper.dark-mode .map-mode-btn:hover {
+  background: rgba(30, 41, 59, 0.9);
+  color: #f8fafc;
 }
 .map-mode-btn:hover { background: #f1f5f9; color: #374151; }
 .map-mode-btn.active {
