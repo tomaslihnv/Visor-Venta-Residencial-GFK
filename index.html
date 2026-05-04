@@ -175,7 +175,13 @@
             <h3>Mapa</h3>
             <p>Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada <code>Dirección</code> (o similar), los proyectos aparecerán automáticamente en el mapa.</p>
           </div>
-          <div id="map" class="map hidden"></div>
+          <div id="mapWrapper" class="map-wrapper hidden">
+            <div class="map-toolbar">
+              <button class="map-mode-btn active" data-mode="general">General</button>
+              <button class="map-mode-btn" data-mode="precio">Precio UF/m²</button>
+            </div>
+            <div id="map" class="map"></div>
+          </div>
         </div>
       </div>
     </section>

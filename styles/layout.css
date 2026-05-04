@@ -36,6 +36,7 @@
   color: #374151; margin-bottom: 6px;
   text-transform: uppercase; letter-spacing: 0.03em;
 }
+.filter-group label.title .keep-case { text-transform: none; }
 .filter-group select,
 .filter-group input[type="text"],
 .filter-group input[type="number"] {
@@ -58,7 +59,69 @@
 .filter-group .multi label:hover { color: #2563eb; }
 .range-row { display: flex; gap: 6px; align-items: center; }
 .range-row input { flex: 1; min-width: 0; }
-.range-row span { font-size: 11px; color: #9ca3af; }
+.range-row span { font-size: 11px; color: #9ca3af; white-space: nowrap; }
+.range-unit { font-size: 11px; color: #9ca3af; }
+
+/* ========== Slider dual ========== */
+.slider-wrap {
+  position: relative;
+  height: 28px;
+  margin: 4px 0 2px;
+}
+.slider-track-bg {
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%; transform: translateY(-50%);
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.slider-fill {
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  height: 4px;
+  background: #3b82f6;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.dual-range {
+  position: absolute;
+  width: 100%; left: 0;
+  top: 50%; transform: translateY(-50%);
+  -webkit-appearance: none; appearance: none;
+  background: transparent;
+  pointer-events: none;
+  margin: 0; padding: 0;
+  height: 28px;
+}
+.dual-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(59,130,246,0.4);
+  pointer-events: all;
+  cursor: pointer;
+}
+.dual-range::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(59,130,246,0.4);
+  pointer-events: all;
+  cursor: pointer;
+  border: none;
+}
+.dual-range::-webkit-slider-runnable-track { background: transparent; }
+.dual-range::-moz-range-track { background: transparent; }
+.slider-labels {
+  display: flex; justify-content: space-between;
+  font-size: 11px; font-weight: 600; color: #374151;
+  margin-top: 2px;
+}
 
 /* ========== Content ========== */
 .content {
