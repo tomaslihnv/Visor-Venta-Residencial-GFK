@@ -214,6 +214,91 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .map-popup .pp-key { font-weight: 600; color: #374151; white-space: nowrap; padding-right: 10px; }
 .map-popup .pp-val { color: #0f172a; max-width: 200px; word-break: break-word; }
 
+/* ========== Tabla Comparativa ========== */
+.comp-container {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+}
+.comp-container .hint {
+  color: #6b7280; font-size: 13px; padding: 20px 0;
+}
+.comp-wrap {
+  flex: 1; min-height: 0;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.comp-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+/* Uniform row height: all cells (headers + body + footer) share 36px */
+.comp-head-top th,
+.comp-head-sub th,
+.comp-table td {
+  height: 36px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Sticky: top header row sits at 0, sub-header row sits right below it */
+.comp-head-top th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  border-bottom: 1px solid #c7d0dc;
+}
+.comp-head-sub th {
+  position: sticky;
+  top: 36px;   /* = height of comp-head-top row */
+  z-index: 2;
+  background: #f1f5f9;
+  font-size: 11px; font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.comp-th-section {
+  background: #1e3a5f; color: #fff;
+  text-align: left;
+}
+.comp-th-tipo {
+  background: #475569; color: #e2e8f0;
+  text-align: center;
+  border-left: 2px solid #cbd5e1;
+}
+.comp-th-label  { text-align: left; }
+.comp-th-metric { text-align: right; }
+
+/* Body rows */
+.comp-table tbody tr { border-bottom: 1px solid #f1f5f9; }
+.comp-table tbody tr:last-child { border-bottom: none; }
+.comp-table tbody tr:hover { background: #f8fafc; }
+.comp-table td { color: #0f172a; }
+.comp-edificio  { font-weight: 500; color: #1e3a5f; }
+
+/* Numeric cells */
+.comp-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Left border separating tipologia groups */
+.comp-sep { border-left: 2px solid #e2e8f0; }
+
+/* Promedio / tfoot row */
+.comp-promedio td {
+  background: #f8fafc;
+  border-top: 2px solid #cbd5e1;
+  height: 36px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  font-size: 12.5px;
+}
+
 /* ========== Scrollbar ========== */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

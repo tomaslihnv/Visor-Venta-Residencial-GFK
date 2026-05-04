@@ -325,7 +325,11 @@ export function applyFilters() {
     if (tab === 'grafico')      renderChart();
     if (tab === 'distribucion') renderDistrib();
   });
-  if ($('.tab.active')?.dataset.tab === 'mapa') {
+  const activeTab = $('.tab.active')?.dataset.tab;
+  if (activeTab === 'comparativa') {
+    import('./comparativa.js').then(({ renderComparativa }) => renderComparativa());
+  }
+  if (activeTab === 'mapa') {
     import('./map.js').then(({ renderMap }) => renderMap());
   }
 }
