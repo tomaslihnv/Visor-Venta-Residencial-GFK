@@ -15,6 +15,14 @@ document.addEventListener('mpchange', () => {
   }
 });
 
+// ============== Filtros collapse ==============
+$('#filtrosPanelHeader')?.addEventListener('click', () => {
+  const body    = $('#filtrosPanelBody');
+  const chevron = $('#filtrosChevron');
+  body?.classList.toggle('mp-collapsed');
+  if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
+});
+
 // ============== Reset ==============
 $('#resetBtn').addEventListener('click', resetFilters);
 

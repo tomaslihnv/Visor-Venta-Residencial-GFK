@@ -370,6 +370,11 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   margin-top: 18px;
   padding-top: 14px;
 }
+.mp-panel-top {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
 .mp-panel-header {
   display: flex; justify-content: space-between; align-items: center;
   cursor: pointer; margin-bottom: 12px;

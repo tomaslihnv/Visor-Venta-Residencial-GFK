@@ -25,16 +25,8 @@
 
   <main class="layout">
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <h2>Filtros</h2>
-        <span id="filterCount" class="badge">0 / 0</span>
-      </div>
-      <div id="filtersContainer" class="filters">
-        <p class="hint">Cargá un Excel para empezar.</p>
-      </div>
-
-      <!-- MI PROYECTO -->
-      <div id="miProyectoSection" class="mp-panel hidden">
+      <!-- MI PROYECTO (arriba, oculto hasta que carga el Excel) -->
+      <div id="miProyectoSection" class="mp-panel mp-panel-top hidden">
         <div class="mp-panel-header" id="mpPanelHeader">
           <span class="mp-panel-title">Mi Proyecto</span>
           <span class="mp-chevron" id="mpChevron">▾</span>
@@ -74,6 +66,20 @@
               <input type="checkbox" id="mpInSvp" />
               <span>Sup. vs Precio</span>
             </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILTROS -->
+      <div class="mp-panel" id="filtrosPanel">
+        <div class="mp-panel-header" id="filtrosPanelHeader">
+          <span class="mp-panel-title">Filtros</span>
+          <span id="filterCount" class="badge">0 / 0</span>
+          <span class="mp-chevron" id="filtrosChevron">▾</span>
+        </div>
+        <div id="filtrosPanelBody" class="mp-panel-body">
+          <div id="filtersContainer" class="filters">
+            <p class="hint">Cargá un Excel para empezar.</p>
           </div>
         </div>
       </div>
