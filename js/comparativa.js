@@ -1,5 +1,6 @@
 import { $ } from './utils.js';
 import { state } from './data.js';
+import { mp } from './miProyecto.js';
 
 function findCol(candidates) {
   const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
@@ -19,12 +20,12 @@ function numVal(v) {
 }
 
 function fmtDec(v, dec = 1) {
-  if (v === null || v === undefined) return '-';
+  if (v === null || v === undefined) return '—';
   return Number(v).toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
 function fmtInt(v) {
-  if (v === null || v === undefined) return '-';
+  if (v === null || v === undefined) return '—';
   return Math.round(v).toLocaleString('es-CL');
 }
 
@@ -35,12 +36,35 @@ function fmtTipo(v) {
   return s;
 }
 
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function cell(content, cls = '') {
   return `<td class="${cls}">${content}</td>`;
 }
 
 function th(content, attrs = '') {
   return `<th ${attrs}>${content}</th>`;
+}
+
+// Celda con % diferencia coloreada
+function vsCell(cls, mpVal, promVal) {
+  if (mpVal != null && promVal != null && promVal !== 0) {
+    const pct = Math.round((mpVal - promVal) / promVal * 100);
+    const cc  = pct > 0 ? 'vs-pos' : pct < 0 ? 'vs-neg' : 'vs-zero';
+    return `<td class="${cls} ${cc}"><strong>${pct >= 0 ? '+' : ''}${pct}%</strong></td>`;
+  }
+  return `<td class="${cls}">—</td>`;
+}
+
+// Busca la tipología de mp que coincide con un tipo del mercado
+function findMpTipo(dataTipo) {
+  const fmtD = fmtTipo(dataTipo).toUpperCase();
+  return mp.tipologias.find(t =>
+    fmtTipo(t.nombre).toUpperCase() === fmtD ||
+    String(t.nombre).toUpperCase() === String(dataTipo).toUpperCase()
+  );
 }
 
 export function renderComparativa() {
@@ -65,7 +89,7 @@ export function renderComparativa() {
     return;
   }
 
-  // Sorted unique typologies
+  // Tipologías únicas y ordenadas
   const tipologias = colTipologia
     ? [...new Set(state.filtered.map(r => r[colTipologia]).filter(v => v !== '' && v != null))]
         .sort((a, b) => {
@@ -75,24 +99,24 @@ export function renderComparativa() {
         })
     : [];
 
-  // Group rows by edificio
+  // Agrupar por edificio
   const map = new Map();
   for (const row of state.filtered) {
     const key = String(row[colEdificio] ?? '').trim();
     if (!key) continue;
     if (!map.has(key)) {
       map.set(key, {
-        edificio: key,
+        edificio:    key,
         propietario: colPropietario ? String(row[colPropietario] ?? '') : '',
-        rows: [],
+        rows:        [],
       });
     }
     map.get(key).rows.push(row);
   }
 
-  // Build per-project data
+  // Promedios por proyecto y tipología
   const proyectos = [...map.values()].map(p => {
-    const pick = col => numVal(p.rows.find(r => numVal(r[col]) !== null)?.[col] ?? null);
+    const pick    = col => numVal(p.rows.find(r => numVal(r[col]) !== null)?.[col] ?? null);
     const vendido  = colVendido  ? pick(colVendido)  : null;
     const velVenta = colVelVenta ? pick(colVelVenta) : null;
 
@@ -115,7 +139,7 @@ export function renderComparativa() {
     return { ...p, vendido, velVenta, byTipo, overall };
   });
 
-  // Averages row
+  // Promedios de mercado
   const promedioVendido  = avg(proyectos.map(p => p.vendido).filter(v => v !== null));
   const promedioVelVenta = avg(proyectos.map(p => p.velVenta).filter(v => v !== null));
   const promedioTipo = {};
@@ -137,87 +161,127 @@ export function renderComparativa() {
   const hasVelVenta = colVelVenta !== null;
   const hasProp     = colPropietario !== null;
   const generalCols = 1 + (hasProp ? 1 : 0) + (hasVendido ? 1 : 0) + (hasVelVenta ? 1 : 0);
-  const tipoCols    = hasTipos ? tipologias.length * 3 : 3;
+  const metricGroups = hasTipos ? tipologias : ['_overall'];
 
-  // ── Build HTML ──────────────────────────────────────────────────────────────
+  // ── HTML ────────────────────────────────────────────────────────────────
   let html = `<div class="comp-wrap"><table class="comp-table">`;
 
-  // THEAD row 1
-  html += `<thead>`;
-  html += `<tr class="comp-head-top">`;
+  // THEAD fila 1
+  html += `<thead><tr class="comp-head-top">`;
   html += `<th colspan="${generalCols}" class="comp-th-section">Información general</th>`;
-  if (hasTipos) {
-    for (const tipo of tipologias) {
-      html += `<th colspan="3" class="comp-th-tipo">${fmtTipo(tipo)}</th>`;
-    }
-  } else {
-    html += `<th colspan="3" class="comp-th-tipo">Indicadores</th>`;
+  for (const tipo of metricGroups) {
+    html += `<th colspan="3" class="comp-th-tipo">${tipo === '_overall' ? 'Indicadores' : fmtTipo(tipo)}</th>`;
   }
   html += `</tr>`;
 
-  // THEAD row 2
+  // THEAD fila 2
   html += `<tr class="comp-head-sub">`;
-  html += th('Edificio', 'class="comp-th-label"');
-  if (hasProp)     html += th('Propietario', 'class="comp-th-label"');
-  if (hasVendido)  html += th('% Vendido',   'class="comp-th-label comp-num"');
+  html += th('Edificio',    'class="comp-th-label"');
+  if (hasProp)     html += th('Propietario',         'class="comp-th-label"');
+  if (hasVendido)  html += th('% Vendido',            'class="comp-th-label comp-num"');
   if (hasVelVenta) html += th('Vel. Venta (un./mes)', 'class="comp-th-label comp-num"');
-  const metricCols = hasTipos ? tipologias : ['_'];
-  for (const _ of metricCols) {
-    html += th('Útil m²', 'class="comp-th-metric comp-num comp-sep"');
-    html += th('UF/m²',   'class="comp-th-metric comp-num"');
+  for (const _ of metricGroups) {
+    html += th('Útil m²',   'class="comp-th-metric comp-num comp-sep"');
+    html += th('UF/m²',     'class="comp-th-metric comp-num"');
     html += th('Ticket UF', 'class="comp-th-metric comp-num"');
   }
-  html += `</tr>`;
-  html += `</thead>`;
+  html += `</tr></thead>`;
 
-  // TBODY
+  // TBODY — proyectos de mercado
   html += `<tbody>`;
   for (const p of proyectos) {
     html += `<tr>`;
-    html += cell(p.edificio, 'comp-edificio');
-    if (hasProp)     html += cell(p.propietario || '-');
-    if (hasVendido)  html += cell(p.vendido  !== null ? fmtDec(p.vendido, 1)  + '%' : '-', 'comp-num');
-    if (hasVelVenta) html += cell(p.velVenta !== null ? fmtDec(p.velVenta, 1) : '-',       'comp-num');
-
+    html += cell(esc(p.edificio), 'comp-edificio');
+    if (hasProp)     html += cell(esc(p.propietario) || '—');
+    if (hasVendido)  html += cell(p.vendido  != null ? fmtDec(p.vendido, 1)  + '%' : '—', 'comp-num');
+    if (hasVelVenta) html += cell(p.velVenta != null ? fmtDec(p.velVenta, 1) : '—',       'comp-num');
     if (hasTipos) {
       for (const tipo of tipologias) {
         const d = p.byTipo[tipo];
-        html += cell(d?.sup    !== null && d?.sup    !== undefined ? fmtDec(d.sup, 0)  : '-', 'comp-num comp-sep');
-        html += cell(d?.ufm2   !== null && d?.ufm2   !== undefined ? fmtDec(d.ufm2, 1) : '-', 'comp-num');
-        html += cell(d?.ticket !== null && d?.ticket !== undefined ? fmtInt(d.ticket)  : '-', 'comp-num');
+        html += cell(d?.sup    != null ? fmtDec(d.sup, 0)  : '—', 'comp-num comp-sep');
+        html += cell(d?.ufm2   != null ? fmtDec(d.ufm2, 1) : '—', 'comp-num');
+        html += cell(d?.ticket != null ? fmtInt(d.ticket)  : '—', 'comp-num');
       }
     } else {
-      html += cell(p.overall?.sup    !== null ? fmtDec(p.overall.sup, 0)  : '-', 'comp-num comp-sep');
-      html += cell(p.overall?.ufm2   !== null ? fmtDec(p.overall.ufm2, 1) : '-', 'comp-num');
-      html += cell(p.overall?.ticket !== null ? fmtInt(p.overall.ticket)  : '-', 'comp-num');
+      html += cell(p.overall?.sup    != null ? fmtDec(p.overall.sup, 0)  : '—', 'comp-num comp-sep');
+      html += cell(p.overall?.ufm2   != null ? fmtDec(p.overall.ufm2, 1) : '—', 'comp-num');
+      html += cell(p.overall?.ticket != null ? fmtInt(p.overall.ticket)  : '—', 'comp-num');
     }
     html += `</tr>`;
   }
   html += `</tbody>`;
 
-  // TFOOT — Promedio
+  // TFOOT
   html += `<tfoot>`;
+
+  // ── Fila Promedio ──
   html += `<tr class="comp-promedio">`;
   html += `<td><strong>Promedio</strong></td>`;
   if (hasProp)     html += `<td></td>`;
-  if (hasVendido)  html += `<td class="comp-num"><strong>${promedioVendido  !== null ? fmtDec(promedioVendido, 1)  + '%' : '-'}</strong></td>`;
-  if (hasVelVenta) html += `<td class="comp-num"><strong>${promedioVelVenta !== null ? fmtDec(promedioVelVenta, 1) : '-'}</strong></td>`;
-
+  if (hasVendido)  html += `<td class="comp-num"><strong>${promedioVendido  != null ? fmtDec(promedioVendido, 1)  + '%' : '—'}</strong></td>`;
+  if (hasVelVenta) html += `<td class="comp-num"><strong>${promedioVelVenta != null ? fmtDec(promedioVelVenta, 1) : '—'}</strong></td>`;
   if (hasTipos) {
     for (const tipo of tipologias) {
       const d = promedioTipo[tipo];
-      html += `<td class="comp-num comp-sep"><strong>${d?.sup    !== null ? fmtDec(d.sup, 0)  : '-'}</strong></td>`;
-      html += `<td class="comp-num"><strong>${d?.ufm2   !== null ? fmtDec(d.ufm2, 1) : '-'}</strong></td>`;
-      html += `<td class="comp-num"><strong>${d?.ticket !== null ? fmtInt(d.ticket)  : '-'}</strong></td>`;
+      html += `<td class="comp-num comp-sep"><strong>${d?.sup    != null ? fmtDec(d.sup, 0)  : '—'}</strong></td>`;
+      html += `<td class="comp-num"><strong>${d?.ufm2   != null ? fmtDec(d.ufm2, 1) : '—'}</strong></td>`;
+      html += `<td class="comp-num"><strong>${d?.ticket != null ? fmtInt(d.ticket)  : '—'}</strong></td>`;
     }
   } else {
-    html += `<td class="comp-num comp-sep"><strong>${promedioOverall?.sup    !== null ? fmtDec(promedioOverall.sup, 0)  : '-'}</strong></td>`;
-    html += `<td class="comp-num"><strong>${promedioOverall?.ufm2   !== null ? fmtDec(promedioOverall.ufm2, 1) : '-'}</strong></td>`;
-    html += `<td class="comp-num"><strong>${promedioOverall?.ticket !== null ? fmtInt(promedioOverall.ticket)  : '-'}</strong></td>`;
+    html += `<td class="comp-num comp-sep"><strong>${promedioOverall?.sup    != null ? fmtDec(promedioOverall.sup, 0)  : '—'}</strong></td>`;
+    html += `<td class="comp-num"><strong>${promedioOverall?.ufm2   != null ? fmtDec(promedioOverall.ufm2, 1) : '—'}</strong></td>`;
+    html += `<td class="comp-num"><strong>${promedioOverall?.ticket != null ? fmtInt(promedioOverall.ticket)  : '—'}</strong></td>`;
   }
   html += `</tr>`;
-  html += `</tfoot>`;
 
-  html += `</table></div>`;
+  // ── Filas Mi Proyecto (solo si está habilitado y tiene nombre) ──
+  if (mp.inComp && mp.edificio) {
+    // Fila de datos del proyecto
+    html += `<tr class="comp-situ">`;
+    html += `<td class="comp-edificio"><strong>${esc(mp.edificio)}</strong></td>`;
+    if (hasProp)     html += `<td>${esc(mp.propietario) || ''}</td>`;
+    if (hasVendido)  html += `<td></td>`;
+    if (hasVelVenta) html += `<td></td>`;
+    if (hasTipos) {
+      for (const tipo of tipologias) {
+        const t = findMpTipo(tipo);
+        html += cell(t?.sup  != null ? fmtDec(t.sup, 0)  : '—', 'comp-num comp-sep');
+        html += cell(t?.ufm2 != null ? fmtDec(t.ufm2, 1) : '—', 'comp-num');
+        html += cell(t?.sup != null && t?.ufm2 != null ? fmtInt(t.sup * t.ufm2) : '—', 'comp-num');
+      }
+    } else {
+      const t = mp.tipologias[0];
+      html += cell(t?.sup  != null ? fmtDec(t.sup, 0)  : '—', 'comp-num comp-sep');
+      html += cell(t?.ufm2 != null ? fmtDec(t.ufm2, 1) : '—', 'comp-num');
+      html += cell(t?.sup != null && t?.ufm2 != null ? fmtInt(t.sup * t.ufm2) : '—', 'comp-num');
+    }
+    html += `</tr>`;
+
+    // Fila vs Promedio
+    html += `<tr class="comp-situ-vs">`;
+    html += `<td class="situ-vs-label"><em>${esc(mp.edificio)} vs Promedio</em></td>`;
+    if (hasProp)     html += `<td></td>`;
+    if (hasVendido)  html += `<td></td>`;
+    if (hasVelVenta) html += `<td></td>`;
+    if (hasTipos) {
+      for (const tipo of tipologias) {
+        const t    = findMpTipo(tipo);
+        const prom = promedioTipo[tipo];
+        html += vsCell('comp-num comp-sep', t?.sup,    prom?.sup);
+        html += vsCell('comp-num',           t?.ufm2,   prom?.ufm2);
+        const mpTicket = t?.sup != null && t?.ufm2 != null ? t.sup * t.ufm2 : null;
+        html += vsCell('comp-num', mpTicket, prom?.ticket);
+      }
+    } else {
+      const t = mp.tipologias[0];
+      const mpTicket = t?.sup != null && t?.ufm2 != null ? t.sup * t.ufm2 : null;
+      html += vsCell('comp-num comp-sep', t?.sup,  promedioOverall?.sup);
+      html += vsCell('comp-num',           t?.ufm2, promedioOverall?.ufm2);
+      html += vsCell('comp-num',           mpTicket, promedioOverall?.ticket);
+    }
+    html += `</tr>`;
+  }
+
+  html += `</tfoot></table></div>`;
   container.innerHTML = html;
 }

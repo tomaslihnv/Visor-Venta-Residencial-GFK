@@ -1,5 +1,6 @@
 import { $, fmt } from './utils.js';
 import { state } from './data.js';
+import { mp } from './miProyecto.js';
 
 // ============== KPIs ==============
 export function renderKpis() {
@@ -258,32 +259,38 @@ function sortEntries(entries, mode) {
 let distribChart = null;
 let distribListenersReady = false;
 const distribMarkers = { percentiles: new Set(), prices: new Set() };
-const pctColors  = ['#ef4444', '#f97316', '#a855f7', '#ec4899'];
-const priceColors = ['#22c55e', '#14b8a6', '#84cc16', '#0ea5e9'];
 
 export function populateDistribSelectors() {
-  const colSel   = $('#distribCol');
-  const groupSel = $('#distribGroup');
+  const colSel = $('#distribCol');
   if (!colSel) return;
 
-  colSel.innerHTML  = '';
-  groupSel.innerHTML = '<option value="">— Ninguno —</option>';
+  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  const ticketCol = state.columns.find(c => normStr(c.name).includes('ticket'));
+  const ufm2Col   = state.columns.find(c => normStr(c.name).includes('uf/m') || normStr(c.name).includes('uf / m'));
 
-  for (const col of state.columns) {
-    if (col.type === 'number') {
-      const o = document.createElement('option');
-      o.value = col.name; o.textContent = col.name;
-      colSel.appendChild(o);
+  colSel.innerHTML = '';
+  if (ticketCol) {
+    const o = document.createElement('option');
+    o.value = ticketCol.name; o.textContent = 'Ticket UF';
+    colSel.appendChild(o);
+  }
+  if (ufm2Col) {
+    const o = document.createElement('option');
+    o.value = ufm2Col.name; o.textContent = 'UF/m²';
+    colSel.appendChild(o);
+  }
+  if (!colSel.options.length) {
+    for (const col of state.columns) {
+      if (col.type === 'number') {
+        const o = document.createElement('option');
+        o.value = col.name; o.textContent = col.name;
+        colSel.appendChild(o);
+        break;
+      }
     }
-    const og = document.createElement('option');
-    og.value = col.name; og.textContent = col.name;
-    groupSel.appendChild(og);
   }
 
-  if (state.columns.find(c => c.name === 'Ticket UF')) colSel.value = 'Ticket UF';
-
   colSel.addEventListener('change', renderDistrib);
-  groupSel.addEventListener('change', renderDistrib);
 
   if (!distribListenersReady) {
     distribListenersReady = true;
@@ -380,56 +387,33 @@ function lerpAtY(data, y) {
 }
 
 export function renderDistrib() {
-  const colSel   = $('#distribCol');
-  const groupSel = $('#distribGroup');
+  const colSel = $('#distribCol');
   if (!colSel || state.filtered.length === 0) return;
 
-  const col      = colSel.value;
-  const groupCol = groupSel.value;
+  const col = colSel.value;
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
   const ctx = $('#distribChart').getContext('2d');
 
-  let datasets;
-  let refData; // primera curva, usada para calcular las anotaciones
-
-  if (groupCol) {
-    const groups = {};
-    for (const r of state.filtered) {
-      const g = String(r[groupCol] ?? '—');
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(r);
-    }
-    datasets = Object.entries(groups).map(([g, rows], i) => ({
-      label: g,
-      data: computeQuantileCurve(rows, col),
-      borderColor: palette[i % palette.length],
-      backgroundColor: 'transparent',
-      pointRadius: 0,
-      borderWidth: 2,
-      tension: 0,
-      fill: false,
-    }));
-    refData = datasets[0]?.data ?? [];
-  } else {
-    refData = computeQuantileCurve(state.filtered, col);
-    datasets = [{
-      label: col,
-      data: refData,
-      borderColor: palette[0],
-      backgroundColor: 'rgba(59,130,246,0.08)',
-      pointRadius: 0,
-      borderWidth: 2,
-      tension: 0,
-      fill: true,
-    }];
-  }
+  const refData = computeQuantileCurve(state.filtered, col);
+  const datasets = [{
+    label: col,
+    data: refData,
+    borderColor: palette[0],
+    backgroundColor: 'rgba(59,130,246,0.08)',
+    pointRadius: 0,
+    borderWidth: 2,
+    tension: 0,
+    fill: true,
+  }];
 
   // Construir anotaciones
   const annotations = {};
+  const pctColor   = '#ef4444';
+  const priceColor = '#16a34a';
 
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach((pct, i) => {
-    const color = pctColors[i % pctColors.length];
+  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+    const color = pctColor;
     const price = lerpAtX(refData, pct);
     if (price === null) return;
     const priceLabel = price.toLocaleString('es-CL', { maximumFractionDigits: 0 });
@@ -449,8 +433,8 @@ export function renderDistrib() {
     };
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach((price, i) => {
-    const color = priceColors[i % priceColors.length];
+  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+    const color = priceColor;
     const pct   = lerpAtY(refData, price);
     const pctForLabel = pct !== null ? pct : 100;
     annotations[`prh_${price}`] = {
@@ -470,6 +454,59 @@ export function renderDistrib() {
       };
     }
   });
+
+  // Mi Proyecto annotations
+  if (mp.inDistrib && mp.tipologias.length > 0) {
+    const normFn  = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+    const nc      = normFn(col);
+    const isUfm2   = nc.includes('uf/m') || nc.includes('uf / m');
+    const isTicket = !isUfm2 && nc.includes('ticket');
+
+    const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normFn(c.name).includes(k)));
+    const fmtTipo = v => {
+      const s = String(v ?? '').trim();
+      return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
+    };
+    let mpTipos = mp.tipologias.filter(t => t.nombre);
+    if (tipoColObj) {
+      const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
+      if (activeTipos.size > 0) {
+        mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
+      }
+    }
+
+    const mpColor = '#1e3a5f';
+    mpTipos.forEach(t => {
+      let val = null;
+      if (isUfm2)        val = t.ufm2;
+      else if (isTicket) val = (t.sup != null && t.ufm2 != null) ? t.sup * t.ufm2 : null;
+      else               val = t.sup;
+      if (val == null) return;
+      const pct = lerpAtY(refData, val);
+      if (pct === null) return;
+      const valLabel = val.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+      annotations[`mp_h_${t.id}`] = {
+        type: 'line', yMin: val, yMax: val, xMax: pct,
+        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+        label: {
+          content: `${t.nombre}: ${valLabel}`,
+          display: true, position: 'start',
+          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
+          padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' },
+        },
+      };
+      annotations[`mp_v_${t.id}`] = {
+        type: 'line', xMin: pct, xMax: pct, yMax: val,
+        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+        label: {
+          content: `P${pct.toFixed(1)}`,
+          display: true, position: 'start',
+          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
+          padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' },
+        },
+      };
+    });
+  }
 
   distribChart = new Chart(ctx, {
     type: 'line',

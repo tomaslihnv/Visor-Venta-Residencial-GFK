@@ -1,0 +1,180 @@
+import { $, debounce } from './utils.js';
+
+const STORAGE_KEY = 'visor_mp_v1';
+
+// ── Global state ───────────────────────────────────────────────────────────
+export const mp = {
+  edificio:    '',
+  propietario: 'SITÛ',
+  direccion:   '',
+  tipologias:  [], // [{ id, nombre, sup, ufm2 }]
+  geocoords:   null, // { lat, lng } — never persisted
+  inComp:      false,
+  inMapa:      false,
+  inDistrib:   false,
+};
+
+let _initialized = false;
+
+// ── Persistence ────────────────────────────────────────────────────────────
+function _save() {
+  try {
+    const { geocoords, ...toSave } = mp; // eslint-disable-line no-unused-vars
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  } catch {}
+  document.dispatchEvent(new CustomEvent('mpchange'));
+}
+
+function _load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) Object.assign(mp, JSON.parse(raw));
+  } catch {}
+  mp.geocoords = null;
+}
+
+// ── Geocoding ──────────────────────────────────────────────────────────────
+async function _geocode(addr) {
+  const statusEl = $('#mpGeoStatus');
+  if (!addr || addr.trim().length < 5) {
+    mp.geocoords = null;
+    if (statusEl) { statusEl.textContent = ''; statusEl.className = 'mp-geo-status'; }
+    document.dispatchEvent(new CustomEvent('mpchange'));
+    return;
+  }
+  if (statusEl) { statusEl.textContent = 'Buscando…'; statusEl.className = 'mp-geo-status mp-geo-searching'; }
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`;
+    const res  = await fetch(url, { headers: { Accept: 'application/json' } });
+    const data = await res.json();
+    mp.geocoords = data.length
+      ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+      : null;
+    if (statusEl) {
+      statusEl.textContent  = mp.geocoords ? '✓ Ubicado' : '✗ No encontrado';
+      statusEl.className    = 'mp-geo-status ' + (mp.geocoords ? 'mp-geo-ok' : 'mp-geo-err');
+    }
+  } catch {
+    mp.geocoords = null;
+    if (statusEl) { statusEl.textContent = '✗ Error de red'; statusEl.className = 'mp-geo-status mp-geo-err'; }
+  }
+  document.dispatchEvent(new CustomEvent('mpchange'));
+}
+
+const _debouncedGeocode = debounce(_geocode, 1200);
+
+// ── Typology card rendering ────────────────────────────────────────────────
+function _esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function _renderTipos() {
+  const container = $('#mpTiposContainer');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (const tipo of mp.tipologias) {
+    const card = document.createElement('div');
+    card.className = 'mp-tipo-card';
+    const typeOptions = ['1D', '2D', '3D', '4D'].map(opt =>
+      `<option value="${opt}"${tipo.nombre === opt ? ' selected' : ''}>${opt}</option>`
+    ).join('');
+    card.innerHTML = `
+      <div class="mp-tipo-top">
+        <select class="mp-tipo-name mp-input">
+          <option value="">— Tipo —</option>
+          ${typeOptions}
+        </select>
+        <button class="mp-remove-tipo" data-id="${tipo.id}" title="Eliminar">×</button>
+      </div>
+      <div class="mp-tipo-metrics">
+        <label class="mp-metric-row">
+          <span>Útil m²</span>
+          <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
+            data-id="${tipo.id}" data-metric="sup" value="${tipo.sup ?? ''}" />
+        </label>
+        <label class="mp-metric-row">
+          <span>UF/m²</span>
+          <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
+            data-id="${tipo.id}" data-metric="ufm2" value="${tipo.ufm2 ?? ''}" />
+        </label>
+      </div>`;
+
+    card.querySelector('.mp-tipo-name').addEventListener('change', e => {
+      const t = mp.tipologias.find(t => t.id === tipo.id);
+      if (t) { t.nombre = e.target.value; _save(); }
+    });
+
+    card.querySelector('.mp-remove-tipo').addEventListener('click', () => {
+      mp.tipologias = mp.tipologias.filter(t => t.id !== tipo.id);
+      _renderTipos();
+      _save();
+    });
+
+    card.querySelectorAll('.mp-metric-input').forEach(input => {
+      input.addEventListener('input', e => {
+        const t = mp.tipologias.find(t => t.id === tipo.id);
+        if (t) {
+          const v = e.target.value.trim();
+          t[e.target.dataset.metric] = v === '' ? null : Number(v);
+          _save();
+        }
+      });
+    });
+
+    container.appendChild(card);
+  }
+}
+
+// ── Public init (called once after data loads) ─────────────────────────────
+export function initMpPanel() {
+  if (_initialized) {
+    // On subsequent file loads, just make sure the panel is visible
+    $('#miProyectoSection')?.classList.remove('hidden');
+    return;
+  }
+  _initialized = true;
+  _load();
+  mp.propietario = 'SITÛ';
+
+  $('#miProyectoSection')?.classList.remove('hidden');
+
+  // Restore field values
+  const set = (id, val) => { const el = $(`#${id}`); if (el) el.value = val ?? ''; };
+  set('mpEdificio',  mp.edificio);
+  set('mpDireccion', mp.direccion);
+  if ($('#mpInComp'))    $('#mpInComp').checked    = mp.inComp;
+  if ($('#mpInMapa'))    $('#mpInMapa').checked    = mp.inMapa;
+  if ($('#mpInDistrib')) $('#mpInDistrib').checked = mp.inDistrib;
+
+  // Trigger geocoding if address is already saved
+  if (mp.direccion) _geocode(mp.direccion);
+
+  // Collapse toggle
+  $('#mpPanelHeader')?.addEventListener('click', () => {
+    const body    = $('#mpPanelBody');
+    const chevron = $('#mpChevron');
+    body?.classList.toggle('mp-collapsed');
+    if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
+  });
+
+  // Field bindings
+  $('#mpEdificio')?.addEventListener('input', e => { mp.edificio = e.target.value; _save(); });
+  $('#mpDireccion')?.addEventListener('input', e => {
+    mp.direccion = e.target.value;
+    _save();
+    _debouncedGeocode(mp.direccion);
+  });
+
+  $('#mpInComp')?.addEventListener('change',    e => { mp.inComp    = e.target.checked; _save(); });
+  $('#mpInMapa')?.addEventListener('change',    e => { mp.inMapa    = e.target.checked; _save(); });
+  $('#mpInDistrib')?.addEventListener('change', e => { mp.inDistrib = e.target.checked; _save(); });
+
+  $('#mpAddTipo')?.addEventListener('click', () => {
+    mp.tipologias.push({ id: Date.now(), nombre: '', sup: null, ufm2: null });
+    _renderTipos();
+    _save();
+  });
+
+  _renderTipos();
+}

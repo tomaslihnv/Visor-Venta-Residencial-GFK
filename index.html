@@ -32,6 +32,47 @@
       <div id="filtersContainer" class="filters">
         <p class="hint">Cargá un Excel para empezar.</p>
       </div>
+
+      <!-- MI PROYECTO -->
+      <div id="miProyectoSection" class="mp-panel hidden">
+        <div class="mp-panel-header" id="mpPanelHeader">
+          <span class="mp-panel-title">Mi Proyecto</span>
+          <span class="mp-chevron" id="mpChevron">▾</span>
+        </div>
+        <div id="mpPanelBody" class="mp-panel-body">
+          <div class="mp-field">
+            <label class="mp-label">Edificio</label>
+            <input type="text" id="mpEdificio" class="mp-input" placeholder="Ej: SITÛ Los Laureles" />
+          </div>
+          <div class="mp-field">
+            <label class="mp-label">Dirección</label>
+            <input type="text" id="mpDireccion" class="mp-input" placeholder="Calle 123, Comuna, Chile" />
+            <span class="mp-geo-status" id="mpGeoStatus"></span>
+          </div>
+
+          <div class="mp-tipos-header">
+            <span class="mp-label">Tipologías</span>
+            <button id="mpAddTipo" class="mp-add-btn">+ Agregar</button>
+          </div>
+          <div id="mpTiposContainer" class="mp-tipos-container"></div>
+
+          <div class="mp-includes">
+            <span class="mp-label">Incluir en:</span>
+            <label class="mp-check-row">
+              <input type="checkbox" id="mpInComp" />
+              <span>Tabla comparativa</span>
+            </label>
+            <label class="mp-check-row">
+              <input type="checkbox" id="mpInMapa" />
+              <span>Mapa</span>
+            </label>
+            <label class="mp-check-row">
+              <input type="checkbox" id="mpInDistrib" />
+              <span>Distribución</span>
+            </label>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <section class="content">
@@ -145,14 +186,8 @@
         <div class="tab-panel" data-panel="distribucion">
           <div class="chart-controls">
             <div class="ctrl">
-              <label>Columna</label>
+              <label>Valores</label>
               <select id="distribCol"></select>
-            </div>
-            <div class="ctrl">
-              <label>Agrupar por</label>
-              <select id="distribGroup">
-                <option value="">— Ninguno —</option>
-              </select>
             </div>
             <div class="ctrl distrib-marker-group">
               <label>Marcar percentil</label>

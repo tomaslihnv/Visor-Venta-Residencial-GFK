@@ -82,6 +82,7 @@ function onDataLoaded(rows) {
   $('#dashboard').classList.remove('hidden');
 
   // Importar y llamar funciones de otros módulos
+  import('./miProyecto.js').then(({ initMpPanel }) => initMpPanel());
   import('./filters.js').then(({ buildFilters }) => buildFilters());
   import('./chart.js').then(({ populateChartSelectors, populateDistribSelectors }) => {
     populateChartSelectors();

@@ -2,6 +2,18 @@ import { $, $$ } from './utils.js';
 import { resetFilters } from './filters.js';
 import { renderChart } from './chart.js';
 
+// Re-renderizar la pestaña activa cuando cambia Mi Proyecto
+document.addEventListener('mpchange', () => {
+  const activeTab = $('.tab.active')?.dataset.tab;
+  if (activeTab === 'comparativa') {
+    import('./comparativa.js').then(({ renderComparativa }) => renderComparativa());
+  } else if (activeTab === 'mapa') {
+    import('./map.js').then(({ renderMap }) => renderMap());
+  } else if (activeTab === 'distribucion') {
+    import('./chart.js').then(({ renderDistrib }) => renderDistrib());
+  }
+});
+
 // ============== Reset ==============
 $('#resetBtn').addEventListener('click', resetFilters);
 

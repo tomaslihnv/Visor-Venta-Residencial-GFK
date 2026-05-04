@@ -299,6 +299,128 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-size: 12.5px;
 }
 
+/* ── Mi Proyecto row en tabla comparativa ── */
+.comp-situ td {
+  background: #eef2ff;
+  border-top: 2px solid #1e3a5f;
+  height: 36px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  font-size: 12.5px;
+  color: #1e3a5f;
+}
+.comp-situ-vs td {
+  background: #f0f9ff;
+  border-top: 1px solid #bfdbfe;
+  height: 36px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  font-size: 12px;
+}
+.situ-vs-label { font-style: italic; color: #475569; }
+
+/* Percentage coloring */
+.vs-pos  { color: #15803d; font-weight: 600; }
+.vs-neg  { color: #b91c1c; font-weight: 600; }
+.vs-zero { color: #6b7280; font-weight: 600; }
+
+/* ========== Panel Mi Proyecto (sidebar) ========== */
+.mp-panel {
+  border-top: 2px solid #1e3a5f;
+  margin-top: 18px;
+  padding-top: 14px;
+}
+.mp-panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  cursor: pointer; margin-bottom: 12px;
+}
+.mp-panel-title {
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: #1e3a5f;
+}
+.mp-chevron { font-size: 13px; color: #6b7280; }
+.mp-panel-body { display: flex; flex-direction: column; gap: 10px; }
+.mp-panel-body.mp-collapsed { display: none; }
+
+.mp-field { display: flex; flex-direction: column; gap: 3px; }
+.mp-label {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: #374151;
+}
+.mp-input {
+  width: 100%; padding: 6px 8px;
+  border: 1px solid #d1d5db; border-radius: 5px;
+  font-size: 13px; font-family: inherit;
+  background: #fff; color: #0f172a;
+}
+.mp-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.12); }
+
+/* Geocoding status */
+.mp-geo-status { font-size: 11px; min-height: 14px; }
+.mp-geo-searching { color: #2563eb; }
+.mp-geo-ok  { color: #16a34a; }
+.mp-geo-err { color: #dc2626; }
+
+/* Typologies */
+.mp-tipos-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 2px;
+}
+.mp-add-btn {
+  background: #1e3a5f; color: #fff;
+  border: none; border-radius: 4px;
+  padding: 3px 9px; font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.mp-add-btn:hover { background: #2563eb; }
+.mp-tipos-container { display: flex; flex-direction: column; gap: 8px; }
+.mp-tipo-card {
+  border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 8px; background: #f8fafc;
+}
+.mp-tipo-top {
+  display: flex; gap: 6px; align-items: center; margin-bottom: 6px;
+}
+.mp-tipo-name { flex: 1; font-weight: 600; }
+.mp-remove-tipo {
+  background: none; border: none; color: #9ca3af;
+  font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+.mp-remove-tipo:hover { color: #dc2626; }
+.mp-tipo-metrics { display: flex; flex-direction: column; gap: 5px; }
+.mp-metric-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.mp-metric-row span { font-size: 11px; color: #6b7280; min-width: 58px; }
+.mp-metric-input { width: 80px; text-align: right; font-size: 12px; padding: 3px 6px; }
+
+/* Include toggles */
+.mp-includes {
+  display: flex; flex-direction: column; gap: 5px;
+  padding-top: 8px; border-top: 1px dashed #e5e7eb;
+}
+.mp-check-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: #374151; cursor: pointer;
+}
+.mp-check-row:hover { color: #2563eb; }
+.mp-check-row input[type="checkbox"] { accent-color: #1e3a5f; }
+
+/* ── Marcador Mi Proyecto en el mapa ── */
+.mp-map-marker {
+  width: 36px; height: 36px;
+  background: #1e3a5f;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fbbf24; font-size: 18px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  cursor: pointer;
+}
+
 /* ========== Scrollbar ========== */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

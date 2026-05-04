@@ -1,5 +1,6 @@
 import { state } from './data.js';
 import { $, fmt } from './utils.js';
+import { mp } from './miProyecto.js';
 
 // ============== Cache y estado ==============
 const cache = new Map();
@@ -151,30 +152,27 @@ export function renderMap() {
 
   refreshStatus();
 
-  if (!col) {
-    placeholder.classList.remove('hidden');
-    wrapper.classList.add('hidden');
-    return;
-  }
-
   // Agrupar filas filtradas por dirección única → un marcador por edificio
   const buildings = new Map();
-  for (const r of state.filtered) {
-    const addr = String(r[col.name] ?? '').trim();
-    const coords = cache.get(addr);
-    if (!coords) continue;
-    if (!buildings.has(addr)) buildings.set(addr, { ...coords, rows: [] });
-    buildings.get(addr).rows.push(r);
+  if (col) {
+    for (const r of state.filtered) {
+      const addr = String(r[col.name] ?? '').trim();
+      const coords = cache.get(addr);
+      if (!coords) continue;
+      if (!buildings.has(addr)) buildings.set(addr, { ...coords, rows: [] });
+      buildings.get(addr).rows.push(r);
+    }
   }
   const points = [...buildings.values()];
+  const mpHasPoint = mp.inMapa && mp.edificio && mp.geocoords;
 
-  if (!points.length) {
+  if (!points.length && !mpHasPoint) {
     placeholder.classList.remove('hidden');
     wrapper.classList.add('hidden');
     const p = placeholder.querySelector('p');
-    if (p) p.textContent = geoStatus.running
-      ? 'Geocodificando direcciones, aguarda un momento...'
-      : 'No se encontraron coordenadas para las direcciones en los datos filtrados.';
+    if (p) p.textContent = col
+      ? (geoStatus.running ? 'Geocodificando direcciones, aguarda un momento...' : 'No se encontraron coordenadas para las direcciones en los datos filtrados.')
+      : 'Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada Dirección (o similar), los proyectos aparecerán en el mapa.';
     return;
   }
 
@@ -222,6 +220,36 @@ export function renderMap() {
 
     marker.bindPopup(buildPopup(rows[0]), { maxWidth: 340 });
     marker.addTo(markersLayer);
+    bounds.push([lat, lng]);
+  }
+
+  // ── Marcador Mi Proyecto ──
+  if (mpHasPoint) {
+    const { lat, lng } = mp.geocoords;
+    const mpIcon = L.divIcon({
+      className: '',
+      html: `<div class="mp-map-marker" title="${String(mp.edificio).replace(/"/g, '&quot;')}">★</div>`,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+      popupAnchor: [0, -20],
+    });
+    const escH = s => String(s ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let popHtml = `<table class="map-popup">
+      <tr><td class="pp-key">Edificio</td><td class="pp-val"><strong>${escH(mp.edificio)}</strong></td></tr>`;
+    if (mp.propietario) popHtml += `<tr><td class="pp-key">Propietario</td><td class="pp-val">${escH(mp.propietario)}</td></tr>`;
+    for (const t of mp.tipologias) {
+      if (!t.nombre) continue;
+      const parts = [
+        t.sup    != null ? `${t.sup} m² útil`   : null,
+        t.ufm2   != null ? `${t.ufm2} UF/m²`    : null,
+        t.ticket != null ? `${t.ticket} UF tick.`: null,
+      ].filter(Boolean);
+      popHtml += `<tr><td class="pp-key">${escH(t.nombre)}</td><td class="pp-val">${parts.join(' · ') || '—'}</td></tr>`;
+    }
+    popHtml += `</table>`;
+    L.marker([lat, lng], { icon: mpIcon, zIndexOffset: 1000 })
+      .bindPopup(popHtml, { maxWidth: 340 })
+      .addTo(markersLayer);
     bounds.push([lat, lng]);
   }
 
