@@ -1,6 +1,5 @@
 import { $, $$ } from './utils.js';
 import { resetFilters } from './filters.js';
-import { renderChart } from './chart.js';
 
 // Re-renderizar la pestaña activa cuando cambia Mi Proyecto
 document.addEventListener('mpchange', () => {
@@ -11,6 +10,8 @@ document.addEventListener('mpchange', () => {
     import('./map.js').then(({ renderMap }) => renderMap());
   } else if (activeTab === 'distribucion') {
     import('./chart.js').then(({ renderDistrib }) => renderDistrib());
+  } else if (activeTab === 'svp') {
+    import('./chart.js').then(({ renderSupVsPrecio }) => renderSupVsPrecio());
   }
 });
 
@@ -24,7 +25,6 @@ $$('.tab').forEach(tab => {
     $$('.tab-panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     $(`.tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
-    if (tab.dataset.tab === 'grafico') renderChart();
     if (tab.dataset.tab === 'comparativa') {
       import('./comparativa.js').then(({ renderComparativa }) => renderComparativa());
     }
@@ -33,6 +33,9 @@ $$('.tab').forEach(tab => {
     }
     if (tab.dataset.tab === 'mapa') {
       import('./map.js').then(({ renderMap }) => renderMap());
+    }
+    if (tab.dataset.tab === 'svp') {
+      import('./chart.js').then(({ renderSupVsPrecio }) => renderSupVsPrecio());
     }
   });
 });
@@ -63,12 +66,3 @@ $('#exportCsvBtn').addEventListener('click', () => {
   });
 });
 
-$('#exportPngBtn').addEventListener('click', () => {
-  import('./data.js').then(({ state }) => {
-    if (!state.chart) return;
-    const a = document.createElement('a');
-    a.href = state.chart.toBase64Image('image/png', 1);
-    a.download = `grafico_${Date.now()}.png`;
-    a.click();
-  });
-});

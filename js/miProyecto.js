@@ -12,6 +12,7 @@ export const mp = {
   inComp:      false,
   inMapa:      false,
   inDistrib:   false,
+  inSvp:       false,
 };
 
 let _initialized = false;
@@ -146,6 +147,7 @@ export function initMpPanel() {
   if ($('#mpInComp'))    $('#mpInComp').checked    = mp.inComp;
   if ($('#mpInMapa'))    $('#mpInMapa').checked    = mp.inMapa;
   if ($('#mpInDistrib')) $('#mpInDistrib').checked = mp.inDistrib;
+  if ($('#mpInSvp'))     $('#mpInSvp').checked     = mp.inSvp;
 
   // Trigger geocoding if address is already saved
   if (mp.direccion) _geocode(mp.direccion);
@@ -169,6 +171,7 @@ export function initMpPanel() {
   $('#mpInComp')?.addEventListener('change',    e => { mp.inComp    = e.target.checked; _save(); });
   $('#mpInMapa')?.addEventListener('change',    e => { mp.inMapa    = e.target.checked; _save(); });
   $('#mpInDistrib')?.addEventListener('change', e => { mp.inDistrib = e.target.checked; _save(); });
+  $('#mpInSvp')?.addEventListener('change',     e => { mp.inSvp     = e.target.checked; _save(); });
 
   $('#mpAddTipo')?.addEventListener('click', () => {
     mp.tipologias.push({ id: Date.now(), nombre: '', sup: null, ufm2: null });

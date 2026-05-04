@@ -255,6 +255,198 @@ function sortEntries(entries, mode) {
   return e;
 }
 
+// ============== Sup. vs Precio ==============
+let svpListenersReady = false;
+
+export function populateSvpSelectors() {
+  const tipoSel = $('#svpTipoFilter');
+  if (!tipoSel) return;
+
+  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  const tipoCol = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k)));
+
+  tipoSel.innerHTML = '<option value="">Todas</option>';
+  if (tipoCol) {
+    const tipos = [...new Set(state.raw.map(r => r[tipoCol.name]).filter(Boolean))].sort();
+    for (const t of tipos) {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      tipoSel.appendChild(o);
+    }
+  }
+
+  if (!svpListenersReady) {
+    svpListenersReady = true;
+    tipoSel.addEventListener('change', renderSupVsPrecio);
+    $('#svpExportPngBtn')?.addEventListener('click', () => {
+      if (!state.chart) return;
+      const a = document.createElement('a');
+      a.href = state.chart.toBase64Image('image/png', 1);
+      a.download = `sup_vs_precio_${Date.now()}.png`;
+      a.click();
+    });
+  }
+}
+
+function _avgByEdif(rows, supCol, ufm2Col, edifCol) {
+  const byEdif = {};
+  for (const r of rows) {
+    const sup  = Number(r[supCol.name]);
+    const ufm2 = Number(r[ufm2Col.name]);
+    if (isNaN(sup) || isNaN(ufm2) || sup <= 0 || ufm2 <= 0) continue;
+    const edif = edifCol ? String(r[edifCol.name] ?? '—') : '—';
+    if (!byEdif[edif]) byEdif[edif] = { sups: [], ufm2s: [] };
+    byEdif[edif].sups.push(sup);
+    byEdif[edif].ufm2s.push(ufm2);
+  }
+  const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+  return Object.entries(byEdif).map(([edif, { sups, ufm2s }]) => ({
+    x: avg(sups),
+    y: avg(ufm2s),
+    label: edif,
+  }));
+}
+
+export function renderSupVsPrecio() {
+  if (state.filtered.length === 0) return;
+
+  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  const supCol = state.columns.find(c =>
+    c.type === 'number' &&
+    ['útil', 'util', 'vendible', 'sup. út', 'sup út'].some(k => normStr(c.name).includes(normStr(k)))
+  );
+  const ufm2Col = state.columns.find(c =>
+    normStr(c.name).includes('uf/m') || normStr(c.name).includes('uf / m')
+  );
+  const tipoCol = state.columns.find(c =>
+    ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k))
+  );
+  const edifCol = state.columns.find(c =>
+    ['edificio', 'proyecto', 'building'].some(k => normStr(c.name).includes(k))
+  );
+
+  if (!supCol || !ufm2Col) return;
+
+  if (state.chart) { state.chart.destroy(); state.chart = null; }
+  const ctx = $('#svpChart').getContext('2d');
+
+  const tipoFilter = $('#svpTipoFilter')?.value ?? '';
+
+  const fmtTipo = v => {
+    const s = String(v ?? '').trim();
+    return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
+  };
+
+  let rows = state.filtered;
+  if (tipoFilter) {
+    rows = rows.filter(r => tipoCol && String(r[tipoCol.name] ?? '') === tipoFilter);
+  }
+
+  // Mi Proyecto dataset (se construye primero para que aparezca primero en la leyenda)
+  const mpDatasets = [];
+  if (mp.inSvp && mp.tipologias.length > 0) {
+    const mpColor = '#1e293b';
+    const mpName  = mp.edificio || mp.propietario || 'Mi Proyecto';
+    const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.ufm2 != null);
+    const mpFiltered = tipoFilter
+      ? mpTipos.filter(t => fmtTipo(t.nombre) === fmtTipo(tipoFilter))
+      : mpTipos;
+
+    if (mpFiltered.length > 0) {
+      mpDatasets.push({
+        label: mpName,
+        data: mpFiltered.map(t => ({ x: t.sup, y: t.ufm2, label: `${mpName} ${fmtTipo(t.nombre)}` })),
+        backgroundColor: mpColor,
+        borderColor: mpColor,
+        borderWidth: 2,
+        pointRadius: 7,
+        pointHoverRadius: 9,
+      });
+    }
+  }
+
+  // Comparables: un punto por edificio (promedio de sup y ufm2)
+  const compDatasets = [];
+  if (tipoCol && !tipoFilter) {
+    const byTipo = {};
+    for (const r of rows) {
+      const sup  = Number(r[supCol.name]);
+      const ufm2 = Number(r[ufm2Col.name]);
+      if (isNaN(sup) || isNaN(ufm2) || sup <= 0 || ufm2 <= 0) continue;
+      const tipo = fmtTipo(r[tipoCol.name]) || '—';
+      const edif = edifCol ? String(r[edifCol.name] ?? '—') : '—';
+      const key  = tipo + '||' + edif;
+      if (!byTipo[key]) byTipo[key] = { tipo, edif, sups: [], ufm2s: [] };
+      byTipo[key].sups.push(sup);
+      byTipo[key].ufm2s.push(ufm2);
+    }
+    const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+    const tipoGroups = {};
+    for (const { tipo, edif, sups, ufm2s } of Object.values(byTipo)) {
+      if (!tipoGroups[tipo]) tipoGroups[tipo] = [];
+      tipoGroups[tipo].push({ x: avg(sups), y: avg(ufm2s), label: edif });
+    }
+    Object.keys(tipoGroups).sort().forEach((tipo, i) => {
+      const hex = palette[i % palette.length];
+      compDatasets.push({
+        label: `Comparables ${tipo}`,
+        data: tipoGroups[tipo],
+        backgroundColor: hex + 'AA',
+        borderColor: hex,
+        borderWidth: 1,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+      });
+    });
+  } else {
+    const pts = _avgByEdif(rows, supCol, ufm2Col, edifCol);
+    const tipo = tipoFilter ? fmtTipo(tipoFilter) : '';
+    compDatasets.push({
+      label: tipo ? `Comparables ${tipo}` : 'Comparables',
+      data: pts,
+      backgroundColor: palette[0] + 'AA',
+      borderColor: palette[0],
+      borderWidth: 1,
+      pointRadius: 5,
+      pointHoverRadius: 7,
+    });
+  }
+
+  const datasets = [...mpDatasets, ...compDatasets];
+
+  state.chart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      parsing: false,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: item => {
+              const d = item.raw;
+              const name = d.label ? `${d.label}: ` : '';
+              return `${name}${Number(d.x).toLocaleString('es-CL')} m² · ${Number(d.y).toLocaleString('es-CL')} UF/m²`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Útil (m²)' },
+          ticks: { callback: v => v.toLocaleString('es-CL') },
+        },
+        y: {
+          title: { display: true, text: 'UF/m²' },
+          ticks: { callback: v => v.toLocaleString('es-CL') },
+        },
+      },
+    },
+  });
+}
+
 // ============== Distribución (curva de precios) ==============
 let distribChart = null;
 let distribListenersReady = false;

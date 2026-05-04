@@ -319,11 +319,11 @@ export function applyFilters() {
   _updateRangeLimits();
 
   import('./table.js').then(({ renderTable }) => renderTable());
-  import('./chart.js').then(({ renderKpis, renderChart, renderDistrib }) => {
+  import('./chart.js').then(({ renderKpis, renderDistrib, renderSupVsPrecio }) => {
     renderKpis();
     const tab = $('.tab.active')?.dataset.tab;
-    if (tab === 'grafico')      renderChart();
     if (tab === 'distribucion') renderDistrib();
+    if (tab === 'svp')          renderSupVsPrecio();
   });
   const activeTab = $('.tab.active')?.dataset.tab;
   if (activeTab === 'comparativa') {

@@ -70,6 +70,10 @@
               <input type="checkbox" id="mpInDistrib" />
               <span>Distribución</span>
             </label>
+            <label class="mp-check-row">
+              <input type="checkbox" id="mpInSvp" />
+              <span>Sup. vs Precio</span>
+            </label>
           </div>
         </div>
       </div>
@@ -89,7 +93,7 @@
         <div class="tabs">
           <button class="tab active" data-tab="tabla">Tabla</button>
           <button class="tab" data-tab="comparativa">Tabla comparativa</button>
-          <button class="tab" data-tab="grafico">Gráfico</button>
+          <button class="tab" data-tab="svp">Sup. Vs Precio</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="mapa">Mapa</button>
         </div>
@@ -129,56 +133,19 @@
           </div>
         </div>
 
-        <!-- TAB: GRAFICO -->
-        <div class="tab-panel" data-panel="grafico">
+        <!-- TAB: SUP. VS PRECIO -->
+        <div class="tab-panel" data-panel="svp">
           <div class="chart-controls">
             <div class="ctrl">
-              <label>Tipo</label>
-              <select id="chartType">
-                <option value="bar">Barras</option>
-                <option value="line">Líneas</option>
-                <option value="scatter">Dispersión</option>
-                <option value="pie">Torta</option>
+              <label>Tipología</label>
+              <select id="svpTipoFilter">
+                <option value="">Todas</option>
               </select>
             </div>
-            <div class="ctrl">
-              <label>Eje X</label>
-              <select id="chartX"></select>
-            </div>
-            <div class="ctrl">
-              <label>Eje Y</label>
-              <select id="chartY"></select>
-            </div>
-            <div class="ctrl">
-              <label>Agregación</label>
-              <select id="chartAgg">
-                <option value="count">Conteo</option>
-                <option value="sum">Suma</option>
-                <option value="avg" selected>Promedio</option>
-                <option value="min">Mínimo</option>
-                <option value="max">Máximo</option>
-                <option value="median">Mediana</option>
-              </select>
-            </div>
-            <div class="ctrl">
-              <label>Agrupar por (color)</label>
-              <select id="chartGroup">
-                <option value="">— Ninguno —</option>
-              </select>
-            </div>
-            <div class="ctrl">
-              <label>Orden</label>
-              <select id="chartSort">
-                <option value="value-desc">Valor (desc)</option>
-                <option value="value-asc">Valor (asc)</option>
-                <option value="label-asc">Etiqueta A-Z</option>
-                <option value="label-desc">Etiqueta Z-A</option>
-              </select>
-            </div>
-            <button id="exportPngBtn" class="primary-btn">Exportar PNG</button>
+            <button id="svpExportPngBtn" class="primary-btn">Exportar PNG</button>
           </div>
           <div class="chart-wrap">
-            <canvas id="mainChart"></canvas>
+            <canvas id="svpChart"></canvas>
           </div>
         </div>
 

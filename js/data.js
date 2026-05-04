@@ -84,9 +84,9 @@ function onDataLoaded(rows) {
   // Importar y llamar funciones de otros módulos
   import('./miProyecto.js').then(({ initMpPanel }) => initMpPanel());
   import('./filters.js').then(({ buildFilters }) => buildFilters());
-  import('./chart.js').then(({ populateChartSelectors, populateDistribSelectors }) => {
-    populateChartSelectors();
+  import('./chart.js').then(({ populateDistribSelectors, populateSvpSelectors }) => {
     populateDistribSelectors();
+    populateSvpSelectors();
   });
   import('./filters.js').then(({ applyFilters }) => applyFilters());
 
