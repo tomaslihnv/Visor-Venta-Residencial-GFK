@@ -13,6 +13,7 @@ export const mp = {
   inMapa:      false,
   inDistrib:   false,
   inSvp:       false,
+  inProy:      false,
 };
 
 let _initialized = false;
@@ -81,16 +82,14 @@ function _renderTipos() {
       `<option value="${opt}"${tipo.nombre === opt ? ' selected' : ''}>${opt}</option>`
     ).join('');
     card.innerHTML = `
+      <button class="mp-remove-tipo" data-id="${tipo.id}" title="Eliminar">×</button>
       <div class="mp-tipo-metrics">
         <div class="mp-metric-row">
           <span>Tipología</span>
-          <div class="mp-tipo-name-wrap">
-            <select class="mp-tipo-name mp-tipo-select mp-input">
-              <option value="">—</option>
-              ${typeOptions}
-            </select>
-            <button class="mp-remove-tipo" data-id="${tipo.id}" title="Eliminar">×</button>
-          </div>
+          <select class="mp-tipo-name mp-tipo-select mp-input">
+            <option value="">—</option>
+            ${typeOptions}
+          </select>
         </div>
         <label class="mp-metric-row">
           <span>Útil m²</span>
@@ -151,6 +150,7 @@ export function initMpPanel() {
   if ($('#mpInMapa'))    $('#mpInMapa').checked    = mp.inMapa;
   if ($('#mpInDistrib')) $('#mpInDistrib').checked = mp.inDistrib;
   if ($('#mpInSvp'))     $('#mpInSvp').checked     = mp.inSvp;
+  if ($('#mpInProy'))    $('#mpInProy').checked    = mp.inProy;
 
   // Trigger geocoding if address is already saved
   if (mp.direccion) _geocode(mp.direccion);
@@ -175,6 +175,7 @@ export function initMpPanel() {
   $('#mpInMapa')?.addEventListener('change',    e => { mp.inMapa    = e.target.checked; _save(); });
   $('#mpInDistrib')?.addEventListener('change', e => { mp.inDistrib = e.target.checked; _save(); });
   $('#mpInSvp')?.addEventListener('change',     e => { mp.inSvp     = e.target.checked; _save(); });
+  $('#mpInProy')?.addEventListener('change',    e => { mp.inProy    = e.target.checked; _save(); });
 
   $('#mpAddTipo')?.addEventListener('click', () => {
     mp.tipologias.push({ id: Date.now(), nombre: '', sup: null, ufm2: null });

@@ -263,6 +263,173 @@ function sortEntries(entries, mode) {
   return e;
 }
 
+// ============== Proyectos (barras por edificio) ==============
+let proyChart = null;
+let proyListenersReady = false;
+
+const PROY_METRICS = [
+  { id: 'ticket', label: 'Ticket UF',            keys: ['ticket'],                      agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
+  { id: 'ufm2',   label: 'UF/m²',               keys: ['uf/m', 'uf / m'],              agg: 'avg', fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
+  { id: 'util',   label: 'Útil (m²)',            keys: ['útil', 'util', 'vendible'],    agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
+  { id: 'disp',   label: 'Disponibles',          keys: ['disponib'],                    agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
+  { id: 'vel',    label: 'Vel. Venta (un./mes)', keys: ['vel. venta', 'vel venta'],     agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
+  { id: 'oferta', label: 'Oferta total proyecto',keys: ['oferta total', 'oferta'],      agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
+  { id: 'pct',    label: '% Vendido',            keys: ['% vendido', 'pct vendido', 'vendido'], agg: 'avg', fmt: v => {
+    const pct = Math.abs(v) <= 1.05 ? v * 100 : v;
+    return pct.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + '%';
+  }},
+];
+
+export function populateProyectosSelectors() {
+  const sel = $('#proyMetrica');
+  if (!sel || proyListenersReady) return;
+  proyListenersReady = true;
+  sel.addEventListener('change', renderProyectos);
+  $('#proyExportPngBtn')?.addEventListener('click', () => {
+    if (!proyChart) return;
+    const a = document.createElement('a');
+    a.href = proyChart.toBase64Image('image/png', 1);
+    a.download = `proyectos_${Date.now()}.png`;
+    a.click();
+  });
+}
+
+export function renderProyectos() {
+  if (state.filtered.length === 0) return;
+
+  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+
+  const metricId = $('#proyMetrica')?.value ?? 'ticket';
+  const metric   = PROY_METRICS.find(m => m.id === metricId) ?? PROY_METRICS[0];
+
+  const edifCol   = state.columns.find(c =>
+    ['edificio', 'proyecto', 'building'].some(k => normStr(c.name).includes(k))
+  )?.name;
+  const metricCol = state.columns.find(c =>
+    c.type === 'number' && metric.keys.some(k => normStr(c.name).includes(normStr(k)))
+  )?.name;
+
+  if (!edifCol || !metricCol) return;
+
+  if (proyChart) { proyChart.destroy(); proyChart = null; }
+  const ctx = $('#proyChart').getContext('2d');
+
+  const byEdif = {};
+  for (const r of state.filtered) {
+    const edif = String(r[edifCol] ?? '').trim();
+    if (!edif) continue;
+    const val = Number(r[metricCol]);
+    if (isNaN(val)) continue;
+    if (!byEdif[edif]) byEdif[edif] = [];
+    byEdif[edif].push(val);
+  }
+
+  const aggFn = metric.agg === 'sum'
+    ? arr => arr.reduce((a, b) => a + b, 0)
+    : arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+  let entries = Object.entries(byEdif)
+    .map(([edif, vals]) => [edif, aggFn(vals)]);
+
+  // Mi Proyecto — respeta el filtro de tipología activo
+  let mpName = null;
+  if (mp.inProy && mp.edificio && mp.tipologias.length > 0) {
+    const fmtTipo = v => {
+      const s = String(v ?? '').trim();
+      return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
+    };
+    const tipoCol = state.columns.find(c =>
+      ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k))
+    );
+    const activeTipos = tipoCol
+      ? new Set(state.filtered.map(r => fmtTipo(r[tipoCol.name])).filter(Boolean))
+      : null;
+
+    const tipos = mp.tipologias.filter(t =>
+      t.nombre && (activeTipos ? activeTipos.has(fmtTipo(t.nombre)) : true)
+    );
+
+    let mpVal = null;
+    if (metricId === 'ticket') {
+      const vals = tipos.filter(t => t.sup != null && t.ufm2 != null).map(t => t.sup * t.ufm2);
+      if (vals.length) mpVal = vals.reduce((a, b) => a + b, 0) / vals.length;
+    } else if (metricId === 'ufm2') {
+      const vals = tipos.filter(t => t.ufm2 != null).map(t => t.ufm2);
+      if (vals.length) mpVal = vals.reduce((a, b) => a + b, 0) / vals.length;
+    } else if (metricId === 'util') {
+      const vals = tipos.filter(t => t.sup != null).map(t => t.sup);
+      if (vals.length) mpVal = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    if (mpVal !== null) {
+      mpName = mp.edificio || mp.propietario || 'Mi Proyecto';
+      entries.push([mpName, mpVal]);
+    }
+  }
+
+  entries = entries.sort((a, b) => b[1] - a[1]);
+
+  const MP_COLOR  = '#f59e0b';
+  const BAR_COLOR = '#1e3a5f';
+
+  // Plugin inline para etiquetas permanentes sobre cada barra
+  const barLabelsPlugin = {
+    id: 'barLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx: c, scales } = chart;
+      const meta = chart.getDatasetMeta(0);
+      c.save();
+      c.font = 'bold 10px system-ui, sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'bottom';
+      meta.data.forEach((bar, i) => {
+        const value = entries[i]?.[1];
+        if (value == null) return;
+        const isMP = entries[i]?.[0] === mpName;
+        c.fillStyle = isMP ? '#d97706' : '#374151';
+        c.fillText(metric.fmt(value), bar.x, bar.y - 3);
+      });
+      c.restore();
+    },
+  };
+
+  proyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: entries.map(([e]) => e),
+      datasets: [{
+        label: metric.label,
+        data: entries.map(([, v]) => v),
+        backgroundColor: entries.map(([e]) => (e === mpName ? MP_COLOR : BAR_COLOR) + 'CC'),
+        borderColor:     entries.map(([e]) =>  e === mpName ? '#d97706' : BAR_COLOR),
+        borderWidth: 1,
+        borderRadius: 3,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: item => ` ${metric.fmt(item.raw)}` },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { maxRotation: 45, minRotation: 30, font: { size: 11 } },
+        },
+        y: {
+          title: { display: true, text: metric.label },
+          ticks: { callback: v => metric.fmt(v) },
+          beginAtZero: false,
+        },
+      },
+    },
+    plugins: [barLabelsPlugin],
+  });
+}
+
 // ============== Sup. vs Precio ==============
 let svpListenersReady = false;
 
@@ -373,26 +540,18 @@ export function renderSupVsPrecio() {
     }
   }
 
-  // Comparables: un punto por edificio (promedio de sup y ufm2)
+  // Comparables: un punto por fila (sin promediar sub-tipologías)
   const compDatasets = [];
   if (tipoCol && !tipoFilter) {
-    const byTipo = {};
+    const tipoGroups = {};
     for (const r of rows) {
       const sup  = Number(r[supCol.name]);
       const ufm2 = Number(r[ufm2Col.name]);
       if (isNaN(sup) || isNaN(ufm2) || sup <= 0 || ufm2 <= 0) continue;
       const tipo = fmtTipo(r[tipoCol.name]) || '—';
       const edif = edifCol ? String(r[edifCol.name] ?? '—') : '—';
-      const key  = tipo + '||' + edif;
-      if (!byTipo[key]) byTipo[key] = { tipo, edif, sups: [], ufm2s: [] };
-      byTipo[key].sups.push(sup);
-      byTipo[key].ufm2s.push(ufm2);
-    }
-    const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
-    const tipoGroups = {};
-    for (const { tipo, edif, sups, ufm2s } of Object.values(byTipo)) {
       if (!tipoGroups[tipo]) tipoGroups[tipo] = [];
-      tipoGroups[tipo].push({ x: avg(sups), y: avg(ufm2s), label: edif });
+      tipoGroups[tipo].push({ x: sup, y: ufm2, label: edif });
     }
     Object.keys(tipoGroups).sort().forEach((tipo, i) => {
       const hex = palette[i % palette.length];
@@ -407,7 +566,14 @@ export function renderSupVsPrecio() {
       });
     });
   } else {
-    const pts = _avgByEdif(rows, supCol, ufm2Col, edifCol);
+    const pts = [];
+    for (const r of rows) {
+      const sup  = Number(r[supCol.name]);
+      const ufm2 = Number(r[ufm2Col.name]);
+      if (isNaN(sup) || isNaN(ufm2) || sup <= 0 || ufm2 <= 0) continue;
+      const edif = edifCol ? String(r[edifCol.name] ?? '—') : '—';
+      pts.push({ x: sup, y: ufm2, label: edif });
+    }
     const tipo = tipoFilter ? fmtTipo(tipoFilter) : '';
     compDatasets.push({
       label: tipo ? `Comparables ${tipo}` : 'Comparables',

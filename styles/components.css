@@ -471,24 +471,32 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   padding: 3px 9px; font-size: 11px; font-weight: 600; cursor: pointer;
 }
 .mp-add-btn:hover { background: #2563eb; }
-.mp-tipos-container { display: flex; flex-direction: column; gap: 8px; }
+.mp-tipo-metrics { display: flex; flex-direction: column; gap: 5px; }
+.mp-tipos-container { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
+.mp-tipo-select {
+  width: 80px;
+  font-size: 12px;
+  padding: 3px 6px;
+  text-align: left;
+}
 .mp-tipo-card {
   border: 1px solid #e5e7eb; border-radius: 6px;
   padding: 8px; background: #f8fafc;
-}
-.mp-tipo-metrics { display: flex; flex-direction: column; gap: 5px; }
-.mp-tipo-name-wrap { display: flex; align-items: center; gap: 4px; }
-.mp-tipo-select {
-  width: 62px;
-  font-size: 12px;
-  padding: 3px 4px;
-  text-align: left;
+  position: relative;
 }
 .mp-remove-tipo {
-  background: none; border: none; color: #9ca3af;
-  font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px;
+  position: absolute;
+  top: -8px; right: -8px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  border: 1.5px solid #d1d5db;
+  color: #6b7280;
+  font-size: 11px; font-weight: 700; line-height: 1;
+  cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
 }
-.mp-remove-tipo:hover { color: #dc2626; }
+.mp-remove-tipo:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
 .mp-metric-row {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
 }

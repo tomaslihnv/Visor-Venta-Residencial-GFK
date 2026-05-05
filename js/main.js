@@ -12,6 +12,8 @@ document.addEventListener('mpchange', () => {
     import('./chart.js').then(({ renderDistrib }) => renderDistrib());
   } else if (activeTab === 'svp') {
     import('./chart.js').then(({ renderSupVsPrecio }) => renderSupVsPrecio());
+  } else if (activeTab === 'proyectos') {
+    import('./chart.js').then(({ renderProyectos }) => renderProyectos());
   }
 });
 
@@ -44,6 +46,9 @@ $$('.tab').forEach(tab => {
     }
     if (tab.dataset.tab === 'svp') {
       import('./chart.js').then(({ renderSupVsPrecio }) => renderSupVsPrecio());
+    }
+    if (tab.dataset.tab === 'proyectos') {
+      import('./chart.js').then(({ renderProyectos }) => renderProyectos());
     }
   });
 });

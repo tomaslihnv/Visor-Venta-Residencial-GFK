@@ -66,6 +66,10 @@
               <input type="checkbox" id="mpInSvp" />
               <span>Sup. vs Precio</span>
             </label>
+            <label class="mp-check-row">
+              <input type="checkbox" id="mpInProy" />
+              <span>Proyectos</span>
+            </label>
           </div>
         </div>
       </div>
@@ -97,38 +101,31 @@
         <div class="kpis" id="kpis"></div>
 
         <div class="tabs">
-          <button class="tab active" data-tab="tabla">Tabla</button>
+          <button class="tab active" data-tab="mapa">Mapa</button>
           <button class="tab" data-tab="comparativa">Tabla comparativa</button>
           <button class="tab" data-tab="svp">Sup. Vs Precio</button>
+          <button class="tab" data-tab="proyectos">Proyectos</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
-          <button class="tab" data-tab="mapa">Mapa</button>
+          <button class="tab" data-tab="tabla">Tabla</button>
         </div>
 
-        <!-- TAB: TABLA -->
-        <div class="tab-panel active" data-panel="tabla">
-          <div class="panel-toolbar">
-            <input type="text" id="searchInput" placeholder="Buscar en la tabla..." />
-            <div class="toolbar-right">
-              <span id="rowCount" class="muted"></span>
-              <button id="exportCsvBtn" class="primary-btn">Exportar CSV</button>
+        <!-- TAB: MAPA -->
+        <div class="tab-panel active" data-panel="mapa">
+          <div id="geocodeStatus" class="geocode-status"></div>
+          <div class="map-placeholder">
+            <h3>Mapa</h3>
+            <p>Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada <code>Dirección</code> (o similar), los proyectos aparecerán automáticamente en el mapa.</p>
+          </div>
+          <div id="mapWrapper" class="map-wrapper hidden">
+            <div class="map-main">
+              <div class="map-toolbar">
+                <button class="map-mode-btn active" data-mode="general">General</button>
+                <button class="map-mode-btn" data-mode="precio">De calor</button>
+              </div>
+              <div id="map" class="map"></div>
             </div>
-          </div>
-          <div class="table-wrap">
-            <table id="dataTable">
-              <thead></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <div class="pagination">
-            <button id="prevPage">‹ Anterior</button>
-            <span id="pageInfo"></span>
-            <button id="nextPage">Siguiente ›</button>
-            <select id="pageSize">
-              <option value="25">25</option>
-              <option value="50" selected>50</option>
-              <option value="100">100</option>
-              <option value="250">250</option>
-            </select>
+            <div id="mapRankingResizer" class="map-ranking-resizer"></div>
+            <div id="mapRanking" class="map-ranking"></div>
           </div>
         </div>
 
@@ -152,6 +149,28 @@
           </div>
           <div class="chart-wrap">
             <canvas id="svpChart"></canvas>
+          </div>
+        </div>
+
+        <!-- TAB: PROYECTOS -->
+        <div class="tab-panel" data-panel="proyectos">
+          <div class="chart-controls">
+            <div class="ctrl">
+              <label>Métrica</label>
+              <select id="proyMetrica">
+                <option value="ticket">Ticket UF</option>
+                <option value="ufm2">UF/m²</option>
+                <option value="util">Útil (m²)</option>
+                <option value="disp">Disponibles</option>
+                <option value="vel">Vel. Venta (un./mes)</option>
+                <option value="oferta">Oferta total proyecto</option>
+                <option value="pct">% Vendido</option>
+              </select>
+            </div>
+            <button id="proyExportPngBtn" class="primary-btn">Exportar PNG</button>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="proyChart"></canvas>
           </div>
         </div>
 
@@ -184,23 +203,31 @@
           </div>
         </div>
 
-        <!-- TAB: MAPA -->
-        <div class="tab-panel" data-panel="mapa">
-          <div id="geocodeStatus" class="geocode-status"></div>
-          <div class="map-placeholder">
-            <h3>Mapa</h3>
-            <p>Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada <code>Dirección</code> (o similar), los proyectos aparecerán automáticamente en el mapa.</p>
-          </div>
-          <div id="mapWrapper" class="map-wrapper hidden">
-            <div class="map-main">
-              <div class="map-toolbar">
-                <button class="map-mode-btn active" data-mode="general">General</button>
-                <button class="map-mode-btn" data-mode="precio">De calor</button>
-              </div>
-              <div id="map" class="map"></div>
+        <!-- TAB: TABLA -->
+        <div class="tab-panel" data-panel="tabla">
+          <div class="panel-toolbar">
+            <input type="text" id="searchInput" placeholder="Buscar en la tabla..." />
+            <div class="toolbar-right">
+              <span id="rowCount" class="muted"></span>
+              <button id="exportCsvBtn" class="primary-btn">Exportar CSV</button>
             </div>
-            <div id="mapRankingResizer" class="map-ranking-resizer"></div>
-            <div id="mapRanking" class="map-ranking"></div>
+          </div>
+          <div class="table-wrap">
+            <table id="dataTable">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination">
+            <button id="prevPage">‹ Anterior</button>
+            <span id="pageInfo"></span>
+            <button id="nextPage">Siguiente ›</button>
+            <select id="pageSize">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+            </select>
           </div>
         </div>
       </div>
