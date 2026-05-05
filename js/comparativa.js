@@ -67,31 +67,83 @@ function findMpTipo(dataTipo) {
   );
 }
 
-const COMP_CSS = `
-table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 11pt; }
-th, td { padding: 5pt 9pt; border: 1px solid #e2e8f0; white-space: nowrap; vertical-align: middle; }
-.comp-head-top th { background-color: #1e3a5f; color: #ffffff; font-weight: bold; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.06em; }
-.comp-th-tipo { background-color: #475569; color: #e2e8f0; text-align: center; border-left: 2px solid #cbd5e1; }
-.comp-th-section { background-color: #1e3a5f; color: #ffffff; text-align: left; }
-.comp-head-sub th { background-color: #f1f5f9; font-weight: 600; font-size: 9.5pt; color: #374151; }
-.comp-num { text-align: right; }
-.comp-sep { border-left: 2px solid #e2e8f0; }
-.comp-edificio { font-weight: 600; color: #1e3a5f; }
-tbody tr td { color: #0f172a; }
-.comp-promedio td { background-color: #f8fafc; font-weight: bold; border-top: 2px solid #cbd5e1; }
-.comp-situ td { background-color: #eef2ff; color: #1e3a5f; font-weight: 600; border-top: 2px solid #1e3a5f; }
-.comp-situ-vs td { background-color: #f0f9ff; font-style: italic; color: #475569; }
-.situ-vs-label { font-style: italic; color: #475569; }
-.vs-pos { color: #15803d; font-weight: 700; }
-.vs-neg { color: #b91c1c; font-weight: 700; }
-.vs-zero { color: #6b7280; font-weight: 600; }
-`;
+// Lee estilos computados del DOM y los convierte en atributo style inline
+function _cellInlineStyle(srcEl) {
+  const c = window.getComputedStyle(srcEl);
+  const s = [];
+
+  s.push(`font-family:'Roboto',Arial,sans-serif`);
+  s.push(`font-size:8pt`);
+  s.push(`mso-font-size-alt:8`);          // pista explícita para Office
+  s.push(`padding:3pt 7pt`);
+  s.push(`vertical-align:middle`);
+  s.push(`white-space:nowrap`);
+  s.push(`mso-wrap-style:none`);          // desactiva ajuste de texto en PPT
+  s.push(`overflow:hidden`);
+  s.push(`border:1px solid #e2e8f0`);
+
+  // Color de fondo
+  const bg = c.backgroundColor;
+  if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') s.push(`background-color:${bg}`);
+
+  // Color de texto, peso, alineación, estilo
+  s.push(`color:${c.color}`);
+  s.push(`font-weight:${c.fontWeight}`);
+  s.push(`text-align:${c.textAlign}`);
+  if (c.fontStyle === 'italic') s.push(`font-style:italic`);
+  if (c.textTransform === 'uppercase') s.push(`text-transform:uppercase`);
+
+  // Bordes superiores más gruesos (separadores de sección)
+  const btw = parseFloat(c.borderTopWidth);
+  if (btw > 1) s.push(`border-top:${c.borderTopWidth} ${c.borderTopStyle} ${c.borderTopColor}`);
+
+  // Borde izquierdo de separación de tipología
+  const blw = parseFloat(c.borderLeftWidth);
+  if (blw > 1) s.push(`border-left:${c.borderLeftWidth} ${c.borderLeftStyle} ${c.borderLeftColor}`);
+
+  return s.join(';');
+}
 
 export async function copyComparativaHtml() {
   const table = document.querySelector('#comparativaContent .comp-table');
   if (!table) return;
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${COMP_CSS}</style></head><body>${table.outerHTML}</body></html>`;
+  const clone = table.cloneNode(true);
+
+  // Aplicar inline styles leyendo el estado real del DOM (colores, pesos, etc.)
+  const srcCells = [...table.querySelectorAll('th, td')];
+  const dstCells = [...clone.querySelectorAll('th, td')];
+  srcCells.forEach((src, i) => {
+    const dst = dstCells[i];
+    dst.setAttribute('style', _cellInlineStyle(src));
+    dst.removeAttribute('class');
+    dst.setAttribute('nowrap', 'nowrap'); // atributo HTML (refuerza no-wrapping en PPT)
+
+    // PowerPoint ignora font-size en <td>; aplicarlo al span interno garantiza el tamaño
+    const inner = dst.innerHTML;
+    dst.innerHTML = `<span style="font-size:8pt;font-family:'Roboto',Arial,sans-serif;">${inner}</span>`;
+  });
+
+  clone.querySelectorAll('tr').forEach(tr => tr.removeAttribute('class'));
+  clone.setAttribute('style',
+    'border-collapse:collapse;font-family:\'Roboto\',Arial,sans-serif;font-size:8pt;');
+  clone.removeAttribute('class');
+
+  // Fijar ancho de columnas según el renderizado real (evita que PPT contraiga columnas)
+  const srcBodyRows = [...table.querySelectorAll('tbody tr, tfoot tr')];
+  const dstBodyRows = [...clone.querySelectorAll('tbody tr, tfoot tr')];
+  if (srcBodyRows.length > 0) {
+    const srcDataCells = [...srcBodyRows[0].querySelectorAll('th, td')];
+    const dstDataCells = [...dstBodyRows[0]?.querySelectorAll('th, td') ?? []];
+    srcDataCells.forEach((src, i) => {
+      if (dstDataCells[i]) {
+        const w = Math.ceil(src.getBoundingClientRect().width);
+        if (w > 0) dstDataCells[i].setAttribute('width', w);
+      }
+    });
+  }
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${clone.outerHTML}</body></html>`;
 
   try {
     await navigator.clipboard.write([
@@ -99,7 +151,6 @@ export async function copyComparativaHtml() {
     ]);
     return true;
   } catch {
-    // Fallback: execCommand para navegadores sin Clipboard API
     const ta = document.createElement('textarea');
     ta.value = html;
     ta.style.cssText = 'position:fixed;left:-9999px';
