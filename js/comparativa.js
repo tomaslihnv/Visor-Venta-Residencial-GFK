@@ -67,6 +67,50 @@ function findMpTipo(dataTipo) {
   );
 }
 
+const COMP_CSS = `
+table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 11pt; }
+th, td { padding: 5pt 9pt; border: 1px solid #e2e8f0; white-space: nowrap; vertical-align: middle; }
+.comp-head-top th { background-color: #1e3a5f; color: #ffffff; font-weight: bold; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.06em; }
+.comp-th-tipo { background-color: #475569; color: #e2e8f0; text-align: center; border-left: 2px solid #cbd5e1; }
+.comp-th-section { background-color: #1e3a5f; color: #ffffff; text-align: left; }
+.comp-head-sub th { background-color: #f1f5f9; font-weight: 600; font-size: 9.5pt; color: #374151; }
+.comp-num { text-align: right; }
+.comp-sep { border-left: 2px solid #e2e8f0; }
+.comp-edificio { font-weight: 600; color: #1e3a5f; }
+tbody tr td { color: #0f172a; }
+.comp-promedio td { background-color: #f8fafc; font-weight: bold; border-top: 2px solid #cbd5e1; }
+.comp-situ td { background-color: #eef2ff; color: #1e3a5f; font-weight: 600; border-top: 2px solid #1e3a5f; }
+.comp-situ-vs td { background-color: #f0f9ff; font-style: italic; color: #475569; }
+.situ-vs-label { font-style: italic; color: #475569; }
+.vs-pos { color: #15803d; font-weight: 700; }
+.vs-neg { color: #b91c1c; font-weight: 700; }
+.vs-zero { color: #6b7280; font-weight: 600; }
+`;
+
+export async function copyComparativaHtml() {
+  const table = document.querySelector('#comparativaContent .comp-table');
+  if (!table) return;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${COMP_CSS}</style></head><body>${table.outerHTML}</body></html>`;
+
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
+    ]);
+    return true;
+  } catch {
+    // Fallback: execCommand para navegadores sin Clipboard API
+    const ta = document.createElement('textarea');
+    ta.value = html;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return true;
+  }
+}
+
 export function renderComparativa() {
   const container = $('#comparativaContent');
   if (!container) return;

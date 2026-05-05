@@ -53,6 +53,19 @@ $$('.tab').forEach(tab => {
   });
 });
 
+// ============== Copiar tabla comparativa ==============
+$('#exportCompBtn').addEventListener('click', async () => {
+  const btn = $('#exportCompBtn');
+  const { copyComparativaHtml } = await import('./comparativa.js');
+  const ok = await copyComparativaHtml();
+  if (ok) {
+    const prev = btn.textContent;
+    btn.textContent = '¡Copiado!';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
+  }
+});
+
 // ============== Exportar ==============
 $('#exportCsvBtn').addEventListener('click', () => {
   import('./data.js').then(({ state }) => {
