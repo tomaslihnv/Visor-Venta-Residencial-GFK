@@ -453,6 +453,7 @@ export function populateSvpSelectors() {
   if (!svpListenersReady) {
     svpListenersReady = true;
     tipoSel.addEventListener('change', renderSupVsPrecio);
+    $('#svpTrendToggle')?.addEventListener('change', renderSupVsPrecio);
     $('#svpExportPngBtn')?.addEventListener('click', () => {
       if (!state.chart) return;
       const a = document.createElement('a');
@@ -461,6 +462,24 @@ export function populateSvpSelectors() {
       a.click();
     });
   }
+}
+
+function linearRegression(pts) {
+  const n = pts.length;
+  if (n < 2) return null;
+  const sx  = pts.reduce((s, p) => s + p.x, 0);
+  const sy  = pts.reduce((s, p) => s + p.y, 0);
+  const sxy = pts.reduce((s, p) => s + p.x * p.y, 0);
+  const sx2 = pts.reduce((s, p) => s + p.x * p.x, 0);
+  const den = n * sx2 - sx * sx;
+  if (den === 0) return null;
+  const m = (n * sxy - sx * sy) / den;
+  const b = (sy - m * sx) / n;
+  const yMean = sy / n;
+  const ssTot = pts.reduce((s, p) => s + (p.y - yMean) ** 2, 0);
+  const ssRes = pts.reduce((s, p) => s + (p.y - (m * p.x + b)) ** 2, 0);
+  const r2 = ssTot === 0 ? 1 : 1 - ssRes / ssTot;
+  return { m, b, r2 };
 }
 
 function _avgByEdif(rows, supCol, ufm2Col, edifCol) {
@@ -588,9 +607,61 @@ export function renderSupVsPrecio() {
 
   const datasets = [...mpDatasets, ...compDatasets];
 
+  // ── Regresión lineal sobre todos los puntos comparables ──
+  const allCompPts = compDatasets.flatMap(ds => ds.data);
+  let reg = null;
+  const showTrend = $('#svpTrendToggle')?.checked ?? true;
+  if (showTrend && allCompPts.length >= 3) {
+    reg = linearRegression(allCompPts);
+    if (reg) {
+      const xs = allCompPts.map(p => p.x);
+      const xMin = Math.min(...xs), xMax = Math.max(...xs);
+      datasets.push({
+        label: `Tendencia  (R² = ${reg.r2.toFixed(2)})`,
+        data: [
+          { x: xMin, y: reg.m * xMin + reg.b },
+          { x: xMax, y: reg.m * xMax + reg.b },
+        ],
+        showLine: true,
+        borderColor: 'rgba(30,58,95,0.75)',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        borderDash: [7, 4],
+        pointRadius: 0,
+        fill: false,
+        order: 0,
+      });
+    }
+  }
+
+  // Plugin inline: caja R² en esquina superior derecha del área del gráfico
+  const svpR2Plugin = {
+    id: 'svpR2',
+    afterDraw(chart) {
+      if (!reg) return;
+      const { ctx: c, chartArea: { right, top } } = chart;
+      const text = `R² = ${reg.r2.toFixed(3)}`;
+      c.save();
+      c.font = 'bold 12px system-ui, sans-serif';
+      c.textAlign = 'right';
+      c.textBaseline = 'middle';
+      const w = c.measureText(text).width;
+      const pad = 6, h = 22, rx = right - w - pad * 2 - 2, ry = top + 6;
+      c.fillStyle = 'rgba(255,255,255,0.92)';
+      c.fillRect(rx, ry, w + pad * 2, h);
+      c.strokeStyle = '#cbd5e1';
+      c.lineWidth = 1;
+      c.strokeRect(rx, ry, w + pad * 2, h);
+      c.fillStyle = '#1e3a5f';
+      c.fillText(text, right - pad, ry + h / 2);
+      c.restore();
+    },
+  };
+
   state.chart = new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
+    plugins: [svpR2Plugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -600,6 +671,7 @@ export function renderSupVsPrecio() {
         tooltip: {
           callbacks: {
             label: item => {
+              if (item.dataset.showLine) return null; // ocultar tooltip en la línea
               const d = item.raw;
               const name = d.label ? `${d.label}: ` : '';
               return `${name}${Number(d.x).toLocaleString('es-CL')} m² · ${Number(d.y).toLocaleString('es-CL')} UF/m²`;
