@@ -625,6 +625,7 @@ export function renderSupVsPrecio() {
 let distribChart = null;
 let distribListenersReady = false;
 const distribMarkers = { percentiles: new Set(), prices: new Set() };
+let distribUnit = 'UF'; // unidad activa, se actualiza al renderizar
 
 export function populateDistribSelectors() {
   const colSel = $('#distribCol');
@@ -707,7 +708,7 @@ function refreshMarkerTags() {
   [...distribMarkers.prices].sort((a, b) => a - b).forEach(v => {
     const tag = document.createElement('span');
     tag.className = 'marker-tag price-tag';
-    tag.innerHTML = `${v.toLocaleString('es-CL')} UF <button data-val="${v}" class="rm-price">×</button>`;
+    tag.innerHTML = `${v.toLocaleString('es-CL')} ${distribUnit} <button data-val="${v}" class="rm-price">×</button>`;
     tag.querySelector('.rm-price').addEventListener('click', () => {
       distribMarkers.prices.delete(v);
       refreshMarkerTags();
@@ -757,6 +758,8 @@ export function renderDistrib() {
   if (!colSel || state.filtered.length === 0) return;
 
   const col = colSel.value;
+  const _nc = col.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²' : 'UF';
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
   const ctx = $('#distribChart').getContext('2d');
@@ -793,7 +796,7 @@ export function renderDistrib() {
     annotations[`ph_${pct}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct,
       borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${priceLabel} UF`, display: true, position: 'start',
+      label: { content: `${priceLabel} ${distribUnit}`, display: true, position: 'start',
         color, backgroundColor: 'rgba(255,255,255,0.9)',
         padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
     };
@@ -806,7 +809,7 @@ export function renderDistrib() {
     annotations[`prh_${price}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pctForLabel,
       borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${price.toLocaleString('es-CL')} UF`, display: true, position: 'start',
+      label: { content: `${price.toLocaleString('es-CL')} ${distribUnit}`, display: true, position: 'start',
         color, backgroundColor: 'rgba(255,255,255,0.9)',
         padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
     };
@@ -889,7 +892,7 @@ export function renderDistrib() {
           axis: 'x',
           callbacks: {
             title: items => `P${Number(items[0]?.parsed.x).toFixed(1)}`,
-            label: item => ` ${item.dataset.label}: ${Number(item.parsed.y).toLocaleString('es-CL', { maximumFractionDigits: 0 })} UF`,
+            label: item => ` ${item.dataset.label}: ${Number(item.parsed.y).toLocaleString('es-CL', { maximumFractionDigits: 0 })} ${distribUnit}`,
           },
         },
         annotation: { annotations },
