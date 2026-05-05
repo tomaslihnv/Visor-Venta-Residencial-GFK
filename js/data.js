@@ -11,7 +11,71 @@ export const state = {
   page: 1,
   pageSize: 50,
   chart: null,
+  source: 'gfk',     // 'gfk' | 'inciti'
 };
+
+// ============== Normalización Inciti → GFK ==============
+const _normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').trim();
+
+const INCITI_TO_GFK = {
+  'Proyecto':                  'Edificio',
+  'Inmobiliaria':              'Propietario',
+  'Programa':                  'Tipología',
+  'Oferta Programa':           'Disponibles',
+  'Precio UF':                 'Ticket UF',
+  'UF/m2':                     'UF/m²',
+  'M2 Útil':                   'Interior (m²)',
+  'M2 Terraza':                'Terraza (m²)',
+  'm2 Vendible':               'Útil (m²)',
+  'Fecha Inicio Construcción': 'Fecha inicio',
+  'Fecha Est. Entrega':        'Fecha entrega',
+};
+// Lookup insensible a tildes como fallback
+const INCITI_NORM_MAP = Object.fromEntries(
+  Object.entries(INCITI_TO_GFK).map(([k, v]) => [_normStr(k), v])
+);
+
+// Transformaciones de valor por columna Inciti (antes del renombre)
+const INCITI_TRANSFORMS = {
+  // '3D2B' → '3D'  (equiparar al formato GFK que solo muestra dormitorios)
+  'Programa': v => {
+    const s = String(v ?? '').trim();
+    const m = s.match(/^(\d+D)\d+B$/i);
+    return m ? m[1] : s;
+  },
+};
+
+function normalizeInciti(rows) {
+  // Eliminar tipologías sin disponibilidad ni precio (ya vendidas / sin datos)
+  const active = rows.filter(r => {
+    const oferta = Number(r['Oferta Programa']);
+    const precio  = r['Precio UF'];
+    return !(oferta === 0 && (precio === '' || precio == null));
+  });
+
+  return active.map(row => {
+    const out = {};
+    for (const [key, val] of Object.entries(row)) {
+      const mapped    = INCITI_TO_GFK[key] ?? INCITI_NORM_MAP[_normStr(key)] ?? key;
+      const transform = INCITI_TRANSFORMS[key];
+      out[mapped] = transform ? transform(val) : val;
+    }
+    // Coordenadas directas para el mapa (sin geocodificación)
+    const lat = Number(row['Latitud']);
+    const lng = Number(row['Longitud']);
+    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+      out['__lat'] = lat;
+      out['__lng'] = lng;
+    }
+    // % Vendido calculado (Stock - Disponibles) / Stock
+    const stock  = Number(row['Stock Programa']);
+    const oferta = Number(row['Oferta Programa']);
+    if (!isNaN(stock) && stock > 0 && !isNaN(oferta)) {
+      out['% Vendido'] = (stock - oferta) / stock;
+    }
+    return out;
+  });
+}
 
 // ============== Carga de archivo ==============
 const fileInput = $('#fileInput');
@@ -39,22 +103,39 @@ dropzone.addEventListener('drop', (e) => {
   if (file) loadFile(file);
 });
 
+function getSelectedSource() {
+  return document.querySelector('input[name="source"]:checked')?.value ?? 'gfk';
+}
+
 function loadFile(file) {
   $('#fileName').textContent = file.name;
+  const source = getSelectedSource();
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
       const data = new Uint8Array(e.target.result);
       const wb = XLSX.read(data, { type: 'array', cellDates: true });
-      if (!wb.SheetNames.includes('Datos')) {
-        alert('No encontré la hoja "Datos" en el archivo. Hojas disponibles: ' + wb.SheetNames.join(', '));
-        return;
-      }
-      const ws = wb.Sheets['Datos'];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
-      if (rows.length === 0) {
-        alert('La hoja "Datos" está vacía.');
-        return;
+
+      let rows;
+      if (source === 'inciti') {
+        if (!wb.SheetNames.includes('Proyectos')) {
+          alert('No encontré la hoja "Proyectos" en el archivo. Hojas disponibles: ' + wb.SheetNames.join(', '));
+          return;
+        }
+        const ws = wb.Sheets['Proyectos'];
+        const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
+        if (raw.length === 0) { alert('La hoja "Proyectos" está vacía.'); return; }
+        rows = normalizeInciti(raw);
+        state.source = 'inciti';
+      } else {
+        if (!wb.SheetNames.includes('Datos')) {
+          alert('No encontré la hoja "Datos" en el archivo. Hojas disponibles: ' + wb.SheetNames.join(', '));
+          return;
+        }
+        const ws = wb.Sheets['Datos'];
+        rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
+        if (rows.length === 0) { alert('La hoja "Datos" está vacía.'); return; }
+        state.source = 'gfk';
       }
       onDataLoaded(rows);
     } catch (err) {
@@ -91,10 +172,10 @@ function onDataLoaded(rows) {
   });
   import('./filters.js').then(({ applyFilters }) => applyFilters());
 
-  // Geocodificar direcciones si hay columna
-  import('./map.js').then(({ geocodeData }) => {
+  // Resetear estado de mapa y geocodificar/usar coords directas
+  import('./map.js').then(({ resetMapOnLoad, geocodeData }) => {
+    resetMapOnLoad();
     geocodeData().then(() => {
-      // Renderizar mapa si la tab está activa
       if ($('.tab.active')?.dataset.tab === 'mapa') {
         import('./map.js').then(({ renderMap }) => renderMap());
       }

@@ -7,6 +7,13 @@ const cache = new Map();
 const geoStatus = { total: 0, done: 0, running: false };
 let mapMode = 'general'; // 'general' | 'precio'
 
+export function resetMapOnLoad() {
+  mapInitialized = false;
+  geoStatus.total = 0;
+  geoStatus.done = 0;
+  geoStatus.running = false;
+}
+
 // ============== Helpers ==============
 function norm(s) {
   return s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
@@ -15,6 +22,40 @@ function norm(s) {
 function findAddressCol() {
   const keywords = ['direccion', 'address', 'domicilio', 'ubicacion', 'calle'];
   return state.columns.find(c => keywords.some(k => norm(c.name).includes(k)));
+}
+
+function hasDirectCoords() {
+  return state.columns.some(c => c.name === '__lat');
+}
+
+function collectPoints(rows) {
+  const buildings = new Map();
+  if (hasDirectCoords()) {
+    const edifCol = state.columns.find(c =>
+      ['edificio', 'proyecto', 'building'].some(k => norm(c.name).includes(k))
+    )?.name;
+    for (const r of rows) {
+      const lat = Number(r['__lat']);
+      const lng = Number(r['__lng']);
+      if (isNaN(lat) || isNaN(lng)) continue;
+      const key = edifCol ? String(r[edifCol] ?? '').trim() : `${lat},${lng}`;
+      if (!key) continue;
+      if (!buildings.has(key)) buildings.set(key, { lat, lng, rows: [] });
+      buildings.get(key).rows.push(r);
+    }
+  } else {
+    const col = findAddressCol();
+    if (col) {
+      for (const r of rows) {
+        const addr = String(r[col.name] ?? '').trim();
+        const coords = cache.get(addr);
+        if (!coords) continue;
+        if (!buildings.has(addr)) buildings.set(addr, { ...coords, rows: [] });
+        buildings.get(addr).rows.push(r);
+      }
+    }
+  }
+  return [...buildings.values()];
 }
 
 function findUfm2Col() {
@@ -59,6 +100,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ============== Geocodificación ==============
 export async function geocodeData() {
+  if (hasDirectCoords()) { refreshStatus(); return; }
   const col = findAddressCol();
   if (!col || geoStatus.running) return;
 
@@ -88,6 +130,11 @@ export async function geocodeData() {
 function refreshStatus() {
   const el = document.getElementById('geocodeStatus');
   if (!el) return;
+  if (hasDirectCoords()) {
+    el.className = 'geocode-status done';
+    el.textContent = `Coordenadas directas del archivo (${state.raw.length} filas).`;
+    return;
+  }
   if (geoStatus.running) {
     el.className = 'geocode-status running';
     el.textContent = `Geocodificando: ${geoStatus.done} / ${geoStatus.total} direcciones...`;
@@ -181,33 +228,28 @@ function initLeafletMap() {
 }
 
 export function renderMap() {
-  const col = findAddressCol();
   const placeholder = document.querySelector('.map-placeholder');
   const wrapper = document.getElementById('mapWrapper');
 
   refreshStatus();
 
-  // Agrupar filas filtradas por dirección única → un marcador por edificio
-  const buildings = new Map();
-  if (col) {
-    for (const r of state.filtered) {
-      const addr = String(r[col.name] ?? '').trim();
-      const coords = cache.get(addr);
-      if (!coords) continue;
-      if (!buildings.has(addr)) buildings.set(addr, { ...coords, rows: [] });
-      buildings.get(addr).rows.push(r);
-    }
-  }
-  const points = [...buildings.values()];
+  const points = collectPoints(state.filtered);
   const mpHasPoint = mp.inMapa && mp.edificio && mp.geocoords;
 
   if (!points.length && !mpHasPoint) {
     placeholder.classList.remove('hidden');
     wrapper.classList.add('hidden');
     const p = placeholder.querySelector('p');
-    if (p) p.textContent = col
-      ? (geoStatus.running ? 'Geocodificando direcciones, aguarda un momento...' : 'No se encontraron coordenadas para las direcciones en los datos filtrados.')
-      : 'Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada Dirección (o similar), los proyectos aparecerán en el mapa.';
+    if (p) {
+      if (hasDirectCoords()) {
+        p.textContent = 'No se encontraron coordenadas válidas en los datos filtrados.';
+      } else {
+        const col = findAddressCol();
+        p.textContent = col
+          ? (geoStatus.running ? 'Geocodificando direcciones, aguarda un momento...' : 'No se encontraron coordenadas para las direcciones en los datos filtrados.')
+          : 'Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada Dirección (o similar), los proyectos aparecerán en el mapa.';
+      }
+    }
     return;
   }
 

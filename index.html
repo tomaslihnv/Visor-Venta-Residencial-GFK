@@ -14,6 +14,16 @@
       <h1>Visor Venta Residencial</h1>
     </div>
     <div class="topbar-actions">
+      <div class="source-pills" title="Fuente de datos">
+        <label class="source-pill">
+          <input type="radio" name="source" value="gfk" checked hidden />
+          <span>GFK</span>
+        </label>
+        <label class="source-pill">
+          <input type="radio" name="source" value="inciti" hidden />
+          <span>Inciti</span>
+        </label>
+      </div>
       <label class="file-btn">
         <input type="file" id="fileInput" accept=".xlsx,.xls" hidden />
         <span>Cargar Excel</span>
@@ -93,7 +103,7 @@
       <div id="dropzone" class="dropzone">
         <div class="dropzone-inner">
           <h2>Arrastrá tu Excel acá</h2>
-          <p>o usá el botón <strong>Cargar Excel</strong>. Se lee la hoja <code>Datos</code>.</p>
+          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>. Seleccioná la fuente primero: <strong>GFK</strong> (hoja <code>Datos</code>) o <strong>Inciti</strong> (hoja <code>Proyectos</code>).</p>
         </div>
       </div>
 

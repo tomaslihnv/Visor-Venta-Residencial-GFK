@@ -41,3 +41,15 @@ code { background: #eef2ff; padding: 1px 5px; border-radius: 4px; font-size: 0.9
   border-radius: 6px; font-size: 12px;
 }
 .ghost-btn:hover { background: #1e293b; color: #fff; }
+.source-pills {
+  display: flex; gap: 2px;
+  background: #1e293b; padding: 3px; border-radius: 7px;
+}
+.source-pill { cursor: pointer; }
+.source-pill span {
+  display: block; padding: 5px 12px; border-radius: 5px;
+  font-size: 12px; font-weight: 600; color: #94a3b8;
+  transition: background 0.15s, color 0.15s; user-select: none;
+}
+.source-pill input:checked + span { background: #3b82f6; color: #fff; }
+.source-pill span:hover { color: #e2e8f0; }
