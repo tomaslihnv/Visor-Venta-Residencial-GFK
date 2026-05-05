@@ -35,6 +35,24 @@ const INCITI_NORM_MAP = Object.fromEntries(
   Object.entries(INCITI_TO_GFK).map(([k, v]) => [_normStr(k), v])
 );
 
+// ── Helpers de fechas en español para cálculo de velocidad ──
+const _ES_MON = {
+  'ene':0,'feb':1,'mar':2,'abr':3,'may':4,'jun':5,
+  'jul':6,'ago':7,'sep':8,'sept':8,'oct':9,'nov':10,'dic':11,
+};
+function _parseEsDate(s) {
+  if (!s) return null;
+  const parts = String(s).trim().toLowerCase().split(/\s+/);
+  if (parts.length < 2) return null;
+  const mon = _ES_MON[parts[0]];
+  const yr  = parseInt(parts[1]);
+  if (mon === undefined || isNaN(yr)) return null;
+  return new Date(yr, mon, 1);
+}
+function _monthsBetween(from, to) {
+  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+}
+
 // Transformaciones de valor por columna Inciti (antes del renombre)
 const INCITI_TRANSFORMS = {
   // '3D2B' → '3D'  (equiparar al formato GFK que solo muestra dormitorios)
@@ -52,6 +70,32 @@ function normalizeInciti(rows) {
     const precio  = r['Precio UF'];
     return !(oferta === 0 && (precio === '' || precio == null));
   });
+
+  // ── Pre-pase: velocidad de venta a nivel proyecto (sobre TODAS las filas, no solo active) ──
+  const _proyStats = new Map();
+  for (const r of rows) {
+    const proj = String(r['Proyecto'] ?? '').trim();
+    if (!proj) continue;
+    if (!_proyStats.has(proj)) {
+      _proyStats.set(proj, {
+        stock: 0, oferta: 0,
+        periodo: r['Periodo'],
+        inicioVentas: r['Fecha Inicio Ventas'],
+      });
+    }
+    const s = _proyStats.get(proj);
+    s.stock  += Number(r['Stock Programa'])  || 0;
+    s.oferta += Number(r['Oferta Programa']) || 0;
+  }
+  const _proyVel = new Map();
+  for (const [proj, s] of _proyStats) {
+    const fechaCorte = _parseEsDate(s.periodo);
+    const fechaInicio = _parseEsDate(s.inicioVentas);
+    if (!fechaCorte || !fechaInicio) continue;
+    const meses = Math.max(1, _monthsBetween(fechaInicio, fechaCorte));
+    const vendidas = s.stock - s.oferta;
+    if (vendidas > 0) _proyVel.set(proj, +(vendidas / meses).toFixed(2));
+  }
 
   return active.map(row => {
     const out = {};
@@ -73,6 +117,9 @@ function normalizeInciti(rows) {
     if (!isNaN(stock) && stock > 0 && !isNaN(oferta)) {
       out['% Vendido'] = (stock - oferta) / stock;
     }
+    // Velocidad de venta a nivel proyecto
+    const vel = _proyVel.get(String(row['Proyecto'] ?? '').trim());
+    if (vel !== undefined) out['Vel. Venta (un./mes)'] = vel;
     return out;
   });
 }
