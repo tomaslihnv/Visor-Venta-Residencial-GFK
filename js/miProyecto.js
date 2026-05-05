@@ -5,7 +5,7 @@ const STORAGE_KEY = 'visor_mp_v1';
 // ── Global state ───────────────────────────────────────────────────────────
 export const mp = {
   edificio:    '',
-  propietario: 'SITÛ',
+  propietario: '',
   direccion:   '',
   tipologias:  [], // [{ id, nombre, sup, ufm2 }]
   geocoords:   null, // { lat, lng } — never persisted
@@ -138,7 +138,7 @@ export function initMpPanel() {
   }
   _initialized = true;
   _load();
-  mp.propietario = 'SITÛ';
+  mp.propietario = '';
 
   $('#miProyectoSection')?.classList.remove('hidden');
 
