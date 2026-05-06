@@ -1,0 +1,49 @@
+// ============== Utilidades (Renta Residencial) ==============
+
+export const $ = (sel) => document.querySelector(sel);
+export const $$ = (sel) => document.querySelectorAll(sel);
+
+// Formateo de números al estándar chileno (es-CL)
+export const fmt = (v) => {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v === 'number') {
+    if (Number.isInteger(v)) return v.toLocaleString('es-CL');
+    return v.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+  }
+  return String(v);
+};
+
+// Validación rápida de valores numéricos
+export const isNumeric = (v) => v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
+
+// Detección automática del tipo de columna basada en un umbral del 80%
+export function detectColType(values) {
+  let nums = 0, total = 0;
+  for (const v of values) {
+    if (v === null || v === undefined || v === '') continue;
+    total++;
+    if (typeof v === 'number' || isNumeric(v)) nums++;
+  }
+  if (total === 0) return 'string';
+  if (nums / total >= 0.8) return 'number';
+  return 'string';
+}
+
+// Extracción de valores únicos para los filtros selectores
+export function uniqueValues(rows, col) {
+  const set = new Set();
+  for (const r of rows) {
+    const v = r[col];
+    if (v !== null && v !== undefined && v !== '') set.add(v);
+  }
+  return Array.from(set).sort((a, b) => {
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    return String(a).localeCompare(String(b), 'es');
+  });
+}
+
+// Helper para evitar saturación de llamadas (ej: al escribir en inputs)
+export function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}

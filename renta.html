@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visor Venta Residencial</title>
+  <title>Visor Renta Residencial</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
 </head>
 <body>
   <nav class="app-nav">
-    <a href="index.html" class="nav-link active">Venta</a>
-    <a href="renta.html" class="nav-link">Renta</a>
+    <a href="index.html" class="nav-link">Venta</a>
+    <a href="renta.html" class="nav-link active">Renta</a>
   </nav>
 
   <header class="topbar">
     <div class="brand">
       <span class="logo-dot"></span>
-      <h1>Visor Venta Residencial</h1>
+      <h1>Visor Renta Residencial</h1>
     </div>
     <div class="topbar-actions">
       <div class="source-pills" title="Fuente de datos">
@@ -48,8 +48,8 @@
         </div>
         <div id="mpPanelBody" class="mp-panel-body">
           <div class="mp-field">
-            <label class="mp-label">Edificio</label>
-            <input type="text" id="mpEdificio" class="mp-input" placeholder="Ej: SITÛ Los Laureles" />
+            <label class="mp-label">Proyecto</label>
+            <input type="text" id="mpEdificio" class="mp-input" placeholder="Ej: Edificio Las Acacias" />
           </div>
           <div class="mp-field">
             <label class="mp-label">Dirección</label>
@@ -79,7 +79,7 @@
             </label>
             <label class="mp-check-row">
               <input type="checkbox" id="mpInSvp" />
-              <span>Sup. vs Precio</span>
+              <span>Sup. vs Renta</span>
             </label>
             <label class="mp-check-row">
               <input type="checkbox" id="mpInProy" />
@@ -108,7 +108,7 @@
       <div id="dropzone" class="dropzone">
         <div class="dropzone-inner">
           <h2>Arrastrá tu Excel acá</h2>
-          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>. Seleccioná la fuente primero: <strong>GFK</strong> (hoja <code>Datos</code>) o <strong>Inciti</strong> (hoja <code>Proyectos</code>).</p>
+          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>. Seleccioná la fuente primero: <strong>GFK</strong> (hoja <code>Datos</code>) o <strong>Inciti</strong> (primera hoja del archivo).</p>
         </div>
       </div>
 
@@ -118,7 +118,7 @@
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
           <button class="tab" data-tab="comparativa">Tabla comparativa</button>
-          <button class="tab" data-tab="svp">Sup. Vs Precio</button>
+          <button class="tab" data-tab="svp">Sup. vs Renta</button>
           <button class="tab" data-tab="proyectos">Proyectos</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="tabla">Tabla</button>
@@ -129,14 +129,18 @@
           <div id="geocodeStatus" class="geocode-status"></div>
           <div class="map-placeholder">
             <h3>Mapa</h3>
-            <p>Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada <code>Dirección</code> (o similar), los proyectos aparecerán automáticamente en el mapa.</p>
+            <p>Aún no detecté coordenadas válidas en tus datos.</p>
           </div>
           <div id="mapWrapper" class="map-wrapper hidden">
             <div class="map-main">
               <div class="map-toolbar">
                 <button class="map-mode-btn active" data-mode="general">General</button>
                 <button class="map-mode-btn" data-mode="precio">De calor</button>
-<button id="mapTableExportBtn" class="primary-btn">Copiar tabla</button>
+                <div class="heat-metric-pills hidden" id="heatMetricPills">
+                  <span class="heat-metric-label">Métrica:</span>
+                  <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
+                  <button class="heat-metric-btn" data-metric="renta">Renta UF</button>
+                </div>
               </div>
               <div id="map" class="map"></div>
             </div>
@@ -156,7 +160,7 @@
           </div>
         </div>
 
-        <!-- TAB: SUP. VS PRECIO -->
+        <!-- TAB: SUP. VS RENTA -->
         <div class="tab-panel" data-panel="svp">
           <div class="chart-controls">
             <div class="ctrl">
@@ -165,13 +169,48 @@
                 <option value="">Todas</option>
               </select>
             </div>
+            <div class="ctrl">
+              <label>Eje Y</label>
+              <select id="svpYAxis">
+                <option value="renta">Renta UF</option>
+                <option value="ufm2">UF/m²</option>
+              </select>
+            </div>
             <label class="toggle-check">
               <input type="checkbox" id="svpTrendToggle" checked />
               <span>Línea de tendencia</span>
             </label>
-            <button id="svpExportPngBtn" class="primary-btn">Exportar PNG</button>
+            <label class="toggle-check">
+              <input type="checkbox" id="svpAvgToggle" />
+              <span>Línea de promedio</span>
+            </label>
+            <div class="ctrl distrib-marker-group">
+              <label>Marcar m² útil</label>
+              <div class="marker-add">
+                <input type="number" id="svpM2Input" min="1" step="1" placeholder="ej: 50">
+                <button id="svpAddM2" class="marker-btn pct-btn">+</button>
+              </div>
+            </div>
+            <div id="svpM2Tags" class="marker-tags"></div>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="svpFontSize" min="8" max="22" step="1" value="11">
+                <span id="svpFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="svp-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="svp-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="svp-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="svp-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <button id="svpExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>
           </div>
         </div>
@@ -182,23 +221,14 @@
             <div class="ctrl">
               <label>Métrica</label>
               <select id="proyMetrica">
-                <option value="ticket">Ticket UF</option>
+                <option value="renta">Renta UF promedio</option>
                 <option value="ufm2">UF/m²</option>
                 <option value="util">Útil (m²)</option>
-                <option value="disp">Disponibles</option>
-                <option value="vel">Vel. Venta (un./mes)</option>
-                <option value="oferta">Oferta total proyecto</option>
-                <option value="pct">% Vendido</option>
+                <option value="gastos">Gastos Comunes (UF)</option>
+                <option value="count">N° Unidades</option>
               </select>
             </div>
-            <div class="ctrl distrib-font-ctrl">
-              <label>Texto</label>
-              <div class="distrib-font-row">
-                <input type="range" id="proyFontSize" min="8" max="22" step="1" value="11">
-                <span id="proyFontSizeVal">11px</span>
-              </div>
-            </div>
-            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
+            <button id="proyExportPngBtn" class="primary-btn">Exportar PNG</button>
           </div>
           <div class="chart-wrap">
             <canvas id="proyChart"></canvas>
@@ -222,7 +252,7 @@
             <div class="ctrl distrib-marker-group">
               <label>Marcar precio</label>
               <div class="marker-add">
-                <input type="number" id="distribPriceInput" min="0" step="100" placeholder="ej: 4500">
+                <input type="number" id="distribPriceInput" min="0" step="1" placeholder="ej: 20">
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -292,6 +322,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
   <!-- Módulos JS -->
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/renta/main.js"></script>
 </body>
 </html>

@@ -919,7 +919,10 @@ function computeQuantileCurve(rows, col) {
   if (vals.length < 2) return [];
   vals.sort((a, b) => a - b);
   const n = vals.length;
-  return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
+  return Array.from({ length: 101 }, (_, pct) => {
+    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
+    return { x: pct, y: vals[idx] };
+  });
 }
 
 function lerpAtX(data, x) {
@@ -960,6 +963,17 @@ export function renderDistrib() {
   if (distribChart) { distribChart.destroy(); distribChart = null; }
   const ctx = $('#distribChart').getContext('2d');
 
+  const sortedVals = state.filtered
+    .map(r => Number(r[col]))
+    .filter(v => !isNaN(v))
+    .sort((a, b) => a - b);
+
+  const valAtPct = pct => {
+    if (!sortedVals.length) return null;
+    const idx = Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1);
+    return sortedVals[Math.max(0, idx)];
+  };
+
   const refData = computeQuantileCurve(state.filtered, col);
   const datasets = [{
     label: col,
@@ -979,8 +993,8 @@ export function renderDistrib() {
 
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
     const color = pctColor;
-    const price = lerpAtX(refData, pct);
-    if (price === null) return;
+    const price = valAtPct(pct);
+    if (price == null) return;
     const priceLabel = price.toLocaleString('es-CL', { maximumFractionDigits: 0 });
     annotations[`pv_${pct}`] = {
       type: 'line', xMin: pct, xMax: pct, yMax: price,
@@ -1087,8 +1101,15 @@ export function renderDistrib() {
           intersect: false,
           axis: 'x',
           callbacks: {
-            title: items => `P${Number(items[0]?.parsed.x).toFixed(1)}`,
-            label: item => ` ${item.dataset.label}: ${Number(item.parsed.y).toLocaleString('es-CL', { maximumFractionDigits: 0 })} ${distribUnit}`,
+            title: items => {
+              const pt = refData[items[0]?.dataIndex];
+              return pt ? `P${pt.x.toFixed(1)}` : '';
+            },
+            label: item => {
+              const pt = refData[item.dataIndex];
+              if (!pt) return '';
+              return ` ${item.dataset.label}: ${pt.y.toLocaleString('es-CL', { maximumFractionDigits: 0 })} ${distribUnit}`;
+            },
           },
         },
         annotation: { annotations },
