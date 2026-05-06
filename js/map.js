@@ -276,9 +276,17 @@ export function renderMap() {
     }
   }
 
+  // En modo general: ordenar izquierda→derecha (lng asc), luego arriba→abajo (lat desc)
+  const orderedPoints = inPriceMode
+    ? points
+    : [...points].sort((a, b) => {
+        const dLng = a.lng - b.lng;
+        return Math.abs(dLng) > 0.0001 ? dLng : b.lat - a.lat;
+      });
+
   const bounds = [];
-  for (const point of points) {
-    const { lat, lng, rows } = point;
+  for (let i = 0; i < orderedPoints.length; i++) {
+    const { lat, lng, rows } = orderedPoints[i];
     let marker;
 
     if (inPriceMode) {
@@ -295,7 +303,14 @@ export function renderMap() {
         className: 'price-marker',
       });
     } else {
-      marker = L.marker([lat, lng]);
+      const numIcon = L.divIcon({
+        className: '',
+        html: `<div class="num-marker">${i + 1}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16],
+      });
+      marker = L.marker([lat, lng], { icon: numIcon });
     }
 
     marker.bindPopup(buildPopup(rows[0]), { maxWidth: 340 });

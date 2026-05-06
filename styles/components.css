@@ -216,6 +216,19 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .rk-metric { font-size: 11px; color: #475569; }
 .rk-metric span { color: #9ca3af; font-size: 10px; }
 .rk-ufm2 { font-weight: 700; color: #1e3a5f !important; }
+.num-marker {
+  width: 28px; height: 28px;
+  background: #2563eb;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.35);
+  cursor: pointer;
+  user-select: none;
+}
 .map-wrapper.dark-mode {
   background: #0f172a;
   border-color: rgba(148, 163, 184, 0.28);
