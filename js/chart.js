@@ -267,6 +267,8 @@ function sortEntries(entries, mode) {
 let proyChart = null;
 let proyListenersReady = false;
 
+const PROY_UNITS = { ticket: 'UF', ufm2: 'UF/m²', util: 'm²', disp: 'un.', vel: 'un./mes', oferta: 'un.', pct: '' };
+
 const PROY_METRICS = [
   { id: 'ticket', label: 'Ticket UF',            keys: ['ticket'],                      agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'ufm2',   label: 'UF/m²',               keys: ['uf/m', 'uf / m'],              agg: 'avg', fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
@@ -358,6 +360,7 @@ export function renderProyectos() {
 
   // Mi Proyecto — respeta el filtro de tipología activo
   let mpName = null;
+  let mpVal  = null;
   if (mp.inProy && mp.edificio && mp.tipologias.length > 0) {
     const fmtTipo = v => {
       const s = String(v ?? '').trim();
@@ -374,7 +377,6 @@ export function renderProyectos() {
       t.nombre && (activeTipos ? activeTipos.has(fmtTipo(t.nombre)) : true)
     );
 
-    let mpVal = null;
     if (metricId === 'ticket') {
       const vals = tipos.filter(t => t.sup != null && t.ufm2 != null).map(t => t.sup * t.ufm2);
       if (vals.length) mpVal = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -392,6 +394,14 @@ export function renderProyectos() {
   }
 
   entries = entries.sort((a, b) => b[1] - a[1]);
+
+  // Mediana de edificios comparables (excluye Mi Proyecto)
+  const compVals = entries.filter(([e]) => e !== mpName).map(([, v]) => v).slice().sort((a, b) => a - b);
+  let median = null;
+  if (compVals.length > 0) {
+    const mid = Math.floor(compVals.length / 2);
+    median = compVals.length % 2 === 0 ? (compVals[mid - 1] + compVals[mid]) / 2 : compVals[mid];
+  }
 
   const MP_COLOR  = '#96323C';
   const BAR_COLOR = '#DDE0E3';
@@ -413,6 +423,46 @@ export function renderProyectos() {
         c.fillStyle = isMP ? '#96323C' : '#374151';
         c.fillText(metric.fmt(value), bar.x, bar.y - 3);
       });
+      c.restore();
+    },
+  };
+
+  const medianPlugin = {
+    id: 'medianPlugin',
+    afterDraw(chart) {
+      if (median == null) return;
+      const { ctx: c, chartArea, scales } = chart;
+      const y = scales.y.getPixelForValue(median);
+      if (y < chartArea.top || y > chartArea.bottom) return;
+      const unit = PROY_UNITS[metricId] ? ' ' + PROY_UNITS[metricId] : '';
+      const line1 = `Mediana: ${metric.fmt(median)}${unit}`;
+      const lines = [line1];
+      if (mpVal != null && mpVal > 0 && median !== mpVal) {
+        const diff = ((median - mpVal) / mpVal) * 100;
+        const abs = Math.abs(diff).toLocaleString('es-CL', { maximumFractionDigits: 0 });
+        lines.push(`(${abs}% ${diff > 0 ? 'mayor' : 'menor'} al proyecto)`);
+      }
+      c.save();
+      c.font = `bold ${fs}px system-ui, sans-serif`;
+      const padX = 8, padY = 4, lineH = fs + 4;
+      const labelW = Math.max(...lines.map(l => c.measureText(l).width)) + padX * 2;
+      const labelH = lines.length * lineH + padY * 2;
+      const labelX = chartArea.right - labelW;
+      const labelY = y - labelH / 2;
+      c.setLineDash([6, 4]);
+      c.strokeStyle = '#ef4444';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(chartArea.left, y);
+      c.lineTo(labelX - 4, y);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = 'rgba(255,255,255,0.92)';
+      c.fillRect(labelX, labelY, labelW, labelH);
+      c.fillStyle = '#ef4444';
+      c.textAlign = 'left';
+      c.textBaseline = 'top';
+      lines.forEach((line, i) => c.fillText(line, labelX + padX, labelY + padY + i * lineH));
       c.restore();
     },
   };
@@ -452,7 +502,7 @@ export function renderProyectos() {
         },
       },
     },
-    plugins: [barLabelsPlugin],
+    plugins: [barLabelsPlugin, medianPlugin],
   });
 }
 
