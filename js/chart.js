@@ -734,6 +734,13 @@ export function populateDistribSelectors() {
   if (!distribListenersReady) {
     distribListenersReady = true;
 
+    document.querySelectorAll('.ratio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
     const fontSlider = $('#distribFontSize');
     const fontVal    = $('#distribFontSizeVal');
     if (fontSlider) {
@@ -747,10 +754,20 @@ export function populateDistribSelectors() {
       if (!distribChart) return;
       const btn = $('#distribExportPngBtn');
       const scale = 4;
+      const pad = 32;
+      const wrap = $('#distribWrap');
+      const ratio = document.querySelector('.ratio-btn.active')?.dataset.ratio ?? 'auto';
+
       const origDPR = distribChart.options.devicePixelRatio ?? window.devicePixelRatio;
+      const exportW = wrap.clientWidth - pad;
+      const exportH = ratio === 'auto'
+        ? distribChart.height
+        : Math.round(exportW / parseFloat(ratio));
+
       distribChart.options.devicePixelRatio = scale;
-      distribChart.resize();
+      distribChart.resize(exportW, exportH);
       const url = distribChart.toBase64Image('image/png', 1);
+
       distribChart.options.devicePixelRatio = origDPR;
       distribChart.resize();
 
@@ -1013,4 +1030,5 @@ export function renderDistrib() {
       },
     },
   });
+
 }
