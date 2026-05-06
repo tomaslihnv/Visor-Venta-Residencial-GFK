@@ -743,8 +743,9 @@ export function populateDistribSelectors() {
       });
     }
 
-    $('#distribExportPngBtn')?.addEventListener('click', () => {
+    $('#distribExportPngBtn')?.addEventListener('click', async () => {
       if (!distribChart) return;
+      const btn = $('#distribExportPngBtn');
       const scale = 4;
       const origDPR = distribChart.options.devicePixelRatio ?? window.devicePixelRatio;
       distribChart.options.devicePixelRatio = scale;
@@ -752,10 +753,15 @@ export function populateDistribSelectors() {
       const url = distribChart.toBase64Image('image/png', 1);
       distribChart.options.devicePixelRatio = origDPR;
       distribChart.resize();
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `distribucion_${Date.now()}.png`;
-      a.click();
+
+      const res  = await fetch(url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+      const prev = btn.textContent;
+      btn.textContent = '¡Copiado!';
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
     });
 
     const addPct = () => {
