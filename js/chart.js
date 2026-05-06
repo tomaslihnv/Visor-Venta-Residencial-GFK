@@ -844,7 +844,7 @@ export function renderDistrib() {
     backgroundColor: 'rgba(59,130,246,0.08)',
     pointRadius: 0,
     borderWidth: 2,
-    tension: 0,
+    tension: 0.4,
     fill: true,
   }];
 
