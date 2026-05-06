@@ -154,6 +154,7 @@ let markersLayer = null;
 let mapInitialized = false;
 let legendControl = null;
 let countControl = null;
+let lastOrderedPoints = [];
 
 function initRankingResize() {
   const resizer = document.getElementById('mapRankingResizer');
@@ -189,12 +190,90 @@ function initRankingResize() {
   });
 }
 
+async function copyMapTable() {
+  if (!lastOrderedPoints.length) return;
+
+  const edifCol   = state.columns.find(c => ['edificio', 'proyecto', 'building'].some(k => norm(c.name).includes(k)))?.name;
+  const propCol   = state.columns.find(c => ['propietario', 'owner', 'inmobiliaria'].some(k => norm(c.name).includes(k)))?.name;
+  const ofertaCol = state.columns.find(c => ['oferta total', 'oferta'].some(k => norm(c.name).includes(k)) && c.type === 'number')?.name;
+  const dispCol   = ofertaCol ? null : state.columns.find(c => norm(c.name).includes('disponib') && c.type === 'number')?.name;
+  const ufm2ColN  = findUfm2Col();
+
+  const fmtN  = v => v != null ? Math.round(v).toLocaleString('es-CL') : '—';
+  const fmtU  = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+
+  const rows = lastOrderedPoints.map((pt, i) => {
+    const edif = edifCol ? String(pt.rows[0]?.[edifCol] ?? '—') : '—';
+    const prop = propCol ? String(pt.rows[0]?.[propCol] ?? '—') : '—';
+
+    let stock = null;
+    if (ofertaCol) {
+      const vals = pt.rows.map(r => Number(r[ofertaCol])).filter(v => !isNaN(v) && v > 0);
+      if (vals.length) stock = Math.max(...vals);
+    } else if (dispCol) {
+      const vals = pt.rows.map(r => Number(r[dispCol])).filter(v => !isNaN(v) && v >= 0);
+      if (vals.length) stock = vals.reduce((a, b) => a + b, 0);
+    }
+
+    let ufm2 = null;
+    if (ufm2ColN) {
+      const vals = pt.rows.map(r => Number(r[ufm2ColN])).filter(v => !isNaN(v) && v > 0);
+      if (vals.length) ufm2 = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+
+    return { n: i + 1, edif, prop, stock, ufm2 };
+  });
+
+  const totalStock = rows.reduce((s, r) => s + (r.stock ?? 0), 0);
+  const ufm2Vals   = rows.filter(r => r.ufm2 != null).map(r => r.ufm2);
+  const avgUfm2    = ufm2Vals.length ? ufm2Vals.reduce((a, b) => a + b, 0) / ufm2Vals.length : null;
+
+  const TH  = 'background:#1e3a5f;color:#fff;font-weight:700;font-size:8pt;padding:6px 10px;border:1px solid #1e3a5f;white-space:nowrap;font-family:Roboto,Arial,sans-serif;text-align:left;';
+  const THR = TH + 'text-align:right;';
+  const TD  = 'font-size:8pt;padding:6px 10px;border:1px solid #e5e7eb;white-space:nowrap;font-family:Roboto,Arial,sans-serif;color:#0f172a;';
+  const TDR = TD + 'text-align:right;';
+  const TF  = TD + 'font-weight:700;background:#f8fafc;';
+  const TFR = TF + 'text-align:right;';
+
+  const bodyHtml = rows.map(r => `<tr>
+    <td style="${TD}">${r.n}</td>
+    <td style="${TD}">${r.edif}</td>
+    <td style="${TD}">${r.prop}</td>
+    <td style="${TDR}">${fmtN(r.stock)}</td>
+    <td style="${TDR}">${fmtU(r.ufm2)}</td>
+  </tr>`).join('');
+
+  const footHtml = `<tr>
+    <td style="${TF}" colspan="3">Resumen</td>
+    <td style="${TFR}">${fmtN(totalStock)}</td>
+    <td style="${TFR}">${fmtU(avgUfm2)}</td>
+  </tr>`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>
+  <table style="border-collapse:collapse;font-family:Roboto,Arial,sans-serif;font-size:8pt;">
+    <thead><tr>
+      <th style="${TH}">N°</th>
+      <th style="${TH}">Edificio</th>
+      <th style="${TH}">Propietario</th>
+      <th style="${THR}">Stock Total</th>
+      <th style="${THR}">UF/m²</th>
+    </tr></thead>
+    <tbody>${bodyHtml}</tbody>
+    <tfoot>${footHtml}</tfoot>
+  </table></body></html>`;
+
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
+  ]);
+}
+
 function initLeafletMap() {
   leafletMap = L.map('map');
   initRankingResize();
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
     maxZoom: 19,
+    crossOrigin: 'anonymous',
   }).addTo(leafletMap);
   markersLayer = L.layerGroup().addTo(leafletMap);
 
@@ -224,6 +303,42 @@ function initLeafletMap() {
       mapMode = btn.dataset.mode;
       renderMap();
     });
+  });
+
+  // Copiar tabla
+  document.getElementById('mapTableExportBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('mapTableExportBtn');
+    btn.textContent = 'Copiando…';
+    btn.disabled = true;
+    try {
+      await copyMapTable();
+      btn.textContent = '¡Copiado!';
+      setTimeout(() => { btn.textContent = 'Copiar tabla'; btn.disabled = false; }, 2000);
+    } catch (err) {
+      console.error(err);
+      btn.textContent = 'Copiar tabla';
+      btn.disabled = false;
+    }
+  });
+
+  // Copiar imagen
+  document.getElementById('mapExportBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('mapExportBtn');
+    btn.textContent = 'Generando…';
+    btn.disabled = true;
+    try {
+      const canvas = await _captureMapCanvas(3);
+      const blob = await new Promise((resolve, reject) =>
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('canvas tainted')), 'image/png')
+      );
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      btn.textContent = '¡Copiado!';
+      setTimeout(() => { btn.textContent = 'Copiar imagen'; btn.disabled = false; }, 2000);
+    } catch (err) {
+      console.error('Error exportando mapa:', err);
+      btn.textContent = 'Copiar imagen';
+      btn.disabled = false;
+    }
   });
 }
 
@@ -283,6 +398,8 @@ export function renderMap() {
         const dLng = a.lng - b.lng;
         return Math.abs(dLng) > 0.0001 ? dLng : b.lat - a.lat;
       });
+
+  lastOrderedPoints = inPriceMode ? [] : orderedPoints;
 
   const bounds = [];
   for (let i = 0; i < orderedPoints.length; i++) {
