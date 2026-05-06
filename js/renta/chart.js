@@ -43,13 +43,13 @@ export function renderKpis() {
       value: avg('UF/m²').toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     });
   }
-  if (state.columns.find(c => c.name === 'Gastos Comunes (UF)')) {
-    const v = avg('Gastos Comunes (UF)');
+  if (state.columns.find(c => c.name === 'Gastos Comunes (CLP)')) {
+    const v = avg('Gastos Comunes (CLP)');
     if (v > 0) {
       kpis.push({
         label: 'Gastos Comunes prom.',
         value: v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
-        sub: 'UF/mes',
+        sub: 'CLP/mes',
       });
     }
   }
@@ -67,7 +67,7 @@ const PROY_METRICS = [
   { id: 'renta',  label: 'Renta UF prom.',       keys: ['renta uf', 'precio'],  agg: 'avg',   fmt: v => fmtNum(v, 1) },
   { id: 'ufm2',   label: 'UF/m²',                keys: ['uf/m'],                agg: 'avg',   fmt: v => fmtNum(v, 2) },
   { id: 'util',   label: 'Útil (m²)',            keys: ['util (m', 'útil (m'],  agg: 'avg',   fmt: v => fmtNum(v, 0) },
-  { id: 'gastos', label: 'Gastos Comunes (UF)',  keys: ['gastos comunes'],      agg: 'avg',   fmt: v => fmtNum(v, 1) },
+  { id: 'gastos', label: 'Gastos Comunes (CLP)',  keys: ['gastos comunes'],      agg: 'avg',   fmt: v => fmtNum(v, 1) },
   { id: 'count',  label: 'N° Unidades',          keys: [],                      agg: 'count', fmt: v => String(Math.round(v)) },
 ];
 
@@ -209,6 +209,24 @@ export function renderProyectos() {
 
 // ============== Sup. vs Renta ==============
 let svpListenersReady = false;
+const svpMarkers = new Set(); // m² útiles a marcar
+
+function refreshSvpMarkerTags() {
+  const cont = $('#svpM2Tags');
+  if (!cont) return;
+  cont.innerHTML = '';
+  [...svpMarkers].sort((a, b) => a - b).forEach(v => {
+    const tag = document.createElement('span');
+    tag.className = 'marker-tag pct-tag';
+    tag.innerHTML = `${v.toLocaleString('es-CL')} m² <button class="rm-svp-m2">×</button>`;
+    tag.querySelector('.rm-svp-m2').addEventListener('click', () => {
+      svpMarkers.delete(v);
+      refreshSvpMarkerTags();
+      renderSupVsRenta();
+    });
+    cont.appendChild(tag);
+  });
+}
 
 export function populateSvpSelectors() {
   const tipoSel = $('#svpTipoFilter');
@@ -230,13 +248,64 @@ export function populateSvpSelectors() {
   if (!svpListenersReady) {
     svpListenersReady = true;
     tipoSel.addEventListener('change', renderSupVsRenta);
+    $('#svpYAxis')?.addEventListener('change', renderSupVsRenta);
     $('#svpTrendToggle')?.addEventListener('change', renderSupVsRenta);
-    $('#svpExportPngBtn')?.addEventListener('click', () => {
+    $('#svpAvgToggle')?.addEventListener('change', renderSupVsRenta);
+
+    const addM2 = () => {
+      const v = parseFloat($('#svpM2Input').value);
+      if (isNaN(v) || v <= 0) return;
+      svpMarkers.add(v);
+      $('#svpM2Input').value = '';
+      refreshSvpMarkerTags();
+      renderSupVsRenta();
+    };
+    $('#svpAddM2')?.addEventListener('click', addM2);
+    $('#svpM2Input')?.addEventListener('keydown', e => { if (e.key === 'Enter') addM2(); });
+    const svpFont = $('#svpFontSize');
+    if (svpFont) {
+      svpFont.addEventListener('input', () => {
+        $('#svpFontSizeVal').textContent = svpFont.value + 'px';
+        renderSupVsRenta();
+      });
+    }
+
+    document.querySelectorAll('.svp-ratio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.svp-ratio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    $('#svpExportPngBtn')?.addEventListener('click', async () => {
       if (!state.chart) return;
-      const a = document.createElement('a');
-      a.href = state.chart.toBase64Image('image/png', 1);
-      a.download = `sup_vs_renta_${Date.now()}.png`;
-      a.click();
+      const btn   = $('#svpExportPngBtn');
+      const scale = 4;
+      const pad   = 32;
+      const wrap  = $('#svpWrap');
+      const ratio = document.querySelector('.svp-ratio-btn.active')?.dataset.ratio ?? 'auto';
+
+      const origDPR = state.chart.options.devicePixelRatio ?? window.devicePixelRatio;
+      const exportW = wrap.clientWidth - pad;
+      const exportH = ratio === 'auto'
+        ? state.chart.height
+        : Math.round(exportW / parseFloat(ratio));
+
+      state.chart.options.devicePixelRatio = scale;
+      state.chart.resize(exportW, exportH);
+      const url = state.chart.toBase64Image('image/png', 1);
+
+      state.chart.options.devicePixelRatio = origDPR;
+      state.chart.resize();
+
+      const res  = await fetch(url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+      const prev = btn.textContent;
+      btn.textContent = '¡Copiado!';
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
     });
   }
 }
@@ -262,12 +331,18 @@ function linearRegression(pts) {
 export function renderSupVsRenta() {
   if (state.filtered.length === 0) return;
 
-  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  const normStr  = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  const yAxisMode = $('#svpYAxis')?.value ?? 'renta';
+  const fs        = parseInt($('#svpFontSize')?.value ?? '11');
+
   const supCol = state.columns.find(c =>
     c.type === 'number' && ['util (m', 'útil (m', 'metros util'].some(k => normStr(c.name).includes(normStr(k)))
   );
   const rentaCol = state.columns.find(c =>
     normStr(c.name).includes('renta uf') || normStr(c.name).includes('precio')
+  );
+  const ufm2Col = state.columns.find(c =>
+    normStr(c.name).includes('uf/m') || normStr(c.name).includes('uf / m')
   );
   const tipoCol = state.columns.find(c =>
     ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k))
@@ -276,7 +351,13 @@ export function renderSupVsRenta() {
     ['proyecto', 'edificio', 'nombre'].some(k => normStr(c.name).includes(k))
   );
 
-  if (!supCol || !rentaCol) return;
+  const yCol      = yAxisMode === 'ufm2' ? ufm2Col : rentaCol;
+  const yLabel    = yAxisMode === 'ufm2' ? 'UF/m²' : 'Renta UF/mes';
+  const yTooltip  = yAxisMode === 'ufm2'
+    ? (v => `${Number(v).toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} UF/m²`)
+    : (v => `${Number(v).toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} UF/mes`);
+
+  if (!supCol || !yCol) return;
 
   if (state.chart) { state.chart.destroy(); state.chart = null; }
   const ctx = $('#svpChart')?.getContext('2d');
@@ -292,14 +373,18 @@ export function renderSupVsRenta() {
   if (mp.inSvp && mp.tipologias.length > 0) {
     const mpColor = '#1e293b';
     const mpPName = mp.proyecto || mp.edificio || 'Mi Proyecto';
-    const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.renta != null);
+    const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.ufm2 != null);
     const mpFiltered = tipoFilter
       ? mpTipos.filter(t => String(t.nombre).toUpperCase() === tipoFilter.toUpperCase())
       : mpTipos;
     if (mpFiltered.length > 0) {
       mpDatasets.push({
         label: mpPName,
-        data: mpFiltered.map(t => ({ x: t.sup, y: t.renta, label: `${mpPName} ${t.nombre}` })),
+        data: mpFiltered.map(t => ({
+          x: t.sup,
+          y: yAxisMode === 'ufm2' ? t.ufm2 : t.sup * t.ufm2,
+          label: `${mpPName} ${t.nombre}`,
+        })),
         backgroundColor: mpColor,
         borderColor: mpColor,
         borderWidth: 2,
@@ -318,13 +403,13 @@ export function renderSupVsRenta() {
   if (tipoCol && !tipoFilter) {
     const tipoGroups = {};
     for (const r of rows) {
-      const sup   = Number(r[supCol.name]);
-      const renta = Number(r[rentaCol.name]);
-      if (isNaN(sup) || isNaN(renta) || sup <= 0 || renta <= 0) continue;
+      const sup = Number(r[supCol.name]);
+      const yv  = Number(r[yCol.name]);
+      if (isNaN(sup) || isNaN(yv) || sup <= 0 || yv <= 0) continue;
       const tipo = fmtTipo(r[tipoCol.name]) || '—';
       const proy = proyCol ? String(r[proyCol.name] ?? '—') : '—';
       if (!tipoGroups[tipo]) tipoGroups[tipo] = [];
-      tipoGroups[tipo].push({ x: sup, y: renta, label: proy });
+      tipoGroups[tipo].push({ x: sup, y: yv, label: proy });
     }
     Object.keys(tipoGroups).sort().forEach((tipo, i) => {
       const hex = palette[i % palette.length];
@@ -341,11 +426,11 @@ export function renderSupVsRenta() {
   } else {
     const pts = [];
     for (const r of rows) {
-      const sup   = Number(r[supCol.name]);
-      const renta = Number(r[rentaCol.name]);
-      if (isNaN(sup) || isNaN(renta) || sup <= 0 || renta <= 0) continue;
+      const sup = Number(r[supCol.name]);
+      const yv  = Number(r[yCol.name]);
+      if (isNaN(sup) || isNaN(yv) || sup <= 0 || yv <= 0) continue;
       const proy = proyCol ? String(r[proyCol.name] ?? '—') : '—';
-      pts.push({ x: sup, y: renta, label: proy });
+      pts.push({ x: sup, y: yv, label: proy });
     }
     const tipo = tipoFilter ? fmtTipo(tipoFilter) : '';
     compDatasets.push({
@@ -362,6 +447,36 @@ export function renderSupVsRenta() {
   const datasets = [...mpDatasets, ...compDatasets];
 
   const allCompPts = compDatasets.flatMap(ds => ds.data);
+
+  // ── Promedio Y ─────────────────────────────────────────────
+  const showAvg = $('#svpAvgToggle')?.checked ?? false;
+  let avgY = null;
+  const annotations = {};
+  if (showAvg && allCompPts.length > 0) {
+    avgY = allCompPts.reduce((s, p) => s + p.y, 0) / allCompPts.length;
+    const avgLabel = yAxisMode === 'ufm2'
+      ? `Prom.: ${avgY.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} UF/m²`
+      : `Prom.: ${avgY.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} UF/mes`;
+    annotations.avgLine = {
+      type: 'line',
+      scaleID: 'y',
+      value: avgY,
+      borderColor: '#dc2626',
+      borderWidth: 1.5,
+      borderDash: [8, 4],
+      label: {
+        content: avgLabel,
+        display: true,
+        position: 'start',
+        color: '#dc2626',
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        font: { size: fs, weight: 'bold' },
+        padding: { x: 6, y: 3 },
+      },
+    };
+  }
+
+  // ── Tendencia ───────────────────────────────────────────────
   let reg = null;
   const showTrend = $('#svpTrendToggle')?.checked ?? true;
   if (showTrend && allCompPts.length >= 3) {
@@ -387,6 +502,57 @@ export function renderSupVsRenta() {
     }
   }
 
+  // ── Marcadores de m² sobre la tendencia ────────────────────
+  const MARKER_COLOR = '#ef4444';
+  [...svpMarkers].sort((a, b) => a - b).forEach(m2 => {
+    if (reg) {
+      // Cruce con la línea de tendencia
+      const trendY = reg.m * m2 + reg.b;
+      const yFmt = yAxisMode === 'ufm2'
+        ? `${trendY.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} UF/m²`
+        : `${trendY.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} UF/mes`;
+      // Línea vertical: desde el eje X hasta el cruce con la tendencia
+      annotations[`sv_${m2}`] = {
+        type: 'line', xMin: m2, xMax: m2, yMax: trendY,
+        borderColor: MARKER_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+        label: {
+          content: `${m2.toLocaleString('es-CL')} m²`,
+          display: true,
+          position: 'start', // top = punto de cruce con la tendencia
+          color: MARKER_COLOR,
+          backgroundColor: 'rgba(255,255,255,0.92)',
+          font: { size: fs, weight: 'bold' },
+          padding: { x: 4, y: 2 },
+          xAdjust: 4, // desplazar hacia la derecha para no tapar la línea
+        },
+      };
+      // Línea horizontal: desde el cruce hasta el eje Y
+      annotations[`sh_${m2}`] = {
+        type: 'line', yMin: trendY, yMax: trendY, xMax: m2,
+        borderColor: MARKER_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+        label: {
+          content: yFmt,
+          display: true,
+          position: 'start',
+          color: MARKER_COLOR,
+          backgroundColor: 'rgba(255,255,255,0.92)',
+          font: { size: fs, weight: 'bold' },
+          padding: { x: 4, y: 2 },
+          yAdjust: -10, // ligeramente arriba para no tapar la línea horizontal
+        },
+      };
+    } else {
+      // Sin tendencia: línea vertical completa con etiqueta arriba
+      annotations[`sv_${m2}`] = {
+        type: 'line', scaleID: 'x', value: m2,
+        borderColor: MARKER_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+        label: { content: `${m2.toLocaleString('es-CL')} m²`, display: true, position: 'start',
+          color: MARKER_COLOR, backgroundColor: 'rgba(255,255,255,0.92)',
+          font: { size: fs, weight: 'bold' }, padding: { x: 4, y: 2 }, xAdjust: 4 },
+      };
+    }
+  });
+
   const svpR2Plugin = {
     id: 'svpR2',
     afterDraw(chart) {
@@ -394,7 +560,7 @@ export function renderSupVsRenta() {
       const { ctx: c, chartArea: { right, top } } = chart;
       const text = `R² = ${reg.r2.toFixed(3)}`;
       c.save();
-      c.font = 'bold 12px system-ui, sans-serif';
+      c.font = `bold ${fs}px system-ui, sans-serif`;
       c.textAlign = 'right';
       c.textBaseline = 'middle';
       const w = c.measureText(text).width;
@@ -419,245 +585,393 @@ export function renderSupVsRenta() {
       maintainAspectRatio: false,
       parsing: false,
       plugins: {
-        legend: { position: 'top' },
+        legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
           callbacks: {
             label: item => {
               if (item.dataset.showLine) return null;
               const d = item.raw;
               const name = d.label ? `${d.label}: ` : '';
-              return `${name}${Number(d.x).toLocaleString('es-CL')} m² · ${Number(d.y).toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} UF/mes`;
+              return `${name}${Number(d.x).toLocaleString('es-CL')} m² · ${yTooltip(d.y)}`;
             },
           },
         },
+        annotation: { annotations },
       },
       scales: {
         x: {
-          title: { display: true, text: 'Útil (m²)' },
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: 'Útil (m²)', font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
         y: {
-          title: { display: true, text: 'Renta UF/mes' },
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: yLabel, font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
       },
     },
   });
 }
 
-// ============== Distribución (CDF) ==============
+// ============== Distribución (curva de cuantiles) ==============
 let distribChart = null;
 let distribListenersReady = false;
 const distribMarkers = { percentiles: new Set(), prices: new Set() };
-
-function _colUnit(colName) {
-  if (colName.includes('m²')) return 'm²';
-  if (colName.includes('UF')) return 'UF';
-  return '';
-}
+let distribUnit = 'UF';
 
 export function populateDistribSelectors() {
-  const sel = $('#distribCol');
-  if (!sel) return;
-  sel.innerHTML = '';
+  const colSel = $('#distribCol');
+  if (!colSel) return;
 
-  const priority = ['Renta UF', 'UF/m²', 'Útil (m²)', 'Gastos Comunes (UF)', 'Total (m²)'];
-  const numCols = state.columns.filter(c => c.type === 'number' && !c.name.startsWith('__'));
-  const sorted = [
-    ...priority.filter(name => numCols.find(c => c.name === name)),
-    ...numCols.filter(c => !priority.includes(c.name)).map(c => c.name),
-  ];
+  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  const rentaCol = state.columns.find(c => normStr(c.name).includes('renta uf') || normStr(c.name).includes('precio (uf'));
+  const ufm2Col  = state.columns.find(c => normStr(c.name).includes('uf/m') || normStr(c.name).includes('uf / m'));
 
-  for (const name of sorted) {
+  colSel.innerHTML = '';
+  if (rentaCol) {
     const o = document.createElement('option');
-    o.value = name; o.textContent = name;
-    sel.appendChild(o);
+    o.value = rentaCol.name; o.textContent = 'Renta UF';
+    colSel.appendChild(o);
   }
+  if (ufm2Col) {
+    const o = document.createElement('option');
+    o.value = ufm2Col.name; o.textContent = 'UF/m²';
+    colSel.appendChild(o);
+  }
+  // Otras columnas numéricas como fallback
+  if (!colSel.options.length) {
+    for (const col of state.columns) {
+      if (col.type === 'number' && !col.name.startsWith('__')) {
+        const o = document.createElement('option');
+        o.value = col.name; o.textContent = col.name;
+        colSel.appendChild(o);
+        break;
+      }
+    }
+  }
+
+  colSel.addEventListener('change', renderDistrib);
 
   if (!distribListenersReady) {
     distribListenersReady = true;
-    sel.addEventListener('change', renderDistrib);
-    _setupMarkers();
+
+    document.querySelectorAll('.ratio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    const fontSlider = $('#distribFontSize');
+    const fontVal    = $('#distribFontSizeVal');
+    if (fontSlider) {
+      fontSlider.addEventListener('input', () => {
+        fontVal.textContent = fontSlider.value + 'px';
+        renderDistrib();
+      });
+    }
+
+    $('#distribExportPngBtn')?.addEventListener('click', async () => {
+      if (!distribChart) return;
+      const btn   = $('#distribExportPngBtn');
+      const scale = 4;
+      const pad   = 32;
+      const wrap  = $('#distribWrap');
+      const ratio = document.querySelector('.ratio-btn.active')?.dataset.ratio ?? 'auto';
+
+      const origDPR = distribChart.options.devicePixelRatio ?? window.devicePixelRatio;
+      const exportW = wrap.clientWidth - pad;
+      const exportH = ratio === 'auto'
+        ? distribChart.height
+        : Math.round(exportW / parseFloat(ratio));
+
+      distribChart.options.devicePixelRatio = scale;
+      distribChart.resize(exportW, exportH);
+      const url = distribChart.toBase64Image('image/png', 1);
+
+      distribChart.options.devicePixelRatio = origDPR;
+      distribChart.resize();
+
+      const res  = await fetch(url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+      const prev = btn.textContent;
+      btn.textContent = '¡Copiado!';
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
+    });
+
+    const addPct = () => {
+      const v = parseInt($('#distribPctInput').value);
+      if (isNaN(v) || v < 1 || v > 99) return;
+      distribMarkers.percentiles.add(v);
+      $('#distribPctInput').value = '';
+      refreshMarkerTags();
+      renderDistrib();
+    };
+    $('#distribAddPct').addEventListener('click', addPct);
+    $('#distribPctInput').addEventListener('keydown', e => { if (e.key === 'Enter') addPct(); });
+
+    const addPrice = () => {
+      const v = parseFloat($('#distribPriceInput').value);
+      if (isNaN(v) || v <= 0) return;
+      distribMarkers.prices.add(v);
+      $('#distribPriceInput').value = '';
+      refreshMarkerTags();
+      renderDistrib();
+    };
+    $('#distribAddPrice').addEventListener('click', addPrice);
+    $('#distribPriceInput').addEventListener('keydown', e => { if (e.key === 'Enter') addPrice(); });
   }
 }
 
-function _setupMarkers() {
-  $('#distribAddPct')?.addEventListener('click', () => {
-    const v = parseInt($('#distribPctInput').value);
-    if (isNaN(v) || v < 1 || v > 99) return;
-    distribMarkers.percentiles.add(v);
-    _renderMarkerTags('#distribPctTags', distribMarkers.percentiles, 'pct');
-    renderDistrib();
-  });
-  $('#distribAddPrice')?.addEventListener('click', () => {
-    const v = parseFloat($('#distribPriceInput').value);
-    if (isNaN(v) || v < 0) return;
-    distribMarkers.prices.add(v);
-    _renderMarkerTags('#distribPriceTags', distribMarkers.prices, 'price');
-    renderDistrib();
-  });
-}
+function refreshMarkerTags() {
+  const pctContainer   = $('#distribPctTags');
+  const priceContainer = $('#distribPriceTags');
+  if (!pctContainer) return;
 
-function _renderMarkerTags(selector, set, type) {
-  const cont = document.querySelector(selector);
-  if (!cont) return;
-  cont.innerHTML = '';
-  for (const v of [...set].sort((a, b) => a - b)) {
+  pctContainer.innerHTML = '';
+  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(v => {
     const tag = document.createElement('span');
-    tag.className = `marker-tag ${type}-tag`;
-    tag.innerHTML = `${type === 'pct' ? 'P' + v : v.toLocaleString('es-CL') + (type === 'price' ? ' UF' : '')} <button data-val="${v}">×</button>`;
-    tag.querySelector('button').addEventListener('click', () => {
-      set.delete(v);
-      _renderMarkerTags(selector, set, type);
+    tag.className = 'marker-tag pct-tag';
+    tag.innerHTML = `P${v} <button data-val="${v}" class="rm-pct">×</button>`;
+    tag.querySelector('.rm-pct').addEventListener('click', () => {
+      distribMarkers.percentiles.delete(v);
+      refreshMarkerTags();
       renderDistrib();
     });
-    cont.appendChild(tag);
+    pctContainer.appendChild(tag);
+  });
+
+  priceContainer.innerHTML = '';
+  [...distribMarkers.prices].sort((a, b) => a - b).forEach(v => {
+    const tag = document.createElement('span');
+    tag.className = 'marker-tag price-tag';
+    tag.innerHTML = `${v.toLocaleString('es-CL')} ${distribUnit} <button data-val="${v}" class="rm-price">×</button>`;
+    tag.querySelector('.rm-price').addEventListener('click', () => {
+      distribMarkers.prices.delete(v);
+      refreshMarkerTags();
+      renderDistrib();
+    });
+    priceContainer.appendChild(tag);
+  });
+}
+
+// Curva de cuantiles: 101 puntos muestreados (P0–P100) para evitar escalones
+function computeQuantileCurve(rows, col) {
+  const vals = rows.map(r => Number(r[col])).filter(v => !isNaN(v) && v > 0);
+  if (vals.length < 2) return [];
+  vals.sort((a, b) => a - b);
+  const n = vals.length;
+  return Array.from({ length: 101 }, (_, pct) => {
+    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
+    return { x: pct, y: vals[idx] };
+  });
+}
+
+// Interpola Y dado X en la curva
+function lerpAtX(data, x) {
+  if (!data.length) return null;
+  if (x <= data[0].x) return data[0].y;
+  if (x >= data[data.length - 1].x) return data[data.length - 1].y;
+  for (let i = 0; i < data.length - 1; i++) {
+    if (data[i].x <= x && x <= data[i + 1].x) {
+      const t = (x - data[i].x) / (data[i + 1].x - data[i].x);
+      return data[i].y + t * (data[i + 1].y - data[i].y);
+    }
   }
+  return null;
+}
+
+// Interpola X dado Y en la curva
+function lerpAtY(data, y) {
+  if (!data.length) return null;
+  if (y <= data[0].y) return data[0].x;
+  if (y >= data[data.length - 1].y) return data[data.length - 1].x;
+  for (let i = 0; i < data.length - 1; i++) {
+    if (data[i].y <= y && y <= data[i + 1].y) {
+      const t = (y - data[i].y) / (data[i + 1].y - data[i].y);
+      return data[i].x + t * (data[i + 1].x - data[i].x);
+    }
+  }
+  return null;
 }
 
 export function renderDistrib() {
-  if (state.filtered.length === 0) return;
-  const colName = $('#distribCol')?.value;
-  if (!colName) return;
+  const colSel = $('#distribCol');
+  if (!colSel || state.filtered.length === 0) return;
 
-  const values = state.filtered
-    .map(r => Number(r[colName]))
-    .filter(v => !isNaN(v) && v > 0)
-    .sort((a, b) => a - b);
+  const col  = colSel.value;
+  const _nc  = col.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²' : 'UF';
+  const fs   = parseInt($('#distribFontSize')?.value ?? '11');
 
-  if (!values.length) return;
-
-  const n = values.length;
-  const unit = _colUnit(colName);
-
-  // Percentil exacto: índice basado en el rango 0-100
-  const percentile = pct => {
-    if (pct <= 0) return values[0];
-    if (pct >= 100) return values[n - 1];
-    const idx = Math.ceil((pct / 100) * n) - 1;
-    return values[Math.max(0, Math.min(idx, n - 1))];
+  // Formato adaptativo: más decimales cuando los valores son pequeños
+  const fmtVal = v => {
+    if (v >= 100) return v.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+    if (v >= 10)  return v.toLocaleString('es-CL', { maximumFractionDigits: 1 });
+    return v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
-
-  // Qué percentil corresponde a un valor dado
-  const valueToPct = val => Math.round((values.filter(v => v <= val).length / n) * 100);
-
-  // Datos de la curva CDF: 101 puntos (P0 a P100)
-  const labels = Array.from({ length: 101 }, (_, i) => i);
-  const cdfData = labels.map(pct => percentile(pct));
-
-  // Estilo compartido de anotación
-  const annotLine = (scaleID, value, color, dash = [6, 4]) => ({
-    type: 'line', scaleID, value,
-    borderColor: color, borderWidth: 1.5, borderDash: dash,
-  });
-  const annotLabel = (content, position, color) => ({
-    content, display: true, position,
-    color, font: { size: 11, weight: 'bold' },
-    backgroundColor: 'transparent', padding: { x: 3, y: 2 },
-  });
-
-  const annotations = {};
-
-  // ── Percentiles (rojo) ─────────────────────────────────────
-  for (const pct of distribMarkers.percentiles) {
-    const val = percentile(pct);
-    const valLabel = `${val.toLocaleString('es-CL', { maximumFractionDigits: 1 })}${unit ? ' ' + unit : ''}`;
-
-    annotations[`pct_v_${pct}`] = {
-      ...annotLine('x', pct, '#ef4444'),
-      label: annotLabel(`P${pct}`, 'end', '#ef4444'),
-    };
-    annotations[`pct_h_${pct}`] = {
-      ...annotLine('y', val, '#ef4444'),
-      label: annotLabel(valLabel, 'start', '#ef4444'),
-    };
-  }
-
-  // ── Precios marcados (rojo oscuro) ─────────────────────────
-  for (const price of distribMarkers.prices) {
-    const calcPct = valueToPct(price);
-    const priceLabel = `${price.toLocaleString('es-CL', { maximumFractionDigits: 1 })}${unit ? ' ' + unit : ''}`;
-
-    annotations[`price_h_${price}`] = {
-      ...annotLine('y', price, '#dc2626'),
-      label: annotLabel(priceLabel, 'start', '#dc2626'),
-    };
-    annotations[`price_v_${price}`] = {
-      ...annotLine('x', calcPct, '#dc2626'),
-      label: annotLabel(`P${calcPct}`, 'end', '#dc2626'),
-    };
-  }
-
-  // ── Mi Proyecto (ámbar) ────────────────────────────────────
-  let mpVals = [];
-  if (mp.inDistrib && mp.tipologias.length > 0) {
-    for (const t of mp.tipologias) {
-      if (colName === 'Renta UF' && t.sup != null && t.ufm2 != null) mpVals.push(t.sup * t.ufm2);
-      else if (colName === 'UF/m²' && t.ufm2 != null) mpVals.push(t.ufm2);
-      else if ((colName === 'Útil (m²)' || colName === 'Total (m²)') && t.sup != null) mpVals.push(t.sup);
-    }
-  }
-  for (const mpV of mpVals) {
-    const calcPct = valueToPct(mpV);
-    const mpLabel = `${mpV.toLocaleString('es-CL', { maximumFractionDigits: 1 })}${unit ? ' ' + unit : ''}`;
-    annotations[`mp_h_${mpV}`] = {
-      ...annotLine('y', mpV, '#f59e0b', []),
-      label: annotLabel(`★ ${mpLabel}`, 'start', '#d97706'),
-    };
-    annotations[`mp_v_${mpV}`] = {
-      ...annotLine('x', calcPct, '#f59e0b', [5, 3]),
-      label: annotLabel(`P${calcPct}`, 'end', '#d97706'),
-    };
-  }
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
   const ctx = $('#distribChart')?.getContext('2d');
   if (!ctx) return;
 
+  // Array ordenado para lookups exactos de percentil
+  const sortedVals = state.filtered
+    .map(r => Number(r[col]))
+    .filter(v => !isNaN(v) && v > 0)
+    .sort((a, b) => a - b);
+
+  if (sortedVals.length < 2) return;
+
+  // Valor exacto en el percentil pct (0-100)
+  const valAtPct = pct => {
+    const idx = Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1);
+    return sortedVals[Math.max(0, idx)];
+  };
+
+  const refData = computeQuantileCurve(state.filtered, col);
+  const datasets = [{
+    label: col,
+    data: refData,
+    borderColor: '#38bdf8',
+    backgroundColor: 'rgba(56,189,248,0.10)',
+    pointRadius: 0,
+    borderWidth: 2,
+    tension: 0.55,
+    fill: true,
+  }];
+
+  const annotations = {};
+  const RED = '#ef4444';
+
+  // ── Percentiles ────────────────────────────────────────────
+  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+    const price = valAtPct(pct);
+    if (price == null || price === 0) return;
+    const priceLabel = fmtVal(price);
+    // Línea vertical: desde eje X hasta la curva
+    annotations[`pv_${pct}`] = {
+      type: 'line', xMin: pct, xMax: pct, yMax: price,
+      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
+      label: { content: `P${pct}`, display: true, position: 'start',
+        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+    };
+    // Línea horizontal: desde eje Y hasta la curva
+    annotations[`ph_${pct}`] = {
+      type: 'line', yMin: price, yMax: price, xMax: pct,
+      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
+      label: { content: `${priceLabel} ${distribUnit}`, display: true, position: 'start',
+        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+    };
+  });
+
+  // ── Precios marcados ────────────────────────────────────────
+  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+    const pct = lerpAtY(refData, price);
+    const pctForLabel = pct !== null ? pct : 100;
+    annotations[`prh_${price}`] = {
+      type: 'line', yMin: price, yMax: price, xMax: pctForLabel,
+      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
+      label: { content: `${fmtVal(price)} ${distribUnit}`, display: true, position: 'start',
+        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+    };
+    if (pct !== null) {
+      annotations[`prv_${price}`] = {
+        type: 'line', xMin: pct, xMax: pct, yMax: price,
+        borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
+        label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
+          color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      };
+    }
+  });
+
+  // ── Mi Proyecto ─────────────────────────────────────────────
+  if (mp.inDistrib && mp.tipologias.length > 0) {
+    const normFn  = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+    const nc      = normFn(col);
+    const isUfm2   = nc.includes('uf/m') || nc.includes('uf / m');
+    const isRenta  = !isUfm2 && (nc.includes('renta') || nc.includes('precio'));
+
+    const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normFn(c.name).includes(k)));
+    const fmtTipo = v => {
+      const s = String(v ?? '').trim();
+      return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
+    };
+    let mpTipos = mp.tipologias.filter(t => t.nombre);
+    if (tipoColObj) {
+      const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
+      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
+    }
+
+    const mpColor = '#1e3a5f';
+    mpTipos.forEach(t => {
+      let val = null;
+      if (isUfm2)       val = t.ufm2;
+      else if (isRenta) val = (t.sup != null && t.ufm2 != null) ? t.sup * t.ufm2 : null;
+      else              val = t.sup;
+      if (val == null) return;
+      const pct = lerpAtY(refData, val);
+      if (pct === null) return;
+      const valLabel = fmtVal(val);
+      annotations[`mp_h_${t.id}`] = {
+        type: 'line', yMin: val, yMax: val, xMax: pct,
+        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+        label: { content: `${t.nombre}: ${valLabel}`, display: true, position: 'start',
+          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      };
+      annotations[`mp_v_${t.id}`] = {
+        type: 'line', xMin: pct, xMax: pct, yMax: val,
+        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+        label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
+          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      };
+    });
+  }
+
   distribChart = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: colName,
-        data: cdfData,
-        borderColor: '#2563eb',
-        backgroundColor: 'rgba(37,99,235,0.08)',
-        fill: true,
-        tension: 0.35,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        borderWidth: 2,
-      }],
-    },
+    data: { datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
+      parsing: false,
       plugins: {
-        legend: { display: false },
-        annotation: { annotations },
+        legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
+          mode: 'nearest',
+          intersect: false,
+          axis: 'x',
           callbacks: {
-            title: items => `Percentil ${items[0].label}%`,
-            label: item => ` ${item.raw.toLocaleString('es-CL', { maximumFractionDigits: 2 })}${unit ? ' ' + unit : ''}`,
+            title: items => {
+              const pt = refData[items[0]?.dataIndex];
+              return pt ? `P${pt.x.toFixed(1)}` : '';
+            },
+            label: item => {
+              const pt = refData[item.dataIndex];
+              if (!pt) return '';
+              return ` ${item.dataset.label}: ${fmtVal(pt.y)} ${distribUnit}`;
+            },
           },
         },
+        annotation: { annotations },
       },
       scales: {
         x: {
-          type: 'linear',
-          min: 0, max: 100,
-          title: { display: true, text: 'Percentil (%)' },
-          ticks: {
-            stepSize: 10,
-            callback: v => `${v}%`,
-          },
+          type: 'linear', min: 0, max: 100,
+          title: { display: true, text: 'Percentil (%)', font: { size: fs } },
+          ticks: { callback: v => v + '%', font: { size: fs } },
         },
         y: {
-          title: { display: true, text: colName },
-          beginAtZero: false,
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: col, font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
       },
     },

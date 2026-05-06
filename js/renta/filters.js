@@ -1,5 +1,5 @@
-import { $, debounce, fmt } from './utils.js';
-import { state } from './data.js'; 
+import { $, debounce } from '../utils.js';
+import { state } from './data.js';
 
 // ============== Resolución de columnas ==============
 function findCol(candidates) {
@@ -10,23 +10,22 @@ function findCol(candidates) {
 let cols = {};
 
 function resolveCols() {
-  // Quitamos 'dormitor' para que obligatoriamente tome nuestra nueva columna 'Tipología'
-  cols.tipologia  = findCol(['tipología', 'tipologia']); 
-  cols.corredor   = findCol(['corredor', 'inmobiliaria', 'propietario']);
-  cols.tipo       = findCol(['tipo de prop', 'tipo prop', 'tipo']);
-  cols.comuna     = findCol(['comuna']);
-  cols.superficie = findCol(['util (m', 'metros util', 'sup. út', 'sup util']);
-  cols.ufm2       = findCol(['uf/m', 'uf / m']);
-  cols.renta      = findCol(['renta uf', 'precio (uf', 'precio uf', 'renta']);
-  cols.gastos     = findCol(['gastos comunes', 'ggcc']);
+  cols.tipologia   = findCol(['tipología', 'tipologia']);
+  cols.corredor    = findCol(['corredor', 'inmobiliaria', 'propietario']);
+  cols.tipo        = findCol(['tipo de prop', 'tipo prop', 'tipo']);
+  cols.comuna      = findCol(['comuna']);
+  cols.superficie  = findCol(['util (m', 'metros util', 'sup. út', 'sup util']);
+  cols.ufm2        = findCol(['uf/m', 'uf / m']);
+  cols.renta       = findCol(['renta uf', 'precio (uf', 'precio uf', 'renta']);
+  cols.gastos      = findCol(['gastos comunes', 'ggcc']);
 }
 
 // ============== Estado de filtros ==============
 const F = {
-  tipologia:  new Set(),
-  corredor:   new Set(),
-  tipo:       new Set(),
-  comuna:     new Set(),
+  tipologia:   new Set(),
+  corredor:    new Set(),
+  tipo:        new Set(),
+  comuna:      new Set(),
   supMin: null, supMax: null,
   ufm2Min: null, ufm2Max: null,
   rentaMin: null, rentaMax: null,
@@ -46,17 +45,18 @@ export function buildFilters() {
   const container = $('#filtersContainer');
   container.innerHTML = '';
 
-  if (cols.tipologia)  _buildMulti('tipologia',  cols.tipologia,  'Tipología',             container);
-  if (cols.superficie) _buildSlider('sup',        cols.superficie, 'm² útil',               container, 1);
-  if (cols.renta)      _buildSlider('renta',      cols.renta,      'Renta UF',              container, 1);
-  if (cols.ufm2)       _buildSlider('ufm2',       cols.ufm2,       'UF/m²',                 container, 0.01);
-  if (cols.gastos)     _buildSlider('gastos',     cols.gastos,     'Gastos Comunes (UF)',   container, 1);
-  if (cols.corredor)   _buildMulti('corredor',    cols.corredor,   'Corredor',              container);
-  if (cols.tipo)       _buildMulti('tipo',        cols.tipo,       'Tipo de propiedad',     container);
-  if (cols.comuna)     _buildMulti('comuna',      cols.comuna,     'Comuna',                container);
+  if (cols.tipologia)  _buildMulti('tipologia', cols.tipologia, 'Tipología', container);
+
+  if (cols.superficie) _buildSlider('sup',    cols.superficie, 'm² útil',             container, 1);
+  if (cols.renta)      _buildSlider('renta',  cols.renta,      'Renta UF',            container, 1);
+  if (cols.ufm2)       _buildSlider('ufm2',   cols.ufm2,       'UF/m²',               container, 0.01);
+  if (cols.gastos)     _buildSlider('gastos', cols.gastos,     'Gastos Comunes (CLP)', container, 1000);
+  if (cols.corredor)   _buildMulti('corredor', cols.corredor,  'Corredor',            container);
+  if (cols.tipo)       _buildMulti('tipo',     cols.tipo,      'Tipo de propiedad',   container);
+  if (cols.comuna)     _buildMulti('comuna',   cols.comuna,    'Comuna',              container);
 }
 
-// --- Multi checkbox ---
+// --- Multi checkbox genérico ---
 function _buildMulti(key, colName, label, container) {
   const vals = [...new Set(
     state.raw.map(r => r[colName]).filter(v => v !== '' && v != null)
@@ -73,7 +73,7 @@ function _buildMulti(key, colName, label, container) {
   for (const v of vals) {
     const id = `f_${key}_${String(v).replace(/\W+/g, '_')}`;
     const lab = document.createElement('label');
-    const cb = document.createElement('input');
+    const cb  = document.createElement('input');
     cb.type = 'checkbox'; cb.id = id; cb.value = String(v);
     cb.addEventListener('change', () => {
       if (cb.checked) F[key].add(v); else F[key].delete(v);
@@ -87,12 +87,12 @@ function _buildMulti(key, colName, label, container) {
   container.appendChild(group);
 }
 
-// --- Slider dual ---
+// --- Slider dual con inputs editables en los extremos ---
 function _buildSlider(key, colName, label, container, step = 1) {
   const nums = state.raw.map(r => Number(r[colName])).filter(v => !isNaN(v) && v > 0);
   if (!nums.length) return;
-  
-  const inv = 1 / step;
+
+  const inv  = 1 / step;
   const dMin = Math.floor(Math.min(...nums) * inv) / inv;
   const dMax = Math.ceil(Math.max(...nums) * inv) / inv;
 
@@ -102,31 +102,36 @@ function _buildSlider(key, colName, label, container, step = 1) {
 
   const wrap = document.createElement('div');
   wrap.className = 'slider-wrap';
-  const trackBg = document.createElement('div');
-  trackBg.className = 'slider-track-bg';
-  const fill = document.createElement('div');
-  fill.className = 'slider-fill';
-  
+  const trackBg = document.createElement('div'); trackBg.className = 'slider-track-bg';
+  const fill    = document.createElement('div'); fill.className    = 'slider-fill';
+
   const sMin = document.createElement('input');
   sMin.type = 'range'; sMin.className = 'dual-range';
   sMin.min = dMin; sMin.max = dMax; sMin.value = dMin; sMin.step = step;
-  
+
   const sMax = document.createElement('input');
   sMax.type = 'range'; sMax.className = 'dual-range';
   sMax.min = dMin; sMax.max = dMax; sMax.value = dMax; sMax.step = step;
-  
+
   wrap.append(trackBg, fill, sMin, sMax);
 
+  // Inputs que reemplazan las etiquetas, pegados a los extremos del slider
   const lblRow = document.createElement('div');
   lblRow.className = 'slider-labels';
-  const lblMin = document.createElement('span'); lblMin.textContent = fmt(dMin);
-  const lblMax = document.createElement('span'); lblMax.textContent = fmt(dMax);
-  lblRow.append(lblMin, lblMax);
 
+  const iMin = document.createElement('input');
+  iMin.type = 'number'; iMin.className = 'slider-lbl-input';
+  iMin.value = dMin; iMin.step = step; iMin.title = 'Mínimo';
+
+  const iMax = document.createElement('input');
+  iMax.type = 'number'; iMax.className = 'slider-lbl-input';
+  iMax.value = dMax; iMax.step = step; iMax.title = 'Máximo';
+
+  lblRow.append(iMin, iMax);
   group.append(wrap, lblRow);
   container.appendChild(group);
 
-  const ref = { type: 'slider', sMin, sMax, fill, lblMin, lblMax, colName, curMin: dMin, curMax: dMax, step };
+  const ref = { type: 'slider', sMin, sMax, fill, iMin, iMax, colName, curMin: dMin, curMax: dMax, step };
   refs[key] = ref;
 
   function updateFill() {
@@ -134,18 +139,13 @@ function _buildSlider(key, colName, label, container, step = 1) {
     if (range <= 0) { fill.style.left = '0%'; fill.style.width = '100%'; return; }
     const lo = Math.min(+sMin.value, +sMax.value);
     const hi = Math.max(+sMin.value, +sMax.value);
-    const loPct = (lo - ref.curMin) / range * 100;
-    const hiPct = (hi - ref.curMin) / range * 100;
-    fill.style.left  = loPct + '%';
-    fill.style.width = (hiPct - loPct) + '%';
-    lblMin.textContent = fmt(lo);
-    lblMax.textContent = fmt(hi);
+    fill.style.left  = ((lo - ref.curMin) / range * 100) + '%';
+    fill.style.width = ((hi - lo) / range * 100) + '%';
   }
-
   ref.updateFill = updateFill;
   updateFill();
 
-  const apply = debounce(() => {
+  const applySlider = debounce(() => {
     const lo = Math.min(+sMin.value, +sMax.value);
     const hi = Math.max(+sMin.value, +sMax.value);
     F[`${key}Min`] = lo <= ref.curMin ? null : lo;
@@ -155,12 +155,33 @@ function _buildSlider(key, colName, label, container, step = 1) {
 
   sMin.addEventListener('input', () => {
     if (+sMin.value > +sMax.value) sMax.value = sMin.value;
-    updateFill(); apply();
+    iMin.value = +sMin.value;
+    updateFill(); applySlider();
   });
   sMax.addEventListener('input', () => {
     if (+sMax.value < +sMin.value) sMin.value = sMax.value;
-    updateFill(); apply();
+    iMax.value = +sMax.value;
+    updateFill(); applySlider();
   });
+
+  function commitInput() {
+    let lo = iMin.value.trim() === '' ? ref.curMin : Math.max(ref.curMin, Math.min(Number(iMin.value), ref.curMax));
+    let hi = iMax.value.trim() === '' ? ref.curMax : Math.max(ref.curMin, Math.min(Number(iMax.value), ref.curMax));
+    if (isNaN(lo)) lo = ref.curMin;
+    if (isNaN(hi)) hi = ref.curMax;
+    if (lo > hi) [lo, hi] = [hi, lo];
+    sMin.value = lo; iMin.value = lo;
+    sMax.value = hi; iMax.value = hi;
+    F[`${key}Min`] = lo <= ref.curMin ? null : lo;
+    F[`${key}Max`] = hi >= ref.curMax ? null : hi;
+    updateFill();
+    applyFilters();
+  }
+
+  iMin.addEventListener('blur',    commitInput);
+  iMax.addEventListener('blur',    commitInput);
+  iMin.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+  iMax.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 }
 
 // ============== Aplicar filtros ==============
@@ -170,10 +191,11 @@ export function applyFilters() {
       const hay = Object.values(row).map(v => String(v).toLowerCase()).join(' ');
       if (!hay.includes(state.search)) return false;
     }
+
     if (F.tipologia.size && cols.tipologia && !F.tipologia.has(row[cols.tipologia])) return false;
-    if (F.corredor.size  && cols.corredor  && !F.corredor.has(row[cols.corredor]))   return false;
-    if (F.tipo.size      && cols.tipo      && !F.tipo.has(row[cols.tipo]))           return false;
-    if (F.comuna.size    && cols.comuna    && !F.comuna.has(row[cols.comuna]))       return false;
+    if (F.corredor.size  && cols.corredor  && !F.corredor.has(row[cols.corredor]))  return false;
+    if (F.tipo.size        && cols.tipo        && !F.tipo.has(row[cols.tipo]))                       return false;
+    if (F.comuna.size      && cols.comuna      && !F.comuna.has(row[cols.comuna]))                   return false;
 
     if (cols.superficie) {
       const v = Number(row[cols.superficie]);
@@ -211,7 +233,7 @@ export function applyFilters() {
     if (tab === 'svp')          renderSupVsRenta();
     if (tab === 'proyectos')    renderProyectos();
   }).catch(() => {});
-  
+
   const activeTab = $('.tab.active')?.dataset.tab;
   if (activeTab === 'comparativa') {
     import('./comparativa.js').then(({ renderComparativa }) => renderComparativa()).catch(() => {});
@@ -227,16 +249,18 @@ function _updateSliderLimits() {
     if (!ref || ref.type !== 'slider') continue;
     const nums = state.filtered.map(r => Number(r[ref.colName])).filter(v => !isNaN(v) && v > 0);
     if (!nums.length) continue;
-    
-    const inv = 1 / ref.step;
+
+    const inv    = 1 / ref.step;
     const newMin = Math.floor(Math.min(...nums) * inv) / inv;
     const newMax = Math.ceil(Math.max(...nums) * inv) / inv;
-    
+
     const noUserFilter = F[`${key}Min`] === null && F[`${key}Max`] === null;
     if (noUserFilter) {
       ref.curMin = newMin; ref.curMax = newMax;
       ref.sMin.min = newMin; ref.sMin.max = newMax; ref.sMin.value = newMin;
       ref.sMax.min = newMin; ref.sMax.max = newMax; ref.sMax.value = newMax;
+      if (ref.iMin) ref.iMin.value = newMin;
+      if (ref.iMax) ref.iMax.value = newMax;
       ref.updateFill();
     }
   }

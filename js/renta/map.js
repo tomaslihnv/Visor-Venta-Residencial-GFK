@@ -5,7 +5,8 @@ import { mp } from './miProyecto.js';
 // ============== Cache y estado ==============
 const cache = new Map();
 const geoStatus = { total: 0, done: 0, running: false };
-let mapMode = 'general'; // 'general' | 'precio'
+let mapMode    = 'general'; // 'general' | 'precio'
+let heatMetric = 'ufm2';   // 'ufm2' | 'renta'
 let mapInitialized = false;
 
 export function resetMapOnLoad() {
@@ -62,6 +63,18 @@ function collectPoints(rows) {
 
 function findUfm2Col() {
   return state.columns.find(c => norm(c.name).includes('uf/m') || norm(c.name).includes('uf / m'))?.name ?? null;
+}
+
+function findRentaCol() {
+  return state.columns.find(c => norm(c.name).includes('renta uf') || norm(c.name).includes('precio (uf'))?.name ?? null;
+}
+
+function getHeatCol() {
+  return heatMetric === 'renta' ? findRentaCol() : findUfm2Col();
+}
+
+function getHeatLabel() {
+  return heatMetric === 'renta' ? 'Renta UF' : 'UF/m²';
 }
 
 // Color gradiente rojo (barato) → amarillo → verde → azul (caro)
@@ -223,6 +236,18 @@ function initLeafletMap() {
       document.querySelectorAll('.map-mode-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       mapMode = btn.dataset.mode;
+      const pills = document.getElementById('heatMetricPills');
+      if (pills) pills.classList.toggle('hidden', mapMode !== 'precio');
+      renderMap();
+    });
+  });
+
+  // Botones de métrica de calor
+  document.querySelectorAll('.heat-metric-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.heat-metric-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      heatMetric = btn.dataset.metric;
       renderMap();
     });
   });
@@ -257,19 +282,19 @@ export function renderMap() {
   placeholder.classList.add('hidden');
   wrapper.classList.remove('hidden');
 
-  const ufm2Col = findUfm2Col();
-  const inPriceMode = mapMode === 'precio' && ufm2Col;
+  const heatCol     = getHeatCol();
+  const heatLabel   = getHeatLabel();
+  const inPriceMode = mapMode === 'precio' && heatCol;
   wrapper.classList.toggle('dark-mode', inPriceMode);
 
   if (!leafletMap) initLeafletMap();
   markersLayer.clearLayers();
 
-
   // Calcular rango de precios para la escala de color
   let priceMin = 0, priceMax = 1;
   if (inPriceMode) {
     const allPrices = points.flatMap(p =>
-      p.rows.map(r => Number(r[ufm2Col])).filter(v => !isNaN(v))
+      p.rows.map(r => Number(r[heatCol])).filter(v => !isNaN(v) && v > 0)
     );
     if (allPrices.length) {
       priceMin = Math.min(...allPrices);
@@ -283,7 +308,7 @@ export function renderMap() {
     let marker;
 
     if (inPriceMode) {
-      const prices = rows.map(r => Number(r[ufm2Col])).filter(v => !isNaN(v));
+      const prices = rows.map(r => Number(r[heatCol])).filter(v => !isNaN(v) && v > 0);
       const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
       const color = avg !== null ? priceToColor(avg, priceMin, priceMax) : '#60a5fa';
       marker = L.circleMarker([lat, lng], {
@@ -340,8 +365,8 @@ export function renderMap() {
     if (!legendControl._map) legendControl.addTo(leafletMap);
     const minEl = document.getElementById('legLblMin');
     const maxEl = document.getElementById('legLblMax');
-    if (minEl) minEl.textContent = `${fmt(priceMin)} UF/m²`;
-    if (maxEl) maxEl.textContent = `${fmt(priceMax)} UF/m²`;
+    if (minEl) minEl.textContent = `${fmt(priceMin)} ${heatLabel}`;
+    if (maxEl) maxEl.textContent = `${fmt(priceMax)} ${heatLabel}`;
   } else {
     if (legendControl._map) legendControl.remove();
   }
@@ -372,20 +397,22 @@ function renderRanking() {
   const ufm2ColN = findUfm2Col();
   const rentaCol = state.columns.find(c => ['renta uf', 'precio', 'renta'].some(k => norm(c.name).includes(k)))?.name;
 
-  if (!proyCol || !ufm2ColN) { el.innerHTML = ''; return; }
+  const rankByRenta = heatMetric === 'renta';
+
+  if (!proyCol) { el.innerHTML = ''; return; }
 
   const byProy = {};
   for (const r of state.filtered) {
     const proy = String(r[proyCol] ?? '').trim();
     if (!proy) continue;
     if (!byProy[proy]) byProy[proy] = { tipo: tipoCol ? r[tipoCol] : null, sups: [], ufm2s: [], rentas: [] };
-    
+
     const sup   = Number(r[supCol]);
     const ufm2  = Number(r[ufm2ColN]);
     const renta = Number(r[rentaCol]);
-    
-    if (supCol   && !isNaN(sup)   && sup > 0)   byProy[proy].sups.push(sup);
-    if (!isNaN(ufm2)  && ufm2 > 0)  byProy[proy].ufm2s.push(ufm2);
+
+    if (supCol   && !isNaN(sup)   && sup > 0)  byProy[proy].sups.push(sup);
+    if (ufm2ColN && !isNaN(ufm2)  && ufm2 > 0) byProy[proy].ufm2s.push(ufm2);
     if (rentaCol && !isNaN(renta) && renta > 0) byProy[proy].rentas.push(renta);
   }
 
@@ -394,15 +421,16 @@ function renderRanking() {
   const buildings = Object.entries(byProy)
     .map(([proy, d]) => ({
       proy,
-      tipo:   d.tipo,
-      sup:    avg(d.sups),
-      ufm2:   avg(d.ufm2s),
-      renta:  avg(d.rentas),
+      tipo:  d.tipo,
+      sup:   avg(d.sups),
+      ufm2:  avg(d.ufm2s),
+      renta: avg(d.rentas),
     }))
-    .filter(b => b.ufm2 !== null)
-    .sort((a, b) => b.ufm2 - a.ufm2);
+    .filter(b => rankByRenta ? b.renta !== null : b.ufm2 !== null)
+    .sort((a, b) => rankByRenta ? b.renta - a.renta : b.ufm2 - a.ufm2);
 
-  el.innerHTML = `<div class="map-ranking-title">Proyectos (${buildings.length}) &nbsp;·&nbsp; UF/<span style="text-transform:none">m²</span> ↓</div>`;
+  const rankLabel = rankByRenta ? 'Renta UF ↓' : 'UF/<span style="text-transform:none">m²</span> ↓';
+  el.innerHTML = `<div class="map-ranking-title">Proyectos (${buildings.length}) &nbsp;·&nbsp; ${rankLabel}</div>`;
 
   buildings.forEach((b, i) => {
     const item = document.createElement('div');

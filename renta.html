@@ -136,6 +136,11 @@
               <div class="map-toolbar">
                 <button class="map-mode-btn active" data-mode="general">General</button>
                 <button class="map-mode-btn" data-mode="precio">De calor</button>
+                <div class="heat-metric-pills hidden" id="heatMetricPills">
+                  <span class="heat-metric-label">Métrica:</span>
+                  <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
+                  <button class="heat-metric-btn" data-metric="renta">Renta UF</button>
+                </div>
               </div>
               <div id="map" class="map"></div>
             </div>
@@ -164,13 +169,48 @@
                 <option value="">Todas</option>
               </select>
             </div>
+            <div class="ctrl">
+              <label>Eje Y</label>
+              <select id="svpYAxis">
+                <option value="renta">Renta UF</option>
+                <option value="ufm2">UF/m²</option>
+              </select>
+            </div>
             <label class="toggle-check">
               <input type="checkbox" id="svpTrendToggle" checked />
               <span>Línea de tendencia</span>
             </label>
-            <button id="svpExportPngBtn" class="primary-btn">Exportar PNG</button>
+            <label class="toggle-check">
+              <input type="checkbox" id="svpAvgToggle" />
+              <span>Línea de promedio</span>
+            </label>
+            <div class="ctrl distrib-marker-group">
+              <label>Marcar m² útil</label>
+              <div class="marker-add">
+                <input type="number" id="svpM2Input" min="1" step="1" placeholder="ej: 50">
+                <button id="svpAddM2" class="marker-btn pct-btn">+</button>
+              </div>
+            </div>
+            <div id="svpM2Tags" class="marker-tags"></div>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="svpFontSize" min="8" max="22" step="1" value="11">
+                <span id="svpFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="svp-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="svp-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="svp-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="svp-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <button id="svpExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>
           </div>
         </div>
@@ -197,36 +237,48 @@
 
         <!-- TAB: DISTRIBUCIÓN -->
         <div class="tab-panel" data-panel="distribucion">
-          <div class="chart-controls">
-            
+          <div class="chart-controls distrib-controls">
             <div class="ctrl">
               <label>Valores</label>
               <select id="distribCol"></select>
-              <label style="display: flex; align-items: center; gap: 6px; margin-top: 10px; cursor: pointer; font-size: 13px; font-weight: normal; text-transform: none;">
-                <input type="checkbox" id="distribCumulToggle"> Ver acumulada
-              </label>
             </div>
-
             <div class="ctrl distrib-marker-group">
               <label>Marcar percentil</label>
               <div class="marker-add">
                 <input type="number" id="distribPctInput" min="1" max="99" step="1" placeholder="ej: 50">
                 <button id="distribAddPct" class="marker-btn pct-btn">+</button>
               </div>
-              <div id="distribPctTags" class="marker-tags"></div>
             </div>
-
             <div class="ctrl distrib-marker-group">
-              <label>Marcar precio (UF)</label>
+              <label>Marcar precio</label>
               <div class="marker-add">
-                <input type="number" id="distribPriceInput" min="0" step="100" placeholder="ej: 4500">
-                <button id="distribAddPrice" class="marker-btn price-btn">+</button>
+                <input type="number" id="distribPriceInput" min="0" step="1" placeholder="ej: 20">
+                <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
+            </div>
+            <div class="distrib-tags-row">
+              <div id="distribPctTags" class="marker-tags"></div>
               <div id="distribPriceTags" class="marker-tags"></div>
             </div>
-
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="distribFontSize" min="8" max="22" step="1" value="11">
+                <span id="distribFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <button id="distribExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="distribWrap">
             <canvas id="distribChart"></canvas>
           </div>
         </div>

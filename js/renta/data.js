@@ -24,7 +24,7 @@ const INCITI_RENTA_MAP = {
   'Metros Útiles':        'Útil (m²)',
   'Metros Totales':       'Total (m²)',
   'Metros Terraza':       'Terraza (m²)',
-  'Gastos Comunes':       'Gastos Comunes (UF)',
+  'Gastos Comunes':       'Gastos Comunes (CLP)',
   'Link Publicación':     'Link',
 };
 
