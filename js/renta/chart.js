@@ -445,10 +445,16 @@ export function renderSupVsRenta() {
   });
 }
 
-// ============== Distribución ==============
+// ============== Distribución (CDF) ==============
 let distribChart = null;
 let distribListenersReady = false;
 const distribMarkers = { percentiles: new Set(), prices: new Set() };
+
+function _colUnit(colName) {
+  if (colName.includes('m²')) return 'm²';
+  if (colName.includes('UF')) return 'UF';
+  return '';
+}
 
 export function populateDistribSelectors() {
   const sel = $('#distribCol');
@@ -471,7 +477,6 @@ export function populateDistribSelectors() {
   if (!distribListenersReady) {
     distribListenersReady = true;
     sel.addEventListener('change', renderDistrib);
-    $('#distribCumulToggle')?.addEventListener('change', renderDistrib);
     _setupMarkers();
   }
 }
@@ -515,8 +520,6 @@ export function renderDistrib() {
   const colName = $('#distribCol')?.value;
   if (!colName) return;
 
-  const isCumulative = $('#distribCumulToggle')?.checked ?? false;
-
   const values = state.filtered
     .map(r => Number(r[colName]))
     .filter(v => !isNaN(v) && v > 0)
@@ -524,137 +527,87 @@ export function renderDistrib() {
 
   if (!values.length) return;
 
-  // Función para obtener percentil exacto
-  const percentile = (pct) => {
-    if (pct === 0) return values[0];
-    const idx = Math.ceil((pct / 100) * values.length) - 1;
-    return values[Math.max(0, Math.min(idx, values.length - 1))];
+  const n = values.length;
+  const unit = _colUnit(colName);
+
+  // Percentil exacto: índice basado en el rango 0-100
+  const percentile = pct => {
+    if (pct <= 0) return values[0];
+    if (pct >= 100) return values[n - 1];
+    const idx = Math.ceil((pct / 100) * n) - 1;
+    return values[Math.max(0, Math.min(idx, n - 1))];
   };
 
-  // Mi Proyecto overlay
+  // Qué percentil corresponde a un valor dado
+  const valueToPct = val => Math.round((values.filter(v => v <= val).length / n) * 100);
+
+  // Datos de la curva CDF: 101 puntos (P0 a P100)
+  const labels = Array.from({ length: 101 }, (_, i) => i);
+  const cdfData = labels.map(pct => percentile(pct));
+
+  // Estilo compartido de anotación
+  const annotLine = (scaleID, value, color, dash = [6, 4]) => ({
+    type: 'line', scaleID, value,
+    borderColor: color, borderWidth: 1.5, borderDash: dash,
+  });
+  const annotLabel = (content, position, color) => ({
+    content, display: true, position,
+    color, font: { size: 11, weight: 'bold' },
+    backgroundColor: 'transparent', padding: { x: 3, y: 2 },
+  });
+
+  const annotations = {};
+
+  // ── Percentiles (rojo) ─────────────────────────────────────
+  for (const pct of distribMarkers.percentiles) {
+    const val = percentile(pct);
+    const valLabel = `${val.toLocaleString('es-CL', { maximumFractionDigits: 1 })}${unit ? ' ' + unit : ''}`;
+
+    annotations[`pct_v_${pct}`] = {
+      ...annotLine('x', pct, '#ef4444'),
+      label: annotLabel(`P${pct}`, 'end', '#ef4444'),
+    };
+    annotations[`pct_h_${pct}`] = {
+      ...annotLine('y', val, '#ef4444'),
+      label: annotLabel(valLabel, 'start', '#ef4444'),
+    };
+  }
+
+  // ── Precios marcados (rojo oscuro) ─────────────────────────
+  for (const price of distribMarkers.prices) {
+    const calcPct = valueToPct(price);
+    const priceLabel = `${price.toLocaleString('es-CL', { maximumFractionDigits: 1 })}${unit ? ' ' + unit : ''}`;
+
+    annotations[`price_h_${price}`] = {
+      ...annotLine('y', price, '#dc2626'),
+      label: annotLabel(priceLabel, 'start', '#dc2626'),
+    };
+    annotations[`price_v_${price}`] = {
+      ...annotLine('x', calcPct, '#dc2626'),
+      label: annotLabel(`P${calcPct}`, 'end', '#dc2626'),
+    };
+  }
+
+  // ── Mi Proyecto (ámbar) ────────────────────────────────────
   let mpVals = [];
   if (mp.inDistrib && mp.tipologias.length > 0) {
     for (const t of mp.tipologias) {
-      if (colName === 'Renta UF' && t.renta != null) mpVals.push(t.renta);
+      if (colName === 'Renta UF' && t.sup != null && t.ufm2 != null) mpVals.push(t.sup * t.ufm2);
       else if (colName === 'UF/m²' && t.ufm2 != null) mpVals.push(t.ufm2);
       else if ((colName === 'Útil (m²)' || colName === 'Total (m²)') && t.sup != null) mpVals.push(t.sup);
     }
   }
-
-  let labels = [];
-  let plotData = [];
-  const annotations = {};
-
-  if (isCumulative) {
-    // ---- MODO ACUMULADO (CURVA DE PERCENTILES) ----
-    for (let i = 0; i <= 100; i++) {
-      labels.push(i);
-      plotData.push(percentile(i));
-    }
-
-    // 1. MARCADORES DE PERCENTIL (Eje X -> Curva -> Eje Y)
-    for (const pct of distribMarkers.percentiles) {
-      const val = percentile(pct);
-      
-      // Línea vertical: Desde el eje X (abajo) hasta el valor en la curva
-      annotations[`pct${pct}_v`] = {
-        type: 'line', xScaleID: 'x', yScaleID: 'y',
-        xMin: pct, xMax: pct, yMax: val,
-        borderColor: '#7c3aed', borderWidth: 2, borderDash: [5, 3],
-        label: { content: `P${pct}`, display: true, position: 'start', font: { size: 10 }, color: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.1)' }
-      };
-      // Línea horizontal: Desde el eje Y (izquierda) hasta el valor en la curva
-      annotations[`pct${pct}_h`] = {
-        type: 'line', xScaleID: 'x', yScaleID: 'y',
-        xMin: 0, xMax: pct, yMin: val, yMax: val,
-        borderColor: '#7c3aed', borderWidth: 2, borderDash: [5, 3],
-        label: { content: `${val.toLocaleString('es-CL', { maximumFractionDigits: 1 })}`, display: true, position: 'start', font: { size: 10 }, color: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.1)' }
-      };
-    }
-
-    // 2. MARCADORES DE PRECIO (Eje Y -> Curva -> Eje X)
-    for (const price of distribMarkers.prices) {
-      const countBelow = values.filter(v => v <= price).length;
-      const calcPct = Math.round((countBelow / values.length) * 100);
-      
-      // Línea horizontal: Desde el eje Y (izquierda) hasta el valor en la curva
-      annotations[`price${price}_h`] = {
-        type: 'line', xScaleID: 'x', yScaleID: 'y',
-        xMin: 0, xMax: calcPct, yMin: price, yMax: price,
-        borderColor: '#db2777', borderWidth: 2, borderDash: [5, 3],
-        label: { content: `${price.toLocaleString('es-CL')} UF`, display: true, position: 'start', font: { size: 10 }, color: '#db2777', backgroundColor: 'rgba(219,39,119,0.1)' }
-      };
-      // Línea vertical: Desde el eje X (abajo) hasta la curva para mostrar a qué percentil equivale
-      annotations[`price${price}_v`] = {
-        type: 'line', xScaleID: 'x', yScaleID: 'y',
-        xMin: calcPct, xMax: calcPct, yMax: price,
-        borderColor: '#db2777', borderWidth: 2, borderDash: [5, 3],
-        label: { content: `P${calcPct}`, display: true, position: 'start', font: { size: 10 }, color: '#db2777', backgroundColor: 'rgba(219,39,119,0.1)' }
-      };
-    }
-
-    // 3. MARCADORES DE MI PROYECTO (Eje Y -> Curva -> Eje X)
-    for (const mpV of mpVals) {
-      const countBelow = values.filter(v => v <= mpV).length;
-      const calcPct = Math.round((countBelow / values.length) * 100);
-
-      annotations[`mp${mpV}_h`] = {
-        type: 'line', xScaleID: 'x', yScaleID: 'y',
-        xMin: 0, xMax: calcPct, yMin: mpV, yMax: mpV,
-        borderColor: '#f59e0b', borderWidth: 2.5,
-        label: { content: `Mi Proyecto`, display: true, position: 'start', font: { size: 10, weight: 'bold' }, color: '#d97706', backgroundColor: 'rgba(245,158,11,0.12)' }
-      };
-      annotations[`mp${mpV}_v`] = {
-        type: 'line', xScaleID: 'x', yScaleID: 'y',
-        xMin: calcPct, xMax: calcPct, yMax: mpV,
-        borderColor: '#f59e0b', borderWidth: 2.5, borderDash: [4, 4],
-        label: { content: `P${calcPct}`, display: true, position: 'start', font: { size: 10, weight: 'bold' }, color: '#d97706', backgroundColor: 'rgba(245,158,11,0.12)' }
-      };
-    }
-
-  } else {
-    // ---- MODO NORMAL (HISTOGRAMA) ----
-    const bins = Math.min(40, Math.max(10, Math.round(Math.sqrt(values.length))));
-    const minV = values[0], maxV = values[values.length - 1];
-    const step = (maxV - minV) / bins || 1;
-
-    const counts = Array(bins).fill(0);
-    for (let i = 0; i < bins; i++) {
-      const lo = minV + i * step;
-      labels.push(lo.toLocaleString('es-CL', { maximumFractionDigits: 1 }));
-    }
-    for (const v of values) {
-      let idx = Math.floor((v - minV) / step);
-      idx = Math.min(idx, bins - 1);
-      counts[idx]++;
-    }
-    plotData = counts;
-
-    for (const pct of distribMarkers.percentiles) {
-      const val = percentile(pct);
-      const binIdx = Math.min(Math.floor((val - minV) / step), bins - 1);
-      annotations[`pct${pct}`] = {
-        type: 'line', scaleID: 'x', value: binIdx,
-        borderColor: '#7c3aed', borderWidth: 2, borderDash: [5, 3],
-        label: { content: `P${pct}: ${val.toLocaleString('es-CL', { maximumFractionDigits: 1 })}`, display: true, position: 'start', font: { size: 10 }, color: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.1)' },
-      };
-    }
-    for (const price of distribMarkers.prices) {
-      const binIdx = Math.min(Math.floor((price - minV) / step), bins - 1);
-      annotations[`price${price}`] = {
-        type: 'line', scaleID: 'x', value: binIdx,
-        borderColor: '#db2777', borderWidth: 2, borderDash: [5, 3],
-        label: { content: `${price.toLocaleString('es-CL')}`, display: true, position: 'end', font: { size: 10 }, color: '#db2777', backgroundColor: 'rgba(219,39,119,0.1)' },
-      };
-    }
-    for (const mpV of mpVals) {
-      const binIdx = Math.min(Math.floor((mpV - minV) / step), bins - 1);
-      annotations[`mp${mpV}`] = {
-        type: 'line', scaleID: 'x', value: binIdx,
-        borderColor: '#f59e0b', borderWidth: 2.5,
-        label: { content: `Mi Proyecto: ${mpV.toLocaleString('es-CL', { maximumFractionDigits: 1 })}`, display: true, position: 'center', font: { size: 10, weight: 'bold' }, color: '#d97706', backgroundColor: 'rgba(245,158,11,0.12)' },
-      };
-    }
+  for (const mpV of mpVals) {
+    const calcPct = valueToPct(mpV);
+    const mpLabel = `${mpV.toLocaleString('es-CL', { maximumFractionDigits: 1 })}${unit ? ' ' + unit : ''}`;
+    annotations[`mp_h_${mpV}`] = {
+      ...annotLine('y', mpV, '#f59e0b', []),
+      label: annotLabel(`★ ${mpLabel}`, 'start', '#d97706'),
+    };
+    annotations[`mp_v_${mpV}`] = {
+      ...annotLine('x', calcPct, '#f59e0b', [5, 3]),
+      label: annotLabel(`P${calcPct}`, 'end', '#d97706'),
+    };
   }
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
@@ -662,20 +615,19 @@ export function renderDistrib() {
   if (!ctx) return;
 
   distribChart = new Chart(ctx, {
-    type: isCumulative ? 'line' : 'bar',
+    type: 'line',
     data: {
       labels,
       datasets: [{
         label: colName,
-        data: plotData,
-        backgroundColor: isCumulative ? 'rgba(30,58,95,0.05)' : '#1e3a5fCC',
-        borderColor: '#1e3a5f',
-        borderWidth: isCumulative ? 2.5 : 1,
-        borderRadius: isCumulative ? 0 : 2,
-        fill: isCumulative,
+        data: cdfData,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,0.08)',
+        fill: true,
+        tension: 0.35,
         pointRadius: 0,
-        pointHoverRadius: isCumulative ? 5 : 0, 
-        tension: isCumulative ? 0.3 : 0
+        pointHoverRadius: 4,
+        borderWidth: 2,
       }],
     },
     options: {
@@ -687,36 +639,25 @@ export function renderDistrib() {
         annotation: { annotations },
         tooltip: {
           callbacks: {
-            title: items => {
-              if (isCumulative) return `Percentil ${items[0].label}%`;
-              const i = items[0].dataIndex;
-              const minV = values[0];
-              const maxV = values[values.length - 1];
-              const step = (maxV - minV) / Math.min(40, Math.max(10, Math.round(Math.sqrt(values.length)))) || 1;
-              const lo = minV + i * step;
-              const hi = lo + step;
-              return `${lo.toLocaleString('es-CL', { maximumFractionDigits: 1 })} – ${hi.toLocaleString('es-CL', { maximumFractionDigits: 1 })}`;
-            },
-            label: item => {
-              if (isCumulative) return ` Valor: ${item.raw.toLocaleString('es-CL', { maximumFractionDigits: 2 })} ${colName.includes('UF') ? 'UF' : ''}`;
-              return ` ${item.raw} unidades`;
-            },
+            title: items => `Percentil ${items[0].label}%`,
+            label: item => ` ${item.raw.toLocaleString('es-CL', { maximumFractionDigits: 2 })}${unit ? ' ' + unit : ''}`,
           },
         },
       },
       scales: {
-        x: { 
-          title: { display: true, text: isCumulative ? 'Percentil (%)' : colName },
-          ticks: { 
-            callback: function(value, index) {
-              if (isCumulative) return index % 10 === 0 ? index + '%' : '';
-              return this.getLabelForValue(value);
-            }
-          }
+        x: {
+          type: 'linear',
+          min: 0, max: 100,
+          title: { display: true, text: 'Percentil (%)' },
+          ticks: {
+            stepSize: 10,
+            callback: v => `${v}%`,
+          },
         },
-        y: { 
-          title: { display: true, text: isCumulative ? colName : 'Unidades' }, 
-          beginAtZero: !isCumulative
+        y: {
+          title: { display: true, text: colName },
+          beginAtZero: false,
+          ticks: { callback: v => v.toLocaleString('es-CL') },
         },
       },
     },

@@ -1,8 +1,43 @@
+/* ========== App Nav ========== */
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #0f172a;
+  padding: 0 20px;
+  height: 36px;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+
+.nav-link {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.nav-link:hover {
+  color: #f1f5f9;
+  background: rgba(255,255,255,0.06);
+}
+
+.nav-link.active {
+  color: #f1f5f9;
+  background: rgba(255,255,255,0.1);
+}
+
 /* ========== Layout ========== */
 .layout {
   display: grid;
   grid-template-columns: 280px 1fr;
-  height: calc(100vh - 53px);
+  height: calc(100vh - 89px); /* 36px nav + 53px topbar */
   overflow: hidden;
 }
 .sidebar {
