@@ -194,7 +194,7 @@
 
         <!-- TAB: DISTRIBUCIÓN -->
         <div class="tab-panel" data-panel="distribucion">
-          <div class="chart-controls">
+          <div class="chart-controls distrib-controls">
             <div class="ctrl">
               <label>Valores</label>
               <select id="distribCol"></select>
@@ -205,14 +205,16 @@
                 <input type="number" id="distribPctInput" min="1" max="99" step="1" placeholder="ej: 50">
                 <button id="distribAddPct" class="marker-btn pct-btn">+</button>
               </div>
-              <div id="distribPctTags" class="marker-tags"></div>
             </div>
             <div class="ctrl distrib-marker-group">
-              <label>Marcar precio (UF)</label>
+              <label>Marcar precio</label>
               <div class="marker-add">
                 <input type="number" id="distribPriceInput" min="0" step="100" placeholder="ej: 4500">
-                <button id="distribAddPrice" class="marker-btn price-btn">+</button>
+                <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
+            </div>
+            <div class="distrib-tags-row">
+              <div id="distribPctTags" class="marker-tags"></div>
               <div id="distribPriceTags" class="marker-tags"></div>
             </div>
           </div>

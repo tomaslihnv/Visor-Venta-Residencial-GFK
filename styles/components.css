@@ -132,16 +132,22 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .pct-btn   { background: #fee2e2; color: #b91c1c; }
 .pct-btn:hover   { background: #fecaca; }
-.price-btn { background: #dcfce7; color: #15803d; }
-.price-btn:hover { background: #bbf7d0; }
-.marker-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; min-height: 24px; }
+.price-btn { background: #fee2e2; color: #b91c1c; }
+.price-btn:hover { background: #fecaca; }
+.marker-tags { display: flex; flex-wrap: wrap; gap: 5px; min-height: 24px; }
 .marker-tag {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 8px; border-radius: 12px;
   font-size: 12px; font-weight: 600;
 }
 .pct-tag   { background: #fee2e2; color: #b91c1c; }
-.price-tag { background: #dcfce7; color: #15803d; }
+.price-tag { background: #fee2e2; color: #b91c1c; }
+
+/* ── Layout distribución ── */
+.distrib-controls { align-items: flex-end; }
+.distrib-controls .distrib-marker-group { min-width: unset; }
+.distrib-controls .marker-add input[type="number"] { flex: 1; width: 0; min-width: 90px; }
+.distrib-tags-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex: 1; padding-bottom: 2px; }
 .marker-tag button {
   background: none; border: none; cursor: pointer;
   font-size: 13px; line-height: 1; padding: 0;
