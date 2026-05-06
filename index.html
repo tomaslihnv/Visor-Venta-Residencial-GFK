@@ -231,9 +231,18 @@
                 <span id="distribFontSizeVal">11px</span>
               </div>
             </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
             <button id="distribExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="distribWrap">
             <canvas id="distribChart"></canvas>
           </div>
         </div>
