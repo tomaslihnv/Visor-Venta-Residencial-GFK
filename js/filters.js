@@ -86,14 +86,14 @@ export function buildFilters() {
   if (cols.superficie)   _buildSlider('sup',          cols.superficie,   '<span class="keep-case">m</span>² útil',       container);
   if (cols.ufm2)         _buildSlider('ufm2',         cols.ufm2,         'UF/<span class="keep-case">m</span>²',         container);
   if (cols.ticket)       _buildSlider('ticket',       cols.ticket,       'Ticket UF',                                    container);
+  if (cols.edificio)     _buildMulti('edificio',      cols.edificio,     'Edificio',                                     container, fmt, true);
   if (cols.propietario)  _buildMulti('propietario',   cols.propietario,  'Propietario',                                  container);
-  if (cols.edificio)     _buildMulti('edificio',      cols.edificio,     'Edificio',                                     container);
   if (cols.estado)       _buildMulti('estado',        cols.estado,       'Estado',                                       container);
   if (cols.fechaEntrega) _buildQuarters(container);
 }
 
 // --- Multi checkbox ---
-function _buildMulti(key, colName, label, container, fmtFn = fmt) {
+function _buildMulti(key, colName, label, container, fmtFn = fmt, searchable = false) {
   const vals = [...new Set(
     state.raw.map(r => r[colName]).filter(v => v !== '' && v != null)
   )].sort((a, b) => String(fmtFn(a)).localeCompare(String(fmtFn(b)), 'es', { numeric: true }));
@@ -103,20 +103,39 @@ function _buildMulti(key, colName, label, container, fmtFn = fmt) {
   group.className = 'filter-group';
   group.innerHTML = `<label class="title">${label}</label>`;
 
+  if (searchable) {
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = 'Buscar…'; inp.className = 'filter-search';
+    inp.addEventListener('input', () => {
+      const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+      const q = norm(inp.value);
+      for (const lab of multi.children) {
+        lab.style.display = norm(lab.textContent).includes(q) ? '' : 'none';
+      }
+    });
+    group.appendChild(inp);
+  }
+
   const multi = document.createElement('div');
   multi.className = 'multi';
+  const checkboxes = [];
 
   for (const v of vals) {
     const id = `f_${key}_${String(v).replace(/\W+/g, '_')}`;
     const lab = document.createElement('label');
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.id = id; cb.value = String(v);
+    cb.checked = true;
+    cb._realVal = v;
     cb.addEventListener('change', () => {
-      if (cb.checked) F[key].add(v); else F[key].delete(v);
+      const checked = checkboxes.filter(c => c.checked).map(c => c._realVal);
+      F[key].clear();
+      if (checked.length < vals.length) checked.forEach(val => F[key].add(val));
       applyFilters();
     });
     lab.append(cb, document.createTextNode(' ' + fmtFn(v)));
     multi.appendChild(lab);
+    checkboxes.push(cb);
   }
 
   group.appendChild(multi);
@@ -263,17 +282,22 @@ function _buildQuarters(container) {
   const multi = document.createElement('div');
   multi.className = 'multi';
 
+  const qCheckboxes = [];
   for (const q of quarters) {
     const id = `f_fecha_${q.replace(/\W+/g, '_')}`;
     const lab = document.createElement('label');
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.id = id; cb.value = q;
+    cb.checked = true;
     cb.addEventListener('change', () => {
-      if (cb.checked) F.fechaEntrega.add(q); else F.fechaEntrega.delete(q);
+      const checked = qCheckboxes.filter(c => c.checked).map(c => c.value);
+      F.fechaEntrega.clear();
+      if (checked.length < quarters.length) checked.forEach(val => F.fechaEntrega.add(val));
       applyFilters();
     });
     lab.append(cb, document.createTextNode(' ' + q));
     multi.appendChild(lab);
+    qCheckboxes.push(cb);
   }
 
   group.appendChild(multi);

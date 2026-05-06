@@ -185,7 +185,14 @@
                 <option value="pct">% Vendido</option>
               </select>
             </div>
-            <button id="proyExportPngBtn" class="primary-btn">Exportar PNG</button>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="proyFontSize" min="8" max="22" step="1" value="11">
+                <span id="proyFontSizeVal">11px</span>
+              </div>
+            </div>
+            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
           <div class="chart-wrap">
             <canvas id="proyChart"></canvas>
@@ -194,7 +201,7 @@
 
         <!-- TAB: DISTRIBUCIÓN -->
         <div class="tab-panel" data-panel="distribucion">
-          <div class="chart-controls">
+          <div class="chart-controls distrib-controls">
             <div class="ctrl">
               <label>Valores</label>
               <select id="distribCol"></select>
@@ -205,16 +212,26 @@
                 <input type="number" id="distribPctInput" min="1" max="99" step="1" placeholder="ej: 50">
                 <button id="distribAddPct" class="marker-btn pct-btn">+</button>
               </div>
-              <div id="distribPctTags" class="marker-tags"></div>
             </div>
             <div class="ctrl distrib-marker-group">
-              <label>Marcar precio (UF)</label>
+              <label>Marcar precio</label>
               <div class="marker-add">
                 <input type="number" id="distribPriceInput" min="0" step="100" placeholder="ej: 4500">
-                <button id="distribAddPrice" class="marker-btn price-btn">+</button>
+                <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
+            </div>
+            <div class="distrib-tags-row">
+              <div id="distribPctTags" class="marker-tags"></div>
               <div id="distribPriceTags" class="marker-tags"></div>
             </div>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="distribFontSize" min="8" max="22" step="1" value="11">
+                <span id="distribFontSizeVal">11px</span>
+              </div>
+            </div>
+            <button id="distribExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
           <div class="chart-wrap">
             <canvas id="distribChart"></canvas>
