@@ -82,6 +82,11 @@
   font-size: 13px;
   background: #fff;
 }
+.filter-search {
+  width: 100%; padding: 5px 8px; margin-bottom: 5px;
+  border: 1px solid #d1d5db; border-radius: 5px;
+  font-size: 12px; background: #fff; box-sizing: border-box;
+}
 .filter-group .multi {
   max-height: 140px; overflow-y: auto;
   border: 1px solid #d1d5db; border-radius: 5px;

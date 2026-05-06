@@ -285,12 +285,35 @@ export function populateProyectosSelectors() {
   if (!sel || proyListenersReady) return;
   proyListenersReady = true;
   sel.addEventListener('change', renderProyectos);
-  $('#proyExportPngBtn')?.addEventListener('click', () => {
+
+  const proyFontSlider = $('#proyFontSize');
+  const proyFontVal    = $('#proyFontSizeVal');
+  if (proyFontSlider) {
+    proyFontSlider.addEventListener('input', () => {
+      proyFontVal.textContent = proyFontSlider.value + 'px';
+      renderProyectos();
+    });
+  }
+
+  $('#proyExportPngBtn')?.addEventListener('click', async () => {
     if (!proyChart) return;
-    const a = document.createElement('a');
-    a.href = proyChart.toBase64Image('image/png', 1);
-    a.download = `proyectos_${Date.now()}.png`;
-    a.click();
+    const btn = $('#proyExportPngBtn');
+    const scale = 4;
+    const origDPR = proyChart.options.devicePixelRatio ?? window.devicePixelRatio;
+    proyChart.options.devicePixelRatio = scale;
+    proyChart.resize();
+    const url = proyChart.toBase64Image('image/png', 1);
+    proyChart.options.devicePixelRatio = origDPR;
+    proyChart.resize();
+
+    const res  = await fetch(url);
+    const blob = await res.blob();
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+    const prev = btn.textContent;
+    btn.textContent = '¡Copiado!';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
   });
 }
 
@@ -310,6 +333,8 @@ export function renderProyectos() {
   )?.name;
 
   if (!edifCol || !metricCol) return;
+
+  const fs = parseInt($('#proyFontSize')?.value ?? '11');
 
   if (proyChart) { proyChart.destroy(); proyChart = null; }
   const ctx = $('#proyChart').getContext('2d');
@@ -368,8 +393,8 @@ export function renderProyectos() {
 
   entries = entries.sort((a, b) => b[1] - a[1]);
 
-  const MP_COLOR  = '#f59e0b';
-  const BAR_COLOR = '#1e3a5f';
+  const MP_COLOR  = '#96323C';
+  const BAR_COLOR = '#DDE0E3';
 
   // Plugin inline para etiquetas permanentes sobre cada barra
   const barLabelsPlugin = {
@@ -378,14 +403,14 @@ export function renderProyectos() {
       const { ctx: c, scales } = chart;
       const meta = chart.getDatasetMeta(0);
       c.save();
-      c.font = 'bold 10px system-ui, sans-serif';
+      c.font = `bold ${fs}px system-ui, sans-serif`;
       c.textAlign = 'center';
       c.textBaseline = 'bottom';
       meta.data.forEach((bar, i) => {
         const value = entries[i]?.[1];
         if (value == null) return;
         const isMP = entries[i]?.[0] === mpName;
-        c.fillStyle = isMP ? '#d97706' : '#374151';
+        c.fillStyle = isMP ? '#96323C' : '#374151';
         c.fillText(metric.fmt(value), bar.x, bar.y - 3);
       });
       c.restore();
@@ -399,9 +424,8 @@ export function renderProyectos() {
       datasets: [{
         label: metric.label,
         data: entries.map(([, v]) => v),
-        backgroundColor: entries.map(([e]) => (e === mpName ? MP_COLOR : BAR_COLOR) + 'CC'),
-        borderColor:     entries.map(([e]) =>  e === mpName ? '#d97706' : BAR_COLOR),
-        borderWidth: 1,
+        backgroundColor: entries.map(([e]) => e === mpName ? MP_COLOR : BAR_COLOR),
+        borderWidth: 0,
         borderRadius: 3,
       }],
     },
@@ -417,12 +441,14 @@ export function renderProyectos() {
       },
       scales: {
         x: {
-          ticks: { maxRotation: 45, minRotation: 30, font: { size: 11 } },
+          ticks: { maxRotation: 45, minRotation: 30, font: { size: fs } },
+          grid: { display: false },
         },
         y: {
-          title: { display: true, text: metric.label },
-          ticks: { callback: v => metric.fmt(v) },
+          title: { display: true, text: metric.label, font: { size: fs } },
+          ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
+          grid: { display: false },
         },
       },
     },
@@ -734,6 +760,53 @@ export function populateDistribSelectors() {
   if (!distribListenersReady) {
     distribListenersReady = true;
 
+    document.querySelectorAll('.ratio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    const fontSlider = $('#distribFontSize');
+    const fontVal    = $('#distribFontSizeVal');
+    if (fontSlider) {
+      fontSlider.addEventListener('input', () => {
+        fontVal.textContent = fontSlider.value + 'px';
+        renderDistrib();
+      });
+    }
+
+    $('#distribExportPngBtn')?.addEventListener('click', async () => {
+      if (!distribChart) return;
+      const btn = $('#distribExportPngBtn');
+      const scale = 4;
+      const pad = 32;
+      const wrap = $('#distribWrap');
+      const ratio = document.querySelector('.ratio-btn.active')?.dataset.ratio ?? 'auto';
+
+      const origDPR = distribChart.options.devicePixelRatio ?? window.devicePixelRatio;
+      const exportW = wrap.clientWidth - pad;
+      const exportH = ratio === 'auto'
+        ? distribChart.height
+        : Math.round(exportW / parseFloat(ratio));
+
+      distribChart.options.devicePixelRatio = scale;
+      distribChart.resize(exportW, exportH);
+      const url = distribChart.toBase64Image('image/png', 1);
+
+      distribChart.options.devicePixelRatio = origDPR;
+      distribChart.resize();
+
+      const res  = await fetch(url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+      const prev = btn.textContent;
+      btn.textContent = '¡Copiado!';
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
+    });
+
     const addPct = () => {
       const v = parseInt($('#distribPctInput').value);
       if (isNaN(v) || v < 1 || v > 99) return;
@@ -832,6 +905,7 @@ export function renderDistrib() {
   const col = colSel.value;
   const _nc = col.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²' : 'UF';
+  const fs = parseInt($('#distribFontSize')?.value ?? '11');
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
   const ctx = $('#distribChart').getContext('2d');
@@ -851,7 +925,7 @@ export function renderDistrib() {
   // Construir anotaciones
   const annotations = {};
   const pctColor   = '#ef4444';
-  const priceColor = '#16a34a';
+  const priceColor = '#ef4444';
 
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
     const color = pctColor;
@@ -863,14 +937,14 @@ export function renderDistrib() {
       borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
       label: { content: `P${pct}`, display: true, position: 'start',
         color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
     };
     annotations[`ph_${pct}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct,
       borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
       label: { content: `${priceLabel} ${distribUnit}`, display: true, position: 'start',
         color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
     };
   });
 
@@ -883,7 +957,7 @@ export function renderDistrib() {
       borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
       label: { content: `${price.toLocaleString('es-CL')} ${distribUnit}`, display: true, position: 'start',
         color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
     };
     if (pct !== null) {
       annotations[`prv_${price}`] = {
@@ -891,7 +965,7 @@ export function renderDistrib() {
         borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
         label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
           color, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
       };
     }
   });
@@ -933,7 +1007,7 @@ export function renderDistrib() {
           content: `${t.nombre}: ${valLabel}`,
           display: true, position: 'start',
           color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' },
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
         },
       };
       annotations[`mp_v_${t.id}`] = {
@@ -943,7 +1017,7 @@ export function renderDistrib() {
           content: `P${pct.toFixed(1)}`,
           display: true, position: 'start',
           color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' },
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
         },
       };
     });
@@ -957,7 +1031,7 @@ export function renderDistrib() {
       maintainAspectRatio: false,
       parsing: false,
       plugins: {
-        legend: { position: 'top' },
+        legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
           mode: 'nearest',
           intersect: false,
@@ -972,14 +1046,15 @@ export function renderDistrib() {
       scales: {
         x: {
           type: 'linear', min: 0, max: 100,
-          title: { display: true, text: 'Percentil (%)' },
-          ticks: { callback: v => v + '%' },
+          title: { display: true, text: 'Percentil (%)', font: { size: fs } },
+          ticks: { callback: v => v + '%', font: { size: fs } },
         },
         y: {
-          title: { display: true, text: col },
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: col, font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
       },
     },
   });
+
 }
