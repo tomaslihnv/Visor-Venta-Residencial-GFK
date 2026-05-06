@@ -131,6 +131,7 @@
               <div class="map-toolbar">
                 <button class="map-mode-btn active" data-mode="general">General</button>
                 <button class="map-mode-btn" data-mode="precio">De calor</button>
+<button id="mapTableExportBtn" class="primary-btn">Copiar tabla</button>
               </div>
               <div id="map" class="map"></div>
             </div>
@@ -185,7 +186,14 @@
                 <option value="pct">% Vendido</option>
               </select>
             </div>
-            <button id="proyExportPngBtn" class="primary-btn">Exportar PNG</button>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="proyFontSize" min="8" max="22" step="1" value="11">
+                <span id="proyFontSizeVal">11px</span>
+              </div>
+            </div>
+            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
           <div class="chart-wrap">
             <canvas id="proyChart"></canvas>

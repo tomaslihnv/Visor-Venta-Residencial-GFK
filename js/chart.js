@@ -267,6 +267,8 @@ function sortEntries(entries, mode) {
 let proyChart = null;
 let proyListenersReady = false;
 
+const PROY_UNITS = { ticket: 'UF', ufm2: 'UF/m²', util: 'm²', disp: 'un.', vel: 'un./mes', oferta: 'un.', pct: '' };
+
 const PROY_METRICS = [
   { id: 'ticket', label: 'Ticket UF',            keys: ['ticket'],                      agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'ufm2',   label: 'UF/m²',               keys: ['uf/m', 'uf / m'],              agg: 'avg', fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
@@ -285,12 +287,35 @@ export function populateProyectosSelectors() {
   if (!sel || proyListenersReady) return;
   proyListenersReady = true;
   sel.addEventListener('change', renderProyectos);
-  $('#proyExportPngBtn')?.addEventListener('click', () => {
+
+  const proyFontSlider = $('#proyFontSize');
+  const proyFontVal    = $('#proyFontSizeVal');
+  if (proyFontSlider) {
+    proyFontSlider.addEventListener('input', () => {
+      proyFontVal.textContent = proyFontSlider.value + 'px';
+      renderProyectos();
+    });
+  }
+
+  $('#proyExportPngBtn')?.addEventListener('click', async () => {
     if (!proyChart) return;
-    const a = document.createElement('a');
-    a.href = proyChart.toBase64Image('image/png', 1);
-    a.download = `proyectos_${Date.now()}.png`;
-    a.click();
+    const btn = $('#proyExportPngBtn');
+    const scale = 4;
+    const origDPR = proyChart.options.devicePixelRatio ?? window.devicePixelRatio;
+    proyChart.options.devicePixelRatio = scale;
+    proyChart.resize();
+    const url = proyChart.toBase64Image('image/png', 1);
+    proyChart.options.devicePixelRatio = origDPR;
+    proyChart.resize();
+
+    const res  = await fetch(url);
+    const blob = await res.blob();
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+    const prev = btn.textContent;
+    btn.textContent = '¡Copiado!';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
   });
 }
 
@@ -310,6 +335,8 @@ export function renderProyectos() {
   )?.name;
 
   if (!edifCol || !metricCol) return;
+
+  const fs = parseInt($('#proyFontSize')?.value ?? '11');
 
   if (proyChart) { proyChart.destroy(); proyChart = null; }
   const ctx = $('#proyChart').getContext('2d');
@@ -333,6 +360,7 @@ export function renderProyectos() {
 
   // Mi Proyecto — respeta el filtro de tipología activo
   let mpName = null;
+  let mpVal  = null;
   if (mp.inProy && mp.edificio && mp.tipologias.length > 0) {
     const fmtTipo = v => {
       const s = String(v ?? '').trim();
@@ -349,7 +377,6 @@ export function renderProyectos() {
       t.nombre && (activeTipos ? activeTipos.has(fmtTipo(t.nombre)) : true)
     );
 
-    let mpVal = null;
     if (metricId === 'ticket') {
       const vals = tipos.filter(t => t.sup != null && t.ufm2 != null).map(t => t.sup * t.ufm2);
       if (vals.length) mpVal = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -368,8 +395,16 @@ export function renderProyectos() {
 
   entries = entries.sort((a, b) => b[1] - a[1]);
 
-  const MP_COLOR  = '#f59e0b';
-  const BAR_COLOR = '#1e3a5f';
+  // Mediana de edificios comparables (excluye Mi Proyecto)
+  const compVals = entries.filter(([e]) => e !== mpName).map(([, v]) => v).slice().sort((a, b) => a - b);
+  let median = null;
+  if (compVals.length > 0) {
+    const mid = Math.floor(compVals.length / 2);
+    median = compVals.length % 2 === 0 ? (compVals[mid - 1] + compVals[mid]) / 2 : compVals[mid];
+  }
+
+  const MP_COLOR  = '#96323C';
+  const BAR_COLOR = '#DDE0E3';
 
   // Plugin inline para etiquetas permanentes sobre cada barra
   const barLabelsPlugin = {
@@ -378,16 +413,56 @@ export function renderProyectos() {
       const { ctx: c, scales } = chart;
       const meta = chart.getDatasetMeta(0);
       c.save();
-      c.font = 'bold 10px system-ui, sans-serif';
+      c.font = `bold ${fs}px system-ui, sans-serif`;
       c.textAlign = 'center';
       c.textBaseline = 'bottom';
       meta.data.forEach((bar, i) => {
         const value = entries[i]?.[1];
         if (value == null) return;
         const isMP = entries[i]?.[0] === mpName;
-        c.fillStyle = isMP ? '#d97706' : '#374151';
+        c.fillStyle = isMP ? '#96323C' : '#374151';
         c.fillText(metric.fmt(value), bar.x, bar.y - 3);
       });
+      c.restore();
+    },
+  };
+
+  const medianPlugin = {
+    id: 'medianPlugin',
+    afterDraw(chart) {
+      if (median == null) return;
+      const { ctx: c, chartArea, scales } = chart;
+      const y = scales.y.getPixelForValue(median);
+      if (y < chartArea.top || y > chartArea.bottom) return;
+      const unit = PROY_UNITS[metricId] ? ' ' + PROY_UNITS[metricId] : '';
+      const line1 = `Mediana: ${metric.fmt(median)}${unit}`;
+      const lines = [line1];
+      if (mpVal != null && mpVal > 0 && median !== mpVal) {
+        const diff = ((median - mpVal) / mpVal) * 100;
+        const abs = Math.abs(diff).toLocaleString('es-CL', { maximumFractionDigits: 0 });
+        lines.push(`(${abs}% ${diff > 0 ? 'mayor' : 'menor'} al proyecto)`);
+      }
+      c.save();
+      c.font = `bold ${fs}px system-ui, sans-serif`;
+      const padX = 8, padY = 4, lineH = fs + 4;
+      const labelW = Math.max(...lines.map(l => c.measureText(l).width)) + padX * 2;
+      const labelH = lines.length * lineH + padY * 2;
+      const labelX = chartArea.right - labelW;
+      const labelY = y - labelH / 2;
+      c.setLineDash([6, 4]);
+      c.strokeStyle = '#ef4444';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(chartArea.left, y);
+      c.lineTo(labelX - 4, y);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = 'rgba(255,255,255,0.92)';
+      c.fillRect(labelX, labelY, labelW, labelH);
+      c.fillStyle = '#ef4444';
+      c.textAlign = 'left';
+      c.textBaseline = 'top';
+      lines.forEach((line, i) => c.fillText(line, labelX + padX, labelY + padY + i * lineH));
       c.restore();
     },
   };
@@ -399,9 +474,8 @@ export function renderProyectos() {
       datasets: [{
         label: metric.label,
         data: entries.map(([, v]) => v),
-        backgroundColor: entries.map(([e]) => (e === mpName ? MP_COLOR : BAR_COLOR) + 'CC'),
-        borderColor:     entries.map(([e]) =>  e === mpName ? '#d97706' : BAR_COLOR),
-        borderWidth: 1,
+        backgroundColor: entries.map(([e]) => e === mpName ? MP_COLOR : BAR_COLOR),
+        borderWidth: 0,
         borderRadius: 3,
       }],
     },
@@ -417,16 +491,18 @@ export function renderProyectos() {
       },
       scales: {
         x: {
-          ticks: { maxRotation: 45, minRotation: 30, font: { size: 11 } },
+          ticks: { maxRotation: 45, minRotation: 30, font: { size: fs } },
+          grid: { display: false },
         },
         y: {
-          title: { display: true, text: metric.label },
-          ticks: { callback: v => metric.fmt(v) },
+          title: { display: true, text: metric.label, font: { size: fs } },
+          ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
+          grid: { display: false },
         },
       },
     },
-    plugins: [barLabelsPlugin],
+    plugins: [barLabelsPlugin, medianPlugin],
   });
 }
 
