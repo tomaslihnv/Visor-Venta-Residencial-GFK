@@ -734,6 +734,30 @@ export function populateDistribSelectors() {
   if (!distribListenersReady) {
     distribListenersReady = true;
 
+    const fontSlider = $('#distribFontSize');
+    const fontVal    = $('#distribFontSizeVal');
+    if (fontSlider) {
+      fontSlider.addEventListener('input', () => {
+        fontVal.textContent = fontSlider.value + 'px';
+        renderDistrib();
+      });
+    }
+
+    $('#distribExportPngBtn')?.addEventListener('click', () => {
+      if (!distribChart) return;
+      const scale = 4;
+      const origDPR = distribChart.options.devicePixelRatio ?? window.devicePixelRatio;
+      distribChart.options.devicePixelRatio = scale;
+      distribChart.resize();
+      const url = distribChart.toBase64Image('image/png', 1);
+      distribChart.options.devicePixelRatio = origDPR;
+      distribChart.resize();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `distribucion_${Date.now()}.png`;
+      a.click();
+    });
+
     const addPct = () => {
       const v = parseInt($('#distribPctInput').value);
       if (isNaN(v) || v < 1 || v > 99) return;
@@ -832,6 +856,7 @@ export function renderDistrib() {
   const col = colSel.value;
   const _nc = col.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²' : 'UF';
+  const fs = parseInt($('#distribFontSize')?.value ?? '11');
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
   const ctx = $('#distribChart').getContext('2d');
@@ -851,7 +876,7 @@ export function renderDistrib() {
   // Construir anotaciones
   const annotations = {};
   const pctColor   = '#ef4444';
-  const priceColor = '#16a34a';
+  const priceColor = '#ef4444';
 
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
     const color = pctColor;
@@ -863,14 +888,14 @@ export function renderDistrib() {
       borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
       label: { content: `P${pct}`, display: true, position: 'start',
         color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
     };
     annotations[`ph_${pct}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct,
       borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
       label: { content: `${priceLabel} ${distribUnit}`, display: true, position: 'start',
         color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
     };
   });
 
@@ -883,7 +908,7 @@ export function renderDistrib() {
       borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
       label: { content: `${price.toLocaleString('es-CL')} ${distribUnit}`, display: true, position: 'start',
         color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
     };
     if (pct !== null) {
       annotations[`prv_${price}`] = {
@@ -891,7 +916,7 @@ export function renderDistrib() {
         borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
         label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
           color, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' } },
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
       };
     }
   });
@@ -933,7 +958,7 @@ export function renderDistrib() {
           content: `${t.nombre}: ${valLabel}`,
           display: true, position: 'start',
           color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' },
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
         },
       };
       annotations[`mp_v_${t.id}`] = {
@@ -943,7 +968,7 @@ export function renderDistrib() {
           content: `P${pct.toFixed(1)}`,
           display: true, position: 'start',
           color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: 11, weight: 'bold' },
+          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
         },
       };
     });
@@ -957,7 +982,7 @@ export function renderDistrib() {
       maintainAspectRatio: false,
       parsing: false,
       plugins: {
-        legend: { position: 'top' },
+        legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
           mode: 'nearest',
           intersect: false,
@@ -972,12 +997,12 @@ export function renderDistrib() {
       scales: {
         x: {
           type: 'linear', min: 0, max: 100,
-          title: { display: true, text: 'Percentil (%)' },
-          ticks: { callback: v => v + '%' },
+          title: { display: true, text: 'Percentil (%)', font: { size: fs } },
+          ticks: { callback: v => v + '%', font: { size: fs } },
         },
         y: {
-          title: { display: true, text: col },
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: col, font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
       },
     },
