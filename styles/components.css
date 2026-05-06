@@ -152,6 +152,15 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .distrib-font-row { display: flex; align-items: center; gap: 6px; padding-bottom: 2px; }
 .distrib-font-row input[type="range"] { width: 80px; cursor: pointer; }
 .distrib-font-row span { font-size: 12px; color: #374151; min-width: 28px; }
+.distrib-ratio-ctrl { min-width: unset; }
+.distrib-ratio-row { display: flex; gap: 4px; }
+.ratio-btn {
+  padding: 4px 9px; border-radius: 5px; border: 1px solid #d1d5db;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  background: #fff; color: #374151; transition: background 0.15s, color 0.15s;
+}
+.ratio-btn:hover { background: #f3f4f6; }
+.ratio-btn.active { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
 .marker-tag button {
   background: none; border: none; cursor: pointer;
   font-size: 13px; line-height: 1; padding: 0;
