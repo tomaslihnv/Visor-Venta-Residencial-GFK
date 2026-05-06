@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Cynthia Castro\\\\Desktop\\\\Dev\\\\Visor-Venta-Residencial-GFK\" -Recurse -Force)",
+      "Bash(Select-Object FullName)"
+    ]
+  }
+}
