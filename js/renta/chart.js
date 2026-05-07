@@ -973,7 +973,7 @@ export function renderDistrib() {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
-      layout: { padding: { top: 12, right: 20, bottom: 12, left: 12 } },
+      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
