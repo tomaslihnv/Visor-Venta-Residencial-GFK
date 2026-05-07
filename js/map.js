@@ -657,6 +657,25 @@ function initSelectionMode() {
   });
 }
 
+// Returns Map<edificioName, mapNumber> using the same left→right ordering as the markers
+export function getMapOrder() {
+  const points = collectPoints(state.filtered);
+  if (!points.length) return new Map();
+  const edifCol = state.columns.find(c =>
+    ['edificio', 'proyecto', 'building'].some(k => norm(c.name).includes(k))
+  )?.name;
+  const ordered = [...points].sort((a, b) => {
+    const dLng = a.lng - b.lng;
+    return Math.abs(dLng) > 0.0001 ? dLng : b.lat - a.lat;
+  });
+  const result = new Map();
+  ordered.forEach((p, i) => {
+    const name = edifCol ? String(p.rows[0]?.[edifCol] ?? '').trim() : '';
+    if (name) result.set(name, i + 1);
+  });
+  return result;
+}
+
 export function renderMap() {
   const placeholder = document.querySelector('.map-placeholder');
   const wrapper = document.getElementById('mapWrapper');
@@ -767,9 +786,10 @@ export function renderMap() {
     for (const t of mp.tipologias) {
       if (!t.nombre) continue;
       const parts = [
-        t.sup    != null ? `${t.sup} m² útil`   : null,
-        t.ufm2   != null ? `${t.ufm2} UF/m²`    : null,
-        t.ticket != null ? `${t.ticket} UF tick.`: null,
+        t.sup      != null ? `${t.sup} m² útil`      : null,
+        t.ufm2     != null ? `${t.ufm2} UF/m²`       : null,
+        t.ticket   != null ? `${t.ticket} UF tick.`   : null,
+        t.unidades != null ? `${t.unidades} un.`      : null,
       ].filter(Boolean);
       popHtml += `<tr><td class="pp-key">${escH(t.nombre)}</td><td class="pp-val">${parts.join(' · ') || '—'}</td></tr>`;
     }

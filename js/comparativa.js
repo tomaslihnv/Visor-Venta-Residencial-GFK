@@ -1,6 +1,7 @@
 import { $ } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
+import { getMapOrder } from './map.js';
 
 function findCol(candidates) {
   const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
@@ -255,15 +256,30 @@ export function renderComparativa() {
   const hasVendido  = colVendido  !== null;
   const hasVelVenta = colVelVenta !== null;
   const hasProp     = colPropietario !== null;
-  const generalCols = 1 + (hasProp ? 1 : 0) + (hasVendido ? 1 : 0) + (hasVelVenta ? 1 : 0);
+
+  // Map pin numbers (only available when coordinates exist)
+  const mapOrder   = getMapOrder();
+  const hasMapNums = mapOrder.size > 0;
+
+  // Sort proyectos by map pin order when available
+  if (hasMapNums) {
+    proyectos.sort((a, b) => {
+      const na = mapOrder.get(a.edificio) ?? Infinity;
+      const nb = mapOrder.get(b.edificio) ?? Infinity;
+      return na - nb;
+    });
+  }
+
+  const generalCols  = 1 + (hasProp ? 1 : 0) + (hasVendido ? 1 : 0) + (hasVelVenta ? 1 : 0);
   const metricGroups = hasTipos ? tipologias : ['_overall'];
 
   // ── HTML ────────────────────────────────────────────────────────────────
   let html = `<div class="comp-wrap"><table class="comp-table">`;
 
   // THEAD fila 1
+  const generalColsTotal = generalCols + (hasMapNums ? 1 : 0);
   html += `<thead><tr class="comp-head-top">`;
-  html += `<th colspan="${generalCols}" class="comp-th-section">Información general</th>`;
+  html += `<th colspan="${generalColsTotal}" class="comp-th-section">Proyectos</th>`;
   for (const tipo of metricGroups) {
     html += `<th colspan="3" class="comp-th-tipo">${tipo === '_overall' ? 'Indicadores' : fmtTipo(tipo)}</th>`;
   }
@@ -271,6 +287,7 @@ export function renderComparativa() {
 
   // THEAD fila 2
   html += `<tr class="comp-head-sub">`;
+  if (hasMapNums) html += th('N°', 'class="comp-th-num"');
   html += th('Edificio',    'class="comp-th-label"');
   if (hasProp)     html += th('Propietario',         'class="comp-th-label"');
   if (hasVendido)  html += th('% Vendido',            'class="comp-th-label comp-num"');
@@ -286,6 +303,7 @@ export function renderComparativa() {
   html += `<tbody>`;
   for (const p of proyectos) {
     html += `<tr>`;
+    if (hasMapNums) html += cell(mapOrder.get(p.edificio) ?? '—', 'comp-num comp-map-num');
     html += cell(esc(p.edificio), 'comp-edificio');
     if (hasProp)     html += cell(esc(p.propietario) || '—');
     if (hasVendido)  html += cell(p.vendido  != null ? fmtDec(p.vendido, 1)  + '%' : '—', 'comp-num');
@@ -311,6 +329,7 @@ export function renderComparativa() {
 
   // ── Fila Promedio ──
   html += `<tr class="comp-promedio">`;
+  if (hasMapNums) html += `<td></td>`;
   html += `<td><strong>Promedio</strong></td>`;
   if (hasProp)     html += `<td></td>`;
   if (hasVendido)  html += `<td class="comp-num"><strong>${promedioVendido  != null ? fmtDec(promedioVendido, 1)  + '%' : '—'}</strong></td>`;
@@ -333,6 +352,7 @@ export function renderComparativa() {
   if (mp.inComp && mp.edificio) {
     // Fila de datos del proyecto
     html += `<tr class="comp-situ">`;
+    if (hasMapNums) html += `<td></td>`;
     html += `<td class="comp-edificio"><strong>${esc(mp.edificio)}</strong></td>`;
     if (hasProp)     html += `<td>${esc(mp.propietario) || ''}</td>`;
     if (hasVendido)  html += `<td></td>`;
@@ -354,6 +374,7 @@ export function renderComparativa() {
 
     // Fila vs Promedio
     html += `<tr class="comp-situ-vs">`;
+    if (hasMapNums) html += `<td></td>`;
     html += `<td class="situ-vs-label"><em>${esc(mp.edificio)} vs Promedio</em></td>`;
     if (hasProp)     html += `<td></td>`;
     if (hasVendido)  html += `<td></td>`;

@@ -529,7 +529,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 
 .comp-th-section {
-  background: #1e3a5f; color: #fff;
+  background: #444D54; color: #fff;
   text-align: left;
 }
 .comp-th-tipo {
@@ -551,6 +551,16 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .comp-num { text-align: right; font-variant-numeric: tabular-nums; }
 /* Left border separating tipologia groups */
 .comp-sep { border-left: 2px solid #e2e8f0; }
+/* Map pin number column */
+.comp-th-num {
+  text-align: center; width: 32px; min-width: 32px;
+  border-right: 2px solid #e2e8f0;
+}
+.comp-map-num {
+  text-align: center;
+  font-weight: 700; color: #1e3a5f;
+  border-right: 1px solid #e2e8f0;
+}
 
 /* Promedio / tfoot row */
 .comp-promedio td {
