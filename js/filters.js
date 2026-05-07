@@ -359,9 +359,10 @@ export function applyFilters() {
   if (activeTab === 'comparativa') {
     import('./comparativa.js').then(({ renderComparativa }) => renderComparativa());
   }
-  if (activeTab === 'mapa') {
-    import('./map.js').then(({ renderMap }) => renderMap());
-  }
+  import('./map.js').then(({ renderMap, updateFilterWidget }) => {
+    updateFilterWidget?.();
+    if (activeTab === 'mapa') renderMap();
+  });
 }
 
 // Actualiza los límites dinámicamente al cambiar otros filtros
@@ -448,4 +449,26 @@ export function undoEdificioFilter() {
 
 export function hasEdificioHistory() {
   return _edificioHistory.length > 0;
+}
+
+export function getActiveFiltersSummary() {
+  const items = [];
+
+  if (F.tipologia.size > 0)
+    items.push({ label: 'Tipología', value: [...F.tipologia].map(fmtTipo).join(', ') });
+
+  const sliders = [
+    { key: 'sup',    label: 'm² útil',   minKey: 'supMin',    maxKey: 'supMax'    },
+    { key: 'ufm2',   label: 'UF/m²',     minKey: 'ufm2Min',   maxKey: 'ufm2Max'   },
+    { key: 'ticket', label: 'Ticket UF', minKey: 'ticketMin', maxKey: 'ticketMax' },
+  ];
+  for (const s of sliders) {
+    if (F[s.minKey] !== null || F[s.maxKey] !== null) {
+      const ref = refs[s.key];
+      const lo  = ref ? ref.lblMin.textContent : String(F[s.minKey] ?? '—');
+      const hi  = ref ? ref.lblMax.textContent : String(F[s.maxKey] ?? '—');
+      items.push({ label: s.label, value: `${lo} – ${hi}` });
+    }
+  }
+  return items;
 }

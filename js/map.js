@@ -332,6 +332,7 @@ function initLeafletMap() {
   });
 
   initSelectionMode();
+  initFilterWidget();
 
   // Copiar imagen
   document.getElementById('mapExportBtn')?.addEventListener('click', async () => {
@@ -350,6 +351,78 @@ function initLeafletMap() {
       console.error('Error exportando mapa:', err);
       btn.textContent = 'Copiar imagen';
       btn.disabled = false;
+    }
+  });
+}
+
+// ============== Widget de filtros activos ==============
+export function updateFilterWidget() {
+  const body = document.getElementById('mfwBody');
+  if (!body) return;
+  const widget = document.getElementById('mapFilterWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+  import('./filters.js').then(({ getActiveFiltersSummary }) => {
+    const items = getActiveFiltersSummary();
+    body.innerHTML = items.length
+      ? items.map(it => `<div class="mfw-row"><span class="mfw-label">${it.label}</span><span class="mfw-value">${it.value}</span></div>`).join('')
+      : '<div class="mfw-empty">Sin filtros aplicados</div>';
+  });
+}
+
+function initFilterWidget() {
+  const toggleBtn = document.getElementById('mapFilterWidgetBtn');
+  if (!toggleBtn) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'mapFilterWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="mfwHeader">
+      <span>Filtros activos</span>
+      <button class="mfw-close" id="mfwClose" title="Cerrar">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="mfwBody"></div>
+  `;
+  leafletMap.getContainer().appendChild(widget);
+  L.DomEvent.disableClickPropagation(widget);
+  L.DomEvent.disableScrollPropagation(widget);
+
+  const header = document.getElementById('mfwHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'mfwClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || 0;
+    const startT = parseInt(widget.style.top)  || 0;
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('mfwClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        const cW = leafletMap.getContainer().offsetWidth;
+        widget.style.left = (cW - 230) + 'px';
+        widget.style.top  = '48px';
+      }
+      updateFilterWidget();
     }
   });
 }

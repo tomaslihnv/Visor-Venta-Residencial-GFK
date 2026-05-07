@@ -1,4 +1,5 @@
 import { fmt, norm } from './utils.js';
+import { reapplyFilters } from './filters.js';
 
 // mapConfig: {
 //   projectCandidates: string[]
@@ -17,9 +18,26 @@ let   legendControl = null;
 let   countControl  = null;
 let   _mapInitialized = false;
 
+// Selección por polígono
+let _selState         = null;
+let _selMapConfig     = null;
+let _selMode          = false;
+let _selRect          = null;
+let _selPanel         = null;
+let _selPoints        = [];
+let _lastPolyPoints   = [];
+let _persistentPoly   = null;
+let _rubberBand       = null;
+let _firstVertexMarker = null;
+let _projHistory      = [];
+
 export function resetMapOnLoad() {
   _mapInitialized = false;
   geoStatus.total = 0; geoStatus.done = 0; geoStatus.running = false;
+  _projHistory = [];
+  if (_persistentPoly) { _persistentPoly.remove(); _persistentPoly = null; }
+  document.getElementById('mapClearPolyBtn')?.classList.add('hidden');
+  document.getElementById('mapUndoBtn')?.classList.add('hidden');
 }
 
 // ── Coord helpers ─────────────────────────────────────────────────────────
@@ -140,6 +158,325 @@ function _priceToColor(value, min, max) {
   return `rgb(${r},${g},${b})`;
 }
 
+// ── Filter widget ─────────────────────────────────────────────────────────
+
+export function updateFilterWidget(state, filterDefs) {
+  const body = document.getElementById('mfwBody');
+  if (!body) return;
+  const widget = document.getElementById('mapFilterWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+  const defs = filterDefs ?? state?._filterDefs ?? [];
+  const items = [];
+  for (const def of defs) {
+    if (def.type === 'multi') {
+      const set = state?.filterValues?.[def.key];
+      if (set?.size > 0) items.push({ label: def.label, value: [...set].join(', ') });
+    } else if (def.type === 'slider') {
+      const min = state?.filterValues?.[def.key + 'Min'];
+      const max = state?.filterValues?.[def.key + 'Max'];
+      if (min === null && max === null) continue;
+      const ref = state?.filterRefs?.[def.key];
+      const lo = min !== null ? (ref?.iMin?.value ?? min) : '—';
+      const hi = max !== null ? (ref?.iMax?.value ?? max) : '—';
+      items.push({ label: def.label, value: `${lo} – ${hi}` });
+    }
+  }
+  body.innerHTML = items.length
+    ? items.map(it => `<div class="mfw-row"><span class="mfw-label">${it.label}</span><span class="mfw-value">${it.value}</span></div>`).join('')
+    : '<div class="mfw-empty">Sin filtros aplicados</div>';
+}
+
+function _initFilterWidget() {
+  const toggleBtn = document.getElementById('mapFilterWidgetBtn');
+  if (!toggleBtn) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'mapFilterWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="mfwHeader">
+      <span>Filtros activos</span>
+      <button class="mfw-close" id="mfwClose" title="Cerrar">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="mfwBody"></div>
+  `;
+  leafletMap.getContainer().appendChild(widget);
+  L.DomEvent.disableClickPropagation(widget);
+  L.DomEvent.disableScrollPropagation(widget);
+
+  const header = document.getElementById('mfwHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'mfwClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || 0;
+    const startT = parseInt(widget.style.top)  || 0;
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('mfwClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        const cW = leafletMap.getContainer().offsetWidth;
+        widget.style.left = (cW - 230) + 'px';
+        widget.style.top  = '48px';
+      }
+      updateFilterWidget(_selState, _selState?._filterDefs);
+    }
+  });
+}
+
+// ── Selección por polígono ────────────────────────────────────────────────
+
+function _pointInPolygon(lat, lng, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].lng, yi = pts[i].lat;
+    const xj = pts[j].lng, yj = pts[j].lat;
+    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+function _setPersistentPoly() {
+  if (_persistentPoly) { _persistentPoly.remove(); _persistentPoly = null; }
+  if (!_lastPolyPoints.length) return;
+  _persistentPoly = L.polygon(_lastPolyPoints, {
+    color: '#1e3a5f', weight: 2.5,
+    fillColor: '#3b82f6', fillOpacity: 0.07,
+    interactive: false,
+  }).addTo(leafletMap);
+  document.getElementById('mapClearPolyBtn')?.classList.remove('hidden');
+}
+
+function _cancelSel() {
+  _selPoints = [];
+  if (_rubberBand)         { _rubberBand.remove();         _rubberBand = null; }
+  if (_firstVertexMarker)  { _firstVertexMarker.remove();  _firstVertexMarker = null; }
+  if (_selRect)            { _selRect.remove();            _selRect = null; }
+  if (_selPanel?.parentNode) _selPanel.parentNode.removeChild(_selPanel);
+  _selPanel = null;
+}
+
+function _endSel() {
+  _cancelSel();
+  _selMode = false;
+  document.getElementById('mapSelectBtn')?.classList.remove('active');
+  if (leafletMap) {
+    leafletMap.dragging.enable();
+    leafletMap.getContainer().style.cursor = '';
+  }
+}
+
+function _updateUndoBtn() {
+  document.getElementById('mapUndoBtn')?.classList.toggle('hidden', _projHistory.length === 0);
+}
+
+function _saveProjSnapshot() {
+  _projHistory.push(new Set(_selState?.excludedProjects ?? new Set()));
+}
+
+function _applyProjExclusion() {
+  if (!_selState) return;
+  reapplyFilters(_selState);
+  _updateUndoBtn();
+  updateFilterWidget(_selState, _selState._filterDefs);
+}
+
+function _closePolygon() {
+  if (_selPoints.length < 3) { _cancelSel(); return; }
+  if (_rubberBand)        { _rubberBand.remove();        _rubberBand = null; }
+  if (_firstVertexMarker) { _firstVertexMarker.remove(); _firstVertexMarker = null; }
+  if (_selRect)           { _selRect.remove();           _selRect = null; }
+
+  _selRect = L.polygon(_selPoints, {
+    color: '#2563eb', weight: 2, dashArray: '5 3',
+    fillColor: '#3b82f6', fillOpacity: 0.12, interactive: false,
+  }).addTo(leafletMap);
+
+  _lastPolyPoints = [..._selPoints];
+  _selPoints = [];
+
+  const projCol = _selState?.columns.find(c =>
+    _selMapConfig?.projectCandidates.some(k => norm(c.name).includes(norm(k)))
+  )?.name;
+
+  const inside = _collectPoints(_selState, _selMapConfig).filter(p =>
+    _pointInPolygon(p.lat, p.lng, _lastPolyPoints)
+  );
+  const names = [...new Set(inside.flatMap(p =>
+    p.rows.map(r => projCol ? String(r[projCol] ?? '').trim() : '').filter(Boolean)
+  ))];
+
+  if (!names.length) { _cancelSel(); return; }
+  _showSelPanel(names, _selRect.getBounds());
+}
+
+function _showSelPanel(names, bounds) {
+  if (_selPanel?.parentNode) _selPanel.parentNode.removeChild(_selPanel);
+
+  const ne   = leafletMap.latLngToContainerPoint(bounds.getNorthEast());
+  const cW   = leafletMap.getContainer().offsetWidth;
+  const cH   = leafletMap.getContainer().offsetHeight;
+  const panelW = 215;
+  const left = Math.min(ne.x + 10, cW - panelW - 8);
+  const top  = Math.max(Math.min(ne.y, cH - 160), 8);
+
+  _selPanel = document.createElement('div');
+  _selPanel.className = 'map-sel-panel';
+  _selPanel.style.left = left + 'px';
+  _selPanel.style.top  = top  + 'px';
+  L.DomEvent.disableClickPropagation(_selPanel);
+  _selPanel.innerHTML = `
+    <div class="map-sel-count">${names.length} proyecto${names.length !== 1 ? 's' : ''} seleccionado${names.length !== 1 ? 's' : ''}</div>
+    <button class="sel-btn sel-btn-keep"  id="selBtnMantener">Mantener solo estos</button>
+    <button class="sel-btn sel-btn-excl"  id="selBtnExcluir">Excluir estos</button>
+    <label class="sel-check-row">
+      <input type="checkbox" id="selChkMark" checked>
+      <span>Dejar zona marcada</span>
+    </label>
+    <button class="sel-btn sel-btn-ghost" id="selBtnCancelar">Cancelar</button>
+  `;
+  leafletMap.getContainer().appendChild(_selPanel);
+
+  document.getElementById('selBtnMantener').addEventListener('click', () => {
+    if (document.getElementById('selChkMark').checked) _setPersistentPoly();
+    _saveProjSnapshot();
+    if (!_selState.excludedProjects) _selState.excludedProjects = new Set();
+    const keepSet = new Set(names.map(String));
+    const projCol = _selState.columns.find(c =>
+      _selMapConfig?.projectCandidates.some(k => norm(c.name).includes(norm(k)))
+    )?.name;
+    const allProjs = [...new Set(
+      _selState.raw.map(r => projCol ? String(r[projCol] ?? '').trim() : '').filter(Boolean)
+    )];
+    _selState.excludedProjects.clear();
+    for (const n of allProjs) {
+      if (!keepSet.has(n)) _selState.excludedProjects.add(n);
+    }
+    _endSel();
+    _applyProjExclusion();
+  });
+
+  document.getElementById('selBtnExcluir').addEventListener('click', () => {
+    if (document.getElementById('selChkMark').checked) _setPersistentPoly();
+    _saveProjSnapshot();
+    if (!_selState.excludedProjects) _selState.excludedProjects = new Set();
+    for (const n of names) _selState.excludedProjects.add(n);
+    _endSel();
+    _applyProjExclusion();
+  });
+
+  document.getElementById('selBtnCancelar').addEventListener('click', _cancelSel);
+}
+
+function _initSelectionMode() {
+  const btn = document.getElementById('mapSelectBtn');
+  if (!btn) return;
+
+  document.getElementById('mapClearPolyBtn')?.addEventListener('click', () => {
+    if (_persistentPoly) { _persistentPoly.remove(); _persistentPoly = null; }
+    document.getElementById('mapClearPolyBtn')?.classList.add('hidden');
+  });
+
+  const undoBtn = document.getElementById('mapUndoBtn');
+  undoBtn?.addEventListener('click', () => {
+    if (!_projHistory.length) return;
+    _selState.excludedProjects = _projHistory.pop();
+    _applyProjExclusion();
+  });
+
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !undoBtn?.classList.contains('hidden')) {
+      e.preventDefault();
+      undoBtn?.click();
+    }
+  });
+
+  btn.addEventListener('click', () => {
+    _selMode = !_selMode;
+    btn.classList.toggle('active', _selMode);
+    if (_selMode) {
+      leafletMap.doubleClickZoom.disable();
+      leafletMap.getContainer().style.cursor = 'crosshair';
+    } else {
+      leafletMap.doubleClickZoom.enable();
+      leafletMap.getContainer().style.cursor = '';
+      _cancelSel();
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _selMode) _endSel();
+  });
+
+  leafletMap.on('click', e => {
+    if (!_selMode) return;
+    if (_selPoints.length >= 3) {
+      const firstPx = leafletMap.latLngToContainerPoint(_selPoints[0]);
+      const clickPx = leafletMap.latLngToContainerPoint(e.latlng);
+      if (Math.hypot(firstPx.x - clickPx.x, firstPx.y - clickPx.y) < 12) {
+        _closePolygon();
+        return;
+      }
+    }
+    _selPoints.push(e.latlng);
+    if (_selPoints.length === 1) {
+      _firstVertexMarker = L.circleMarker(_selPoints[0], {
+        radius: 6, color: '#2563eb', weight: 2.5,
+        fillColor: '#fff', fillOpacity: 1, interactive: false,
+      }).addTo(leafletMap);
+    }
+    if (_selRect) _selRect.setLatLngs(_selPoints);
+    else _selRect = L.polyline(_selPoints, {
+      color: '#2563eb', weight: 2.5, interactive: false,
+    }).addTo(leafletMap);
+  });
+
+  leafletMap.on('mousemove', e => {
+    if (!_selMode || !_selPoints.length) return;
+    const last = _selPoints[_selPoints.length - 1];
+    if (_rubberBand) _rubberBand.setLatLngs([last, e.latlng]);
+    else _rubberBand = L.polyline([last, e.latlng], {
+      color: '#2563eb', weight: 1.5, dashArray: '5 4',
+      interactive: false, opacity: 0.6,
+    }).addTo(leafletMap);
+    if (_selPoints.length >= 3 && _firstVertexMarker) {
+      const firstPx = leafletMap.latLngToContainerPoint(_selPoints[0]);
+      const movePx  = leafletMap.latLngToContainerPoint(e.latlng);
+      const near    = Math.hypot(firstPx.x - movePx.x, firstPx.y - movePx.y) < 12;
+      _firstVertexMarker.setStyle({ fillColor: near ? '#2563eb' : '#fff', radius: near ? 9 : 6 });
+      leafletMap.getContainer().style.cursor = near ? 'pointer' : 'crosshair';
+    }
+  });
+
+  leafletMap.on('dblclick', e => {
+    if (!_selMode || _selPoints.length < 4) return;
+    L.DomEvent.stopPropagation(e);
+    _selPoints.pop();
+    _closePolygon();
+  });
+}
+
 // ── Leaflet init ──────────────────────────────────────────────────────────
 
 function _initRankingResize() {
@@ -166,6 +503,11 @@ function _initRankingResize() {
 }
 
 function _initLeafletMap(state, mapConfig, mp) {
+  _selState     = state;
+  _selMapConfig = mapConfig;
+  state._projCol = state.columns.find(c =>
+    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
+  )?.name ?? null;
   leafletMap   = L.map('map');
   _initRankingResize();
 
@@ -188,10 +530,10 @@ function _initLeafletMap(state, mapConfig, mp) {
   };
   countControl.addTo(leafletMap);
 
-  // Mode buttons
-  document.querySelectorAll('.map-mode-btn').forEach(btn => {
+  // Mode buttons (only General / De calor — buttons with data-mode)
+  document.querySelectorAll('.map-mode-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.map-mode-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.map-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       mapMode = btn.dataset.mode;
       const pills = document.getElementById('heatMetricPills');
@@ -214,6 +556,9 @@ function _initLeafletMap(state, mapConfig, mp) {
   if (!heatMetric && mapConfig.heatOptions?.length) {
     heatMetric = mapConfig.heatOptions[0].value;
   }
+
+  _initSelectionMode();
+  _initFilterWidget();
 }
 
 // ── Popup ─────────────────────────────────────────────────────────────────

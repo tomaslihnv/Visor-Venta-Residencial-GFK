@@ -54,6 +54,7 @@ $('#resetBtn')?.addEventListener('click', async () => {
     if (tab === 'mapa')         (await import('../core/map.js')).renderMap(_state, MAP, mpCurrent);
   };
 
+  state.excludedProjects = new Set();
   resetFilters(FILTERS, state, container, onChange);
 });
 

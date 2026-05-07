@@ -103,6 +103,7 @@ function loadFile(file) {
 export function onDataLoaded(rows) {
   state.raw      = rows;
   state.filtered = rows.slice();
+  state.excludedProjects = new Set();
 
   const colNames  = Object.keys(rows[0] ?? {});
   state.columns   = colNames.map(name => ({
@@ -150,6 +151,7 @@ export function onDataLoaded(rows) {
           if (tab === 'comparativa')  import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_state, COMPARATIVA, mpCurrent));
           if (tab === 'mapa')         renderMap(_state, MAP, mpCurrent);
         });
+        import('../core/map.js').then(({ updateFilterWidget }) => updateFilterWidget(_state, FILTERS)).catch(() => {});
       };
 
       // Helpers para re-render lazy (usados en main.js)

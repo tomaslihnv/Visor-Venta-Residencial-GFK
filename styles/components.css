@@ -395,6 +395,41 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .sel-check-row input[type="checkbox"] { accent-color: #2563eb; width: 14px; height: 14px; cursor: pointer; }
 
+/* Widget flotante de filtros activos */
+.map-filter-widget {
+  position: absolute; z-index: 900;
+  background: rgba(255,255,255,0.97);
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.13);
+  min-width: 175px; max-width: 230px;
+  pointer-events: auto;
+}
+.mfw-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 8px;
+  background: #2E3338; color: #fff;
+  border-radius: 6px 6px 0 0;
+  cursor: grab; user-select: none;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+}
+.mfw-header:active { cursor: grabbing; }
+.mfw-close {
+  background: none; border: none; color: rgba(255,255,255,0.65);
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 0 0 0 8px;
+}
+.mfw-close:hover { color: #fff; }
+.mfw-body { padding: 6px 9px; }
+.mfw-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px; padding: 3px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.mfw-row:last-child { border-bottom: none; }
+.mfw-label { font-size: 10px; color: #64748b; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.mfw-value { font-size: 11px; color: #0f172a; font-weight: 500; text-align: right; }
+.mfw-empty { font-size: 10px; color: #9ca3af; font-style: italic; padding: 2px 0; }
+
 /* Panel flotante de selección */
 .map-sel-panel {
   position: absolute;
