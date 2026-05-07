@@ -919,10 +919,7 @@ function computeQuantileCurve(rows, col) {
   if (vals.length < 2) return [];
   vals.sort((a, b) => a - b);
   const n = vals.length;
-  return Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return { x: pct, y: vals[idx] };
-  });
+  return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
 }
 
 function lerpAtX(data, x) {
@@ -993,7 +990,7 @@ export function renderDistrib() {
 
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
     const color = pctColor;
-    const price = valAtPct(pct);
+    const price = lerpAtX(refData, pct);
     if (price == null) return;
     const priceLabel = price.toLocaleString('es-CL', { maximumFractionDigits: 0 });
     annotations[`pv_${pct}`] = {

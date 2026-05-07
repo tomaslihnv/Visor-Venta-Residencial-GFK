@@ -757,16 +757,13 @@ function refreshMarkerTags() {
   });
 }
 
-// Curva de cuantiles: 101 puntos muestreados (P0–P100) para evitar escalones
+// Curva de cuantiles: X = percentil (0–100%), Y = valor
 function computeQuantileCurve(rows, col) {
   const vals = rows.map(r => Number(r[col])).filter(v => !isNaN(v) && v > 0);
   if (vals.length < 2) return [];
   vals.sort((a, b) => a - b);
   const n = vals.length;
-  return Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return { x: pct, y: vals[idx] };
-  });
+  return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
 }
 
 // Interpola Y dado X en la curva
@@ -848,7 +845,7 @@ export function renderDistrib() {
 
   // ── Percentiles ────────────────────────────────────────────
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
-    const price = valAtPct(pct);
+    const price = lerpAtX(refData, pct);
     if (price == null || price === 0) return;
     const priceLabel = fmtVal(price);
     // Línea vertical: desde eje X hasta la curva

@@ -789,7 +789,7 @@ export function renderMap() {
         t.sup      != null ? `${t.sup} m² útil`      : null,
         t.ufm2     != null ? `${t.ufm2} UF/m²`       : null,
         t.ticket   != null ? `${t.ticket} UF tick.`   : null,
-        t.unidades != null ? `${t.unidades} un.`      : null,
+
       ].filter(Boolean);
       popHtml += `<tr><td class="pp-key">${escH(t.nombre)}</td><td class="pp-val">${parts.join(' · ') || '—'}</td></tr>`;
     }

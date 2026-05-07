@@ -129,15 +129,26 @@ function _refreshMarkerTags() {
   });
 }
 
+// Curva de cuantiles: X = percentil (0–100%), Y = valor
 function _computeQuantileCurve(rows, col) {
   const vals = rows.map(r => Number(r[col])).filter(v => !isNaN(v) && v > 0);
   if (vals.length < 2) return [];
   vals.sort((a, b) => a - b);
   const n = vals.length;
-  return Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return { x: pct, y: vals[idx] };
-  });
+  return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
+}
+
+function _lerpAtX(data, x) {
+  if (!data.length) return null;
+  if (x <= data[0].x) return data[0].y;
+  if (x >= data[data.length - 1].x) return data[data.length - 1].y;
+  for (let i = 0; i < data.length - 1; i++) {
+    if (data[i].x <= x && x <= data[i + 1].x) {
+      const t = (x - data[i].x) / (data[i + 1].x - data[i].x);
+      return data[i].y + t * (data[i + 1].y - data[i].y);
+    }
+  }
+  return null;
 }
 
 function _lerpAtY(data, y) {
@@ -198,7 +209,7 @@ export function renderDistrib(state, distribCols, mp) {
 
   // Percentile markers
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
-    const price = valAtPct(pct);
+    const price = _lerpAtX(refData, pct);
     if (!price) return;
     annotations[`pv_${pct}`] = {
       type: 'line', xMin: pct, xMax: pct, yMax: price,
