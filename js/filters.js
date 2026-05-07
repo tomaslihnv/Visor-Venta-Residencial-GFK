@@ -138,6 +138,11 @@ function _buildMulti(key, colName, label, container, fmtFn = fmt, searchable = f
     checkboxes.push(cb);
   }
 
+  if (key === 'edificio') {
+    refs.edificioCbs  = checkboxes;
+    refs.edificioVals = vals;
+  }
+
   group.appendChild(multi);
   container.appendChild(group);
 }
@@ -391,4 +396,56 @@ export function resetFilters() {
   const s = $('#searchInput');
   if (s) { s.value = ''; state.search = ''; }
   applyFilters();
+}
+
+// ============== Manipulación programática del filtro Edificio ==============
+const _edificioHistory = [];
+
+function _saveEdificioSnapshot() {
+  if (!refs.edificioCbs) return;
+  _edificioHistory.push(refs.edificioCbs.map(cb => cb.checked));
+}
+
+function _syncEdificioFilter() {
+  const cbs  = refs.edificioCbs;
+  const vals = refs.edificioVals ?? [];
+  if (!cbs) return;
+  const checked = cbs.filter(c => c.checked).map(c => c._realVal);
+  F.edificio.clear();
+  if (checked.length < vals.length) checked.forEach(v => F.edificio.add(v));
+  applyFilters();
+}
+
+export function excludeEdificios(names) {
+  const cbs = refs.edificioCbs;
+  if (!cbs) return;
+  _saveEdificioSnapshot();
+  const toExclude = new Set(names.map(String));
+  for (const cb of cbs) {
+    if (toExclude.has(String(cb._realVal))) cb.checked = false;
+  }
+  _syncEdificioFilter();
+}
+
+export function keepOnlyEdificios(names) {
+  const cbs = refs.edificioCbs;
+  if (!cbs) return;
+  _saveEdificioSnapshot();
+  const toKeep = new Set(names.map(String));
+  for (const cb of cbs) {
+    cb.checked = toKeep.has(String(cb._realVal));
+  }
+  _syncEdificioFilter();
+}
+
+export function undoEdificioFilter() {
+  if (!_edificioHistory.length || !refs.edificioCbs) return false;
+  const prev = _edificioHistory.pop();
+  refs.edificioCbs.forEach((cb, i) => { cb.checked = prev[i]; });
+  _syncEdificioFilter();
+  return _edificioHistory.length > 0;
+}
+
+export function hasEdificioHistory() {
+  return _edificioHistory.length > 0;
 }

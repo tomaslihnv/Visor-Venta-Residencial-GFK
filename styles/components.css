@@ -375,6 +375,67 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .map-placeholder h3 { margin-bottom: 10px; color: #334155; }
 
+/* Botones de selección y deshacer */
+.map-select-btn { margin-left: 4px; border-left: 1px solid #e5e7eb !important; padding-left: 12px !important; }
+.map-wrapper.dark-mode .map-select-btn { border-left-color: rgba(148,163,184,0.3) !important; }
+.map-undo-btn { color: #92400e !important; border-color: #fcd34d !important; background: #fffbeb !important; }
+.map-undo-btn:hover { background: #fef3c7 !important; }
+.map-wrapper.dark-mode .map-undo-btn { background: rgba(120,80,0,0.25) !important; color: #fcd34d !important; border-color: rgba(252,211,77,0.4) !important; }
+.map-clearpoly-btn { color: #6b7280 !important; border-color: #d1d5db !important; background: #f9fafb !important; }
+.map-clearpoly-btn:hover { background: #f1f5f9 !important; color: #374151 !important; }
+
+/* Checkbox en el panel de selección */
+.sel-check-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: #374151; cursor: pointer;
+  padding: 4px 2px;
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+  margin: 2px 0;
+}
+.sel-check-row input[type="checkbox"] { accent-color: #2563eb; width: 14px; height: 14px; cursor: pointer; }
+
+/* Panel flotante de selección */
+.map-sel-panel {
+  position: absolute;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  padding: 10px;
+  width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+}
+.map-sel-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 2px;
+}
+.sel-btn {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sel-btn-keep   { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+.sel-btn-keep:hover   { background: #bfdbfe; }
+.sel-btn-excl   { background: #fee2e2; color: #dc2626; border-color: #fecaca; }
+.sel-btn-excl:hover   { background: #fecaca; }
+.sel-btn-ghost  { background: transparent; color: #6b7280; border-color: #e5e7eb; }
+.sel-btn-ghost:hover  { background: #f9fafb; }
+
 /* Popup del mapa */
 .map-popup { border-collapse: collapse; font-size: 12px; }
 .map-popup tr + tr td { border-top: 1px solid #f1f5f9; }
