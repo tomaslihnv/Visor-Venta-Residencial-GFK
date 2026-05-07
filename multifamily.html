@@ -3,33 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visor Venta Residencial</title>
+  <title>Visor Multifamily</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
 </head>
 <body>
   <nav class="app-nav">
-    <a href="index.html"       class="nav-link active">Venta</a>
+    <a href="index.html"       class="nav-link">Venta</a>
     <a href="renta.html"       class="nav-link">Renta</a>
-    <a href="multifamily.html" class="nav-link">Multifamily</a>
+    <a href="multifamily.html" class="nav-link active">Multifamily</a>
   </nav>
 
   <header class="topbar">
     <div class="brand">
       <span class="logo-dot"></span>
-      <h1>Visor Venta Residencial</h1>
+      <h1>Visor Multifamily</h1>
     </div>
     <div class="topbar-actions">
-      <div class="source-pills" title="Fuente de datos">
-        <label class="source-pill">
-          <input type="radio" name="source" value="inciti" checked hidden />
-          <span>Inciti</span>
-        </label>
-        <label class="source-pill">
-          <input type="radio" name="source" value="gfk" hidden />
-          <span>GFK</span>
-        </label>
-      </div>
       <label class="file-btn">
         <input type="file" id="fileInput" accept=".xlsx,.xls" hidden />
         <span>Cargar Excel</span>
@@ -41,7 +31,8 @@
 
   <main class="layout">
     <aside class="sidebar" id="sidebar">
-      <!-- MI PROYECTO (arriba, oculto hasta que carga el Excel) -->
+
+      <!-- MI PROYECTO -->
       <div id="miProyectoSection" class="mp-panel mp-panel-top hidden">
         <div class="mp-panel-header" id="mpPanelHeader">
           <span class="mp-panel-title">Mi Proyecto</span>
@@ -49,8 +40,8 @@
         </div>
         <div id="mpPanelBody" class="mp-panel-body">
           <div class="mp-field">
-            <label class="mp-label">Edificio</label>
-            <input type="text" id="mpEdificio" class="mp-input" placeholder="Ej: SITÛ Los Laureles" />
+            <label class="mp-label">Proyecto</label>
+            <input type="text" id="mpEdificio" class="mp-input" placeholder="Ej: Torre Norte" />
           </div>
           <div class="mp-field">
             <label class="mp-label">Dirección</label>
@@ -58,34 +49,36 @@
             <span class="mp-geo-status" id="mpGeoStatus"></span>
           </div>
 
-          <div class="mp-tipos-header">
-            <span class="mp-label">Unidades Tipo</span>
-            <button id="mpAddTipo" class="mp-add-btn">+ Agregar</button>
+          <!-- Métricas del edificio -->
+          <div class="mp-field">
+            <label class="mp-label">Métricas del edificio</label>
+            <div class="mp-tipo-metrics">
+              <label class="mp-metric-row">
+                <span>Stock</span>
+                <input type="number" id="mpStock" class="mp-metric-input mp-input" min="0" step="1" placeholder="—" />
+              </label>
+              <label class="mp-metric-row">
+                <span>Vacancia (%)</span>
+                <input type="number" id="mpVacancia" class="mp-metric-input mp-input" min="0" max="100" step="0.1" placeholder="—" />
+              </label>
+              <label class="mp-metric-row">
+                <span>Arriendo UF</span>
+                <input type="number" id="mpArriendo" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
+              </label>
+              <label class="mp-metric-row">
+                <span>UF/m²</span>
+                <input type="number" id="mpUfm2" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
+              </label>
+            </div>
           </div>
-          <div id="mpTiposContainer" class="mp-tipos-container"></div>
 
           <div class="mp-includes">
             <span class="mp-label">Incluir en:</span>
-            <label class="mp-check-row">
-              <input type="checkbox" id="mpInComp" />
-              <span>Tabla comparativa</span>
-            </label>
-            <label class="mp-check-row">
-              <input type="checkbox" id="mpInMapa" />
-              <span>Mapa</span>
-            </label>
-            <label class="mp-check-row">
-              <input type="checkbox" id="mpInDistrib" />
-              <span>Distribución</span>
-            </label>
-            <label class="mp-check-row">
-              <input type="checkbox" id="mpInSvp" />
-              <span>Sup. vs Precio</span>
-            </label>
-            <label class="mp-check-row">
-              <input type="checkbox" id="mpInProy" />
-              <span>Proyectos</span>
-            </label>
+            <label class="mp-check-row"><input type="checkbox" id="mpInComp" /><span>Tabla comparativa</span></label>
+            <label class="mp-check-row"><input type="checkbox" id="mpInMapa" /><span>Mapa</span></label>
+            <label class="mp-check-row"><input type="checkbox" id="mpInDistrib" /><span>Distribución</span></label>
+            <label class="mp-check-row"><input type="checkbox" id="mpInSvp" /><span>Sup. vs Arriendo</span></label>
+            <label class="mp-check-row"><input type="checkbox" id="mpInProy" /><span>Proyectos</span></label>
           </div>
         </div>
       </div>
@@ -109,7 +102,7 @@
       <div id="dropzone" class="dropzone">
         <div class="dropzone-inner">
           <h2>Arrastrá tu Excel acá</h2>
-          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>. Seleccioná la fuente primero: <strong>GFK</strong> (hoja <code>Datos</code>) o <strong>Inciti</strong> (hoja <code>Proyectos</code>).</p>
+          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>. El archivo debe ser exportado desde <strong>Inciti</strong> en formato multifamily.</p>
         </div>
       </div>
 
@@ -119,7 +112,7 @@
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
           <button class="tab" data-tab="comparativa">Tabla comparativa</button>
-          <button class="tab" data-tab="svp">Sup. Vs Precio</button>
+          <button class="tab" data-tab="svp">Sup. vs Arriendo</button>
           <button class="tab" data-tab="proyectos">Proyectos</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="tabla">Tabla</button>
@@ -130,14 +123,19 @@
           <div id="geocodeStatus" class="geocode-status"></div>
           <div class="map-placeholder">
             <h3>Mapa</h3>
-            <p>Aún no detecté direcciones válidas en tus datos. Cuando incluyas una columna llamada <code>Dirección</code> (o similar), los proyectos aparecerán automáticamente en el mapa.</p>
+            <p>Aún no detecté coordenadas válidas en tus datos.</p>
           </div>
           <div id="mapWrapper" class="map-wrapper hidden">
             <div class="map-main">
               <div class="map-toolbar">
                 <button class="map-mode-btn active" data-mode="general">General</button>
                 <button class="map-mode-btn" data-mode="precio">De calor</button>
-<button id="mapTableExportBtn" class="primary-btn">Copiar tabla</button>
+                <div class="heat-metric-pills hidden" id="heatMetricPills">
+                  <span class="heat-metric-label">Métrica:</span>
+                  <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
+                  <button class="heat-metric-btn" data-metric="arriendo">Arriendo UF</button>
+                  <button class="heat-metric-btn" data-metric="vacancia">Vacancia %</button>
+                </div>
               </div>
               <div id="map" class="map"></div>
             </div>
@@ -157,22 +155,48 @@
           </div>
         </div>
 
-        <!-- TAB: SUP. VS PRECIO -->
+        <!-- TAB: SUP. VS ARRIENDO -->
         <div class="tab-panel" data-panel="svp">
           <div class="chart-controls">
             <div class="ctrl">
-              <label>Tipología</label>
-              <select id="svpTipoFilter">
-                <option value="">Todas</option>
-              </select>
+              <label>Eje Y</label>
+              <select id="svpYAxis"></select>
             </div>
             <label class="toggle-check">
               <input type="checkbox" id="svpTrendToggle" checked />
               <span>Línea de tendencia</span>
             </label>
-            <button id="svpExportPngBtn" class="primary-btn">Exportar PNG</button>
+            <label class="toggle-check">
+              <input type="checkbox" id="svpAvgToggle" />
+              <span>Línea de promedio</span>
+            </label>
+            <div class="ctrl distrib-marker-group">
+              <label>Marcar m² útil</label>
+              <div class="marker-add">
+                <input type="number" id="svpM2Input" min="1" step="1" placeholder="ej: 50">
+                <button id="svpAddM2" class="marker-btn pct-btn">+</button>
+              </div>
+            </div>
+            <div id="svpM2Tags" class="marker-tags"></div>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="svpFontSize" min="8" max="22" step="1" value="11">
+                <span id="svpFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="svp-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="svp-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="svp-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="svp-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <button id="svpExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>
           </div>
         </div>
@@ -183,23 +207,14 @@
             <div class="ctrl">
               <label>Métrica</label>
               <select id="proyMetrica">
-                <option value="ticket">Ticket UF</option>
+                <option value="vacancia">Vacancia (%)</option>
+                <option value="arriendo">Arriendo UF prom.</option>
                 <option value="ufm2">UF/m²</option>
-                <option value="util">Útil (m²)</option>
-                <option value="disp">Disponibles</option>
-                <option value="vel">Vel. Venta (un./mes)</option>
-                <option value="oferta">Oferta total proyecto</option>
-                <option value="pct">% Vendido</option>
+                <option value="stock">Stock</option>
+                <option value="disponib">Disponibilidad</option>
               </select>
             </div>
-            <div class="ctrl distrib-font-ctrl">
-              <label>Texto</label>
-              <div class="distrib-font-row">
-                <input type="range" id="proyFontSize" min="8" max="22" step="1" value="11">
-                <span id="proyFontSizeVal">11px</span>
-              </div>
-            </div>
-            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
+            <button id="proyExportPngBtn" class="primary-btn">Exportar PNG</button>
           </div>
           <div class="chart-wrap">
             <canvas id="proyChart"></canvas>
@@ -223,7 +238,7 @@
             <div class="ctrl distrib-marker-group">
               <label>Marcar precio</label>
               <div class="marker-add">
-                <input type="number" id="distribPriceInput" min="0" step="100" placeholder="ej: 4500">
+                <input type="number" id="distribPriceInput" min="0" step="1" placeholder="ej: 20">
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -292,7 +307,6 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
-  <!-- Módulos JS -->
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/multifamily/main.js"></script>
 </body>
 </html>
