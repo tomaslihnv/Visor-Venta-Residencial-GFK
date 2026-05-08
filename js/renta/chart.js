@@ -93,6 +93,21 @@ function _computeNormalFit(sortedVals, refData) {
 
 const palette = ['#1e3a5f','#2563eb','#7c3aed','#db2777','#d97706','#059669','#0891b2','#65a30d'];
 
+function _withMargin(dataUrl, m) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width + m * 2; c.height = img.height + m * 2;
+      const x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      x.drawImage(img, m, m);
+      c.toBlob(resolve, 'image/png');
+    };
+    img.src = dataUrl;
+  });
+}
+
 const fmtNum = (v, dec = 1) =>
   v == null || isNaN(v) ? '—'
   : Number(v).toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -167,12 +182,21 @@ export function populateProyectosSelectors() {
   if (proyListenersReady) return;
   proyListenersReady = true;
   $('#proyMetrica')?.addEventListener('change', renderProyectos);
-  $('#proyExportPngBtn')?.addEventListener('click', () => {
+  $('#proyExportPngBtn')?.addEventListener('click', async () => {
     if (!proyChart) return;
-    const a = document.createElement('a');
-    a.href = proyChart.toBase64Image('image/png', 1);
-    a.download = `proyectos_renta_${Date.now()}.png`;
-    a.click();
+    const btn = $('#proyExportPngBtn');
+    const prev = btn.textContent;
+    const scale = 4;
+    const origDPR = proyChart.options.devicePixelRatio ?? window.devicePixelRatio;
+    proyChart.options.devicePixelRatio = scale;
+    proyChart.resize();
+    const url = proyChart.toBase64Image('image/png', 1);
+    proyChart.options.devicePixelRatio = origDPR;
+    proyChart.resize();
+    const blob = await _withMargin(url, 64);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    btn.textContent = '¡Copiado!'; btn.disabled = true;
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
   });
 }
 
@@ -278,7 +302,7 @@ export function renderProyectos() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      layout: { padding: { top: 20 } },
+      layout: { padding: { top: 40, right: 20, bottom: 12, left: 12 } },
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: item => ` ${metric.fmt(item.raw)}` } },
@@ -286,13 +310,25 @@ export function renderProyectos() {
       scales: {
         x: { ticks: { maxRotation: 45, minRotation: 30, font: { size: 11 } } },
         y: {
-          title: { display: true, text: metric.label },
+          title: { display: false },
           ticks: { callback: v => metric.fmt(v) },
           beginAtZero: false,
         },
       },
     },
-    plugins: [barLabelsPlugin],
+    plugins: [barLabelsPlugin, {
+      id: 'yAxisHLabel',
+      afterDraw(chart) {
+        const { ctx, chartArea } = chart;
+        ctx.save();
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.fillStyle = '#666';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(metric.label, chartArea.left, chartArea.top - 22);
+        ctx.restore();
+      },
+    }],
   });
 }
 
@@ -788,11 +824,8 @@ export function populateDistribSelectors() {
 
       distribChart.options.devicePixelRatio = origDPR;
       distribChart.resize();
-
-      const res  = await fetch(url);
-      const blob = await res.blob();
+      const blob = await _withMargin(url, 64);
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-
       const prev = btn.textContent;
       btn.textContent = '¡Copiado!';
       btn.disabled = true;
@@ -855,16 +888,13 @@ function refreshMarkerTags() {
   });
 }
 
-// Curva de cuantiles: 101 puntos muestreados (P0–P100) para evitar escalones
+// Curva de cuantiles: X = percentil (0–100%), Y = valor
 function computeQuantileCurve(rows, col) {
   const vals = rows.map(r => Number(r[col])).filter(v => !isNaN(v) && v > 0);
   if (vals.length < 2) return [];
   vals.sort((a, b) => a - b);
   const n = vals.length;
-  return Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return { x: pct, y: vals[idx] };
-  });
+  return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
 }
 
 // Interpola Y dado X en la curva
@@ -966,7 +996,7 @@ export function renderDistrib() {
 
   // ── Percentiles ────────────────────────────────────────────
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
-    const price = valAtPct(pct);
+    const price = lerpAtX(refData, pct);
     if (price == null || price === 0) return;
     const priceLabel = fmtVal(price);
     // Línea vertical: desde eje X hasta la curva
@@ -1085,6 +1115,7 @@ export function renderDistrib() {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
+      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {

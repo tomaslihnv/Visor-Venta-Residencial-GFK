@@ -375,6 +375,102 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .map-placeholder h3 { margin-bottom: 10px; color: #334155; }
 
+/* Botones de selección y deshacer */
+.map-select-btn { margin-left: 4px; border-left: 1px solid #e5e7eb !important; padding-left: 12px !important; }
+.map-wrapper.dark-mode .map-select-btn { border-left-color: rgba(148,163,184,0.3) !important; }
+.map-undo-btn { color: #92400e !important; border-color: #fcd34d !important; background: #fffbeb !important; }
+.map-undo-btn:hover { background: #fef3c7 !important; }
+.map-wrapper.dark-mode .map-undo-btn { background: rgba(120,80,0,0.25) !important; color: #fcd34d !important; border-color: rgba(252,211,77,0.4) !important; }
+.map-clearpoly-btn { color: #6b7280 !important; border-color: #d1d5db !important; background: #f9fafb !important; }
+.map-clearpoly-btn:hover { background: #f1f5f9 !important; color: #374151 !important; }
+
+/* Checkbox en el panel de selección */
+.sel-check-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: #374151; cursor: pointer;
+  padding: 4px 2px;
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+  margin: 2px 0;
+}
+.sel-check-row input[type="checkbox"] { accent-color: #2563eb; width: 14px; height: 14px; cursor: pointer; }
+
+/* Widget flotante de filtros activos */
+.map-filter-widget {
+  position: absolute; z-index: 900;
+  background: rgba(255,255,255,0.97);
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.13);
+  min-width: 175px; max-width: 230px;
+  pointer-events: auto;
+}
+.mfw-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 8px;
+  background: #2E3338; color: #fff;
+  border-radius: 6px 6px 0 0;
+  cursor: grab; user-select: none;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+}
+.mfw-header:active { cursor: grabbing; }
+.mfw-close {
+  background: none; border: none; color: rgba(255,255,255,0.65);
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 0 0 0 8px;
+}
+.mfw-close:hover { color: #fff; }
+.mfw-body { padding: 6px 9px; }
+.mfw-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px; padding: 3px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.mfw-row:last-child { border-bottom: none; }
+.mfw-label { font-size: 10px; color: #64748b; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.mfw-value { font-size: 11px; color: #0f172a; font-weight: 500; text-align: right; }
+.mfw-empty { font-size: 10px; color: #9ca3af; font-style: italic; padding: 2px 0; }
+
+/* Panel flotante de selección */
+.map-sel-panel {
+  position: absolute;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  padding: 10px;
+  width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+}
+.map-sel-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 2px;
+}
+.sel-btn {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sel-btn-keep   { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+.sel-btn-keep:hover   { background: #bfdbfe; }
+.sel-btn-excl   { background: #fee2e2; color: #dc2626; border-color: #fecaca; }
+.sel-btn-excl:hover   { background: #fecaca; }
+.sel-btn-ghost  { background: transparent; color: #6b7280; border-color: #e5e7eb; }
+.sel-btn-ghost:hover  { background: #f9fafb; }
+
 /* Popup del mapa */
 .map-popup { border-collapse: collapse; font-size: 12px; }
 .map-popup tr + tr td { border-top: 1px solid #f1f5f9; }
@@ -433,7 +529,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 
 .comp-th-section {
-  background: #1e3a5f; color: #fff;
+  background: #444D54; color: #fff;
   text-align: left;
 }
 .comp-th-tipo {
@@ -455,6 +551,16 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .comp-num { text-align: right; font-variant-numeric: tabular-nums; }
 /* Left border separating tipologia groups */
 .comp-sep { border-left: 2px solid #e2e8f0; }
+/* Map pin number column */
+.comp-th-num {
+  text-align: center; width: 32px; min-width: 32px;
+  border-right: 2px solid #e2e8f0;
+}
+.comp-map-num {
+  text-align: center;
+  font-weight: 700; color: #1e3a5f;
+  border-right: 1px solid #e2e8f0;
+}
 
 /* Promedio / tfoot row */
 .comp-promedio td {

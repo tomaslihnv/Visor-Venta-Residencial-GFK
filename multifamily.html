@@ -130,6 +130,10 @@
               <div class="map-toolbar">
                 <button class="map-mode-btn active" data-mode="general">General</button>
                 <button class="map-mode-btn" data-mode="precio">De calor</button>
+                <button id="mapFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar resumen de filtros activos">&#x2263; Filtros</button>
+                <button id="mapSelectBtn" class="map-mode-btn" title="Dibuja un polígono para excluir/mantener proyectos. Esc para cancelar.">&#x2B1A; Seleccionar zona</button>
+                <button id="mapUndoBtn" class="map-mode-btn map-undo-btn hidden" title="Deshacer última acción de selección (Ctrl+Z)">&#x21A9; Deshacer</button>
+                <button id="mapClearPolyBtn" class="map-mode-btn map-clearpoly-btn hidden" title="Quitar la zona marcada del mapa">&#x2715; Limpiar zona</button>
                 <div class="heat-metric-pills hidden" id="heatMetricPills">
                   <span class="heat-metric-label">Métrica:</span>
                   <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
@@ -260,7 +264,7 @@
             <div class="ctrl distrib-font-ctrl">
               <label>Texto</label>
               <div class="distrib-font-row">
-                <input type="range" id="distribFontSize" min="8" max="22" step="1" value="11">
+                <input type="range" id="distribFontSize" min="8" max="36" step="1" value="11">
                 <span id="distribFontSizeVal">11px</span>
               </div>
             </div>

@@ -371,6 +371,21 @@ const PROY_METRICS = [
   }},
 ];
 
+function _withMargin(dataUrl, m) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width + m * 2; c.height = img.height + m * 2;
+      const x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      x.drawImage(img, m, m);
+      c.toBlob(resolve, 'image/png');
+    };
+    img.src = dataUrl;
+  });
+}
+
 export function populateProyectosSelectors() {
   const sel = $('#proyMetrica');
   if (!sel || proyListenersReady) return;
@@ -396,12 +411,9 @@ export function populateProyectosSelectors() {
     const url = proyChart.toBase64Image('image/png', 1);
     proyChart.options.devicePixelRatio = origDPR;
     proyChart.resize();
-
-    const res  = await fetch(url);
-    const blob = await res.blob();
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-
     const prev = btn.textContent;
+    const blob = await _withMargin(url, 64);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
     btn.textContent = '¡Copiado!';
     btn.disabled = true;
     setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
@@ -571,7 +583,7 @@ export function renderProyectos() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      layout: { padding: { top: 20 } },
+      layout: { padding: { top: 40, right: 20, bottom: 12, left: 12 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -584,14 +596,26 @@ export function renderProyectos() {
           grid: { display: false },
         },
         y: {
-          title: { display: true, text: metric.label, font: { size: fs } },
+          title: { display: false },
           ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
           grid: { display: false },
         },
       },
     },
-    plugins: [barLabelsPlugin, medianPlugin],
+    plugins: [barLabelsPlugin, medianPlugin, {
+      id: 'yAxisHLabel',
+      afterDraw(chart) {
+        const { ctx, chartArea } = chart;
+        ctx.save();
+        ctx.font = `${fs}px system-ui, sans-serif`;
+        ctx.fillStyle = '#666';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(metric.label, chartArea.left, chartArea.top - 22);
+        ctx.restore();
+      },
+    }],
   });
 }
 
@@ -945,10 +969,8 @@ export function populateDistribSelectors() {
       distribChart.options.devicePixelRatio = origDPR;
       distribChart.resize();
 
-      const res  = await fetch(url);
-      const blob = await res.blob();
+      const blob = await _withMargin(url, 64);
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-
       const prev = btn.textContent;
       btn.textContent = '¡Copiado!';
       btn.disabled = true;
@@ -1017,10 +1039,7 @@ function computeQuantileCurve(rows, col) {
   if (vals.length < 2) return [];
   vals.sort((a, b) => a - b);
   const n = vals.length;
-  return Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return { x: pct, y: vals[idx] };
-  });
+  return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
 }
 
 function lerpAtX(data, x) {
@@ -1117,7 +1136,7 @@ export function renderDistrib() {
 
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
     const color = pctColor;
-    const price = valAtPct(pct);
+    const price = lerpAtX(refData, pct);
     if (price == null) return;
     const priceLabel = price.toLocaleString('es-CL', { maximumFractionDigits: 0 });
     annotations[`pv_${pct}`] = {
@@ -1242,6 +1261,7 @@ export function renderDistrib() {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
+      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {

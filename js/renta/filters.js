@@ -18,6 +18,7 @@ function resolveCols() {
   cols.ufm2        = findCol(['uf/m', 'uf / m']);
   cols.renta       = findCol(['renta uf', 'precio (uf', 'precio uf', 'renta']);
   cols.gastos      = findCol(['gastos comunes', 'ggcc']);
+  cols.proyecto    = findCol(['proyecto', 'edificio', 'nombre', 'building']);
 }
 
 // ============== Estado de filtros ==============
@@ -30,9 +31,11 @@ const F = {
   ufm2Min: null, ufm2Max: null,
   rentaMin: null, rentaMax: null,
   gastosMin: null, gastosMax: null,
+  excludedProyectos: new Set(),
 };
 
 const refs = {};
+let _proyHistory = [];
 
 // ============== Construcción de filtros ==============
 export function buildFilters() {
@@ -40,6 +43,8 @@ export function buildFilters() {
 
   F.tipologia.clear(); F.corredor.clear(); F.tipo.clear(); F.comuna.clear();
   F.supMin = F.supMax = F.ufm2Min = F.ufm2Max = F.rentaMin = F.rentaMax = F.gastosMin = F.gastosMax = null;
+  F.excludedProyectos.clear();
+  _proyHistory = [];
   Object.keys(refs).forEach(k => delete refs[k]);
 
   const container = $('#filtersContainer');
@@ -192,6 +197,7 @@ export function applyFilters() {
       if (!hay.includes(state.search)) return false;
     }
 
+    if (F.excludedProyectos.size && cols.proyecto && F.excludedProyectos.has(String(row[cols.proyecto] ?? '').trim())) return false;
     if (F.tipologia.size && cols.tipologia && !F.tipologia.has(row[cols.tipologia])) return false;
     if (F.corredor.size  && cols.corredor  && !F.corredor.has(row[cols.corredor]))  return false;
     if (F.tipo.size        && cols.tipo        && !F.tipo.has(row[cols.tipo]))                       return false;
@@ -238,9 +244,10 @@ export function applyFilters() {
   if (activeTab === 'comparativa') {
     import('./comparativa.js').then(({ renderComparativa }) => renderComparativa()).catch(() => {});
   }
-  if (activeTab === 'mapa') {
-    import('./map.js').then(({ renderMap }) => renderMap()).catch(() => {});
-  }
+  import('./map.js').then(({ renderMap, updateFilterWidget }) => {
+    updateFilterWidget?.();
+    if (activeTab === 'mapa') renderMap();
+  }).catch(() => {});
 }
 
 function _updateSliderLimits() {
@@ -272,4 +279,62 @@ export function resetFilters() {
   const s = $('#searchInput');
   if (s) { s.value = ''; state.search = ''; }
   applyFilters();
+}
+
+// ============== Selección por polígono — exclusión de proyectos ==============
+
+function _saveProySnapshot() {
+  _proyHistory.push(new Set(F.excludedProyectos));
+}
+
+export function excludeProyectos(names) {
+  _saveProySnapshot();
+  for (const n of names) F.excludedProyectos.add(n);
+  applyFilters();
+}
+
+export function keepOnlyProyectos(names) {
+  _saveProySnapshot();
+  const keepSet = new Set(names.map(String));
+  F.excludedProyectos.clear();
+  const allProyectos = [...new Set(
+    state.raw.map(r => cols.proyecto ? String(r[cols.proyecto] ?? '').trim() : '').filter(Boolean)
+  )];
+  for (const n of allProyectos) {
+    if (!keepSet.has(n)) F.excludedProyectos.add(n);
+  }
+  applyFilters();
+}
+
+export function undoProyectoFilter() {
+  if (!_proyHistory.length) return false;
+  F.excludedProyectos = _proyHistory.pop();
+  applyFilters();
+  return _proyHistory.length > 0;
+}
+
+export function hasProyectoHistory() {
+  return _proyHistory.length > 0;
+}
+
+export function getActiveFiltersSummary() {
+  const items = [];
+  if (F.tipologia.size > 0) {
+    items.push({ label: 'Tipología', value: [...F.tipologia].join(', ') });
+  }
+  for (const { key, label } of [
+    { key: 'sup',   label: 'm² útil' },
+    { key: 'ufm2',  label: 'UF/m²' },
+    { key: 'renta', label: 'Renta UF' },
+  ]) {
+    const ref = refs[key];
+    if (!ref) continue;
+    const hasMin = F[`${key}Min`] !== null;
+    const hasMax = F[`${key}Max`] !== null;
+    if (!hasMin && !hasMax) continue;
+    const lo = hasMin ? ref.iMin.value : '—';
+    const hi = hasMax ? ref.iMax.value : '—';
+    items.push({ label, value: `${lo} – ${hi}` });
+  }
+  return items;
 }

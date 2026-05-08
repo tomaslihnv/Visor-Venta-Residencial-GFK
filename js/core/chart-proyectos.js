@@ -8,6 +8,21 @@ import { norm } from './utils.js';
 
 const palette = ['#1e3a5f','#2563eb','#7c3aed','#db2777','#d97706','#059669','#0891b2','#65a30d'];
 
+function _withMargin(dataUrl, m) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width + m * 2; c.height = img.height + m * 2;
+      const x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      x.drawImage(img, m, m);
+      c.toBlob(resolve, 'image/png');
+    };
+    img.src = dataUrl;
+  });
+}
+
 let _proyChart  = null;
 let _proyReady  = false;
 
@@ -22,12 +37,21 @@ export function initProyectosListeners(state, metricDefs, mp, options = {}) {
     renderProyectos(state, metricDefs, mp, options);
   });
 
-  document.getElementById(exportBtnId)?.addEventListener('click', () => {
+  document.getElementById(exportBtnId)?.addEventListener('click', async () => {
     if (!_proyChart) return;
+    const scale = 4;
+    const origDPR = _proyChart.options.devicePixelRatio ?? window.devicePixelRatio;
+    _proyChart.options.devicePixelRatio = scale;
+    _proyChart.resize();
+    const url = _proyChart.toBase64Image('image/png', 1);
+    _proyChart.options.devicePixelRatio = origDPR;
+    _proyChart.resize();
+    const blob = await _withMargin(url, 64);
     const a = document.createElement('a');
-    a.href = _proyChart.toBase64Image('image/png', 1);
+    a.href = URL.createObjectURL(blob);
     a.download = `proyectos_${Date.now()}.png`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 }
 
@@ -128,7 +152,7 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      layout: { padding: { top: 20 } },
+      layout: { padding: { top: 40, right: 20, bottom: 12, left: 12 } },
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: item => ` ${metric.fmt(item.raw)}` } },
@@ -136,12 +160,24 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
       scales: {
         x: { ticks: { maxRotation: 45, minRotation: 30, font: { size: 11 } } },
         y: {
-          title: { display: true, text: metric.label },
+          title: { display: false },
           ticks: { callback: v => metric.fmt(v) },
           beginAtZero: false,
         },
       },
     },
-    plugins: [barLabelsPlugin],
+    plugins: [barLabelsPlugin, {
+      id: 'yAxisHLabel',
+      afterDraw(chart) {
+        const { ctx, chartArea } = chart;
+        ctx.save();
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.fillStyle = '#666';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(metric.label, chartArea.left, chartArea.top - 22);
+        ctx.restore();
+      },
+    }],
   });
 }

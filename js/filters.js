@@ -138,6 +138,11 @@ function _buildMulti(key, colName, label, container, fmtFn = fmt, searchable = f
     checkboxes.push(cb);
   }
 
+  if (key === 'edificio') {
+    refs.edificioCbs  = checkboxes;
+    refs.edificioVals = vals;
+  }
+
   group.appendChild(multi);
   container.appendChild(group);
 }
@@ -354,9 +359,10 @@ export function applyFilters() {
   if (activeTab === 'comparativa') {
     import('./comparativa.js').then(({ renderComparativa }) => renderComparativa());
   }
-  if (activeTab === 'mapa') {
-    import('./map.js').then(({ renderMap }) => renderMap());
-  }
+  import('./map.js').then(({ renderMap, updateFilterWidget }) => {
+    updateFilterWidget?.();
+    if (activeTab === 'mapa') renderMap();
+  });
 }
 
 // Actualiza los límites dinámicamente al cambiar otros filtros
@@ -391,4 +397,78 @@ export function resetFilters() {
   const s = $('#searchInput');
   if (s) { s.value = ''; state.search = ''; }
   applyFilters();
+}
+
+// ============== Manipulación programática del filtro Edificio ==============
+const _edificioHistory = [];
+
+function _saveEdificioSnapshot() {
+  if (!refs.edificioCbs) return;
+  _edificioHistory.push(refs.edificioCbs.map(cb => cb.checked));
+}
+
+function _syncEdificioFilter() {
+  const cbs  = refs.edificioCbs;
+  const vals = refs.edificioVals ?? [];
+  if (!cbs) return;
+  const checked = cbs.filter(c => c.checked).map(c => c._realVal);
+  F.edificio.clear();
+  if (checked.length < vals.length) checked.forEach(v => F.edificio.add(v));
+  applyFilters();
+}
+
+export function excludeEdificios(names) {
+  const cbs = refs.edificioCbs;
+  if (!cbs) return;
+  _saveEdificioSnapshot();
+  const toExclude = new Set(names.map(String));
+  for (const cb of cbs) {
+    if (toExclude.has(String(cb._realVal))) cb.checked = false;
+  }
+  _syncEdificioFilter();
+}
+
+export function keepOnlyEdificios(names) {
+  const cbs = refs.edificioCbs;
+  if (!cbs) return;
+  _saveEdificioSnapshot();
+  const toKeep = new Set(names.map(String));
+  for (const cb of cbs) {
+    cb.checked = toKeep.has(String(cb._realVal));
+  }
+  _syncEdificioFilter();
+}
+
+export function undoEdificioFilter() {
+  if (!_edificioHistory.length || !refs.edificioCbs) return false;
+  const prev = _edificioHistory.pop();
+  refs.edificioCbs.forEach((cb, i) => { cb.checked = prev[i]; });
+  _syncEdificioFilter();
+  return _edificioHistory.length > 0;
+}
+
+export function hasEdificioHistory() {
+  return _edificioHistory.length > 0;
+}
+
+export function getActiveFiltersSummary() {
+  const items = [];
+
+  if (F.tipologia.size > 0)
+    items.push({ label: 'Tipología', value: [...F.tipologia].map(fmtTipo).join(', ') });
+
+  const sliders = [
+    { key: 'sup',    label: 'm² útil',   minKey: 'supMin',    maxKey: 'supMax'    },
+    { key: 'ufm2',   label: 'UF/m²',     minKey: 'ufm2Min',   maxKey: 'ufm2Max'   },
+    { key: 'ticket', label: 'Ticket UF', minKey: 'ticketMin', maxKey: 'ticketMax' },
+  ];
+  for (const s of sliders) {
+    if (F[s.minKey] !== null || F[s.maxKey] !== null) {
+      const ref = refs[s.key];
+      const lo  = ref ? ref.lblMin.textContent : String(F[s.minKey] ?? '—');
+      const hi  = ref ? ref.lblMax.textContent : String(F[s.maxKey] ?? '—');
+      items.push({ label: s.label, value: `${lo} – ${hi}` });
+    }
+  }
+  return items;
 }

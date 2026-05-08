@@ -164,6 +164,9 @@ function _applyRaw(state) {
       const hay = Object.values(row).map(v => String(v).toLowerCase()).join(' ');
       if (!hay.includes(state.search)) return false;
     }
+    if (state.excludedProjects?.size && state._projCol) {
+      if (state.excludedProjects.has(String(row[state._projCol] ?? '').trim())) return false;
+    }
     for (const def of defs) {
       const colName = state.filterCols[def.key];
       if (!colName) continue;
@@ -189,6 +192,10 @@ function _applyRaw(state) {
 export function applyFilters(filterDefs, state, onChange) {
   state._filterDefs = filterDefs;
   if (onChange) state._onChange = onChange;
+  _applyAndNotify(state);
+}
+
+export function reapplyFilters(state) {
   _applyAndNotify(state);
 }
 
