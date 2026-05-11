@@ -86,8 +86,8 @@ export function buildFilters() {
   if (cols.tipologia)    _buildMulti('tipologia',     cols.tipologia,    'Tipología',                                    container, fmtTipo);
   if (cols.superficie && cols.tipologia) _buildSupTipo('sup', cols.superficie, cols.tipologia, '<span class="keep-case">m</span>² útil', container);
   else if (cols.superficie) _buildSlider('sup', cols.superficie, '<span class="keep-case">m</span>² útil', container);
-  if (cols.ufm2)         _buildSlider('ufm2',         cols.ufm2,         'UF/<span class="keep-case">m</span>²',         container);
-  if (cols.ticket)       _buildSlider('ticket',       cols.ticket,       'Ticket UF',                                    container);
+  if (cols.ufm2)         _buildMinMax('ufm2',         cols.ufm2,         'UF/<span class="keep-case">m</span>²',         container);
+  if (cols.ticket)       _buildMinMax('ticket',       cols.ticket,       'Ticket UF',                                    container);
   if (cols.edificio)     _buildMulti('edificio',      cols.edificio,     'Edificio',                                     container, fmt, true);
   if (cols.propietario)  _buildMulti('propietario',   cols.propietario,  'Propietario',                                  container);
   if (cols.estado)       _buildMulti('estado',        cols.estado,       'Estado',                                       container);
@@ -263,6 +263,66 @@ function _buildSupTipo(key, supCol, tipoCol, label, container) {
   group.appendChild(grid);
   container.appendChild(group);
   refs[key] = { type: 'tipo-range', colName: supCol };
+}
+
+// --- Min / Max inputs simples ---
+function _buildMinMax(key, colName, label, container) {
+  const nums = state.raw.map(r => Number(r[colName])).filter(v => !isNaN(v));
+  if (!nums.length) return;
+  const dMin = Math.floor(Math.min(...nums));
+  const dMax = Math.ceil(Math.max(...nums));
+
+  const fmtNum = v => Math.round(v).toLocaleString('es-CL');
+  const parseNum = s => { const n = parseInt(String(s).replace(/[^\d]/g, ''), 10); return isNaN(n) ? null : n; };
+
+  const group = document.createElement('div');
+  group.className = 'filter-group';
+  group.innerHTML = `<label class="title">${label}</label>`;
+
+  const row = document.createElement('div');
+  row.className = 'sup-tipo-row';
+
+  const minLbl = document.createElement('span');
+  minLbl.className = 'sup-tipo-minmax-label';
+  minLbl.textContent = 'min';
+
+  const iMin = document.createElement('input');
+  iMin.type = 'text'; iMin.className = 'sup-tipo-input minmax-wide';
+  iMin.value = fmtNum(dMin);
+
+  const maxLbl = document.createElement('span');
+  maxLbl.className = 'sup-tipo-minmax-label';
+  maxLbl.textContent = 'max';
+
+  const iMax = document.createElement('input');
+  iMax.type = 'text'; iMax.className = 'sup-tipo-input minmax-wide';
+  iMax.value = fmtNum(dMax);
+
+  row.append(minLbl, iMin, maxLbl, iMax);
+  group.appendChild(row);
+  container.appendChild(group);
+
+  refs[key] = { type: 'minmax', inMin: iMin, inMax: iMax, colName, dMin, dMax, fmtNum };
+
+  const onChange = debounce(() => {
+    F[`${key}Min`] = parseNum(iMin.value);
+    F[`${key}Max`] = parseNum(iMax.value);
+    applyFilters();
+  }, 350);
+  iMin.addEventListener('input', onChange);
+  iMax.addEventListener('input', onChange);
+  iMin.addEventListener('blur', () => {
+    const n = parseNum(iMin.value);
+    if (n === null) { iMin.value = fmtNum(refs[key].dMin); F[`${key}Min`] = null; applyFilters(); }
+    else iMin.value = fmtNum(n);
+  });
+  iMax.addEventListener('blur', () => {
+    const n = parseNum(iMax.value);
+    if (n === null) { iMax.value = fmtNum(refs[key].dMax); F[`${key}Max`] = null; applyFilters(); }
+    else iMax.value = fmtNum(n);
+  });
+  iMin.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+  iMax.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 }
 
 // --- Slider dual ---
@@ -475,6 +535,9 @@ function _updateRangeLimits() {
         ref.sMax.min = newMin; ref.sMax.max = newMax; ref.sMax.value = newMax;
         ref.updateFill();
       }
+    } else if (ref.type === 'minmax') {
+      if (F[`${key}Min`] === null) { ref.inMin.value = ref.fmtNum(newMin); ref.dMin = newMin; }
+      if (F[`${key}Max`] === null) { ref.inMax.value = ref.fmtNum(newMax); ref.dMax = newMax; }
     } else {
       if (!ref.inMin.value) ref.inMin.placeholder = String(newMin);
       if (!ref.inMax.value) ref.inMax.placeholder = String(newMax);
@@ -570,8 +633,14 @@ export function getActiveFiltersSummary() {
   for (const s of sliders) {
     if (F[s.minKey] !== null || F[s.maxKey] !== null) {
       const ref = refs[s.key];
-      const lo  = ref ? ref.lblMin.textContent : String(F[s.minKey] ?? '—');
-      const hi  = ref ? ref.lblMax.textContent : String(F[s.maxKey] ?? '—');
+      let lo, hi;
+      if (ref?.type === 'minmax') {
+        lo = ref.fmtNum(F[s.minKey] ?? ref.dMin);
+        hi = ref.fmtNum(F[s.maxKey] ?? ref.dMax);
+      } else {
+        lo = ref ? ref.lblMin.textContent : String(F[s.minKey] ?? '—');
+        hi = ref ? ref.lblMax.textContent : String(F[s.maxKey] ?? '—');
+      }
       items.push({ label: s.label, value: `${lo} – ${hi}` });
     }
   }

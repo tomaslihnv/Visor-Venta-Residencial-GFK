@@ -180,6 +180,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   text-align: center;
 }
 .sup-tipo-input:focus { outline: none; border-bottom-color: #3b82f6; }
+.minmax-wide { width: 74px; }
 
 /* ========== Mapa ========== */
 .map-wrapper {
