@@ -272,7 +272,7 @@ const PROY_UNITS = { ticket: 'UF', ufm2: 'UF/m²', util: 'm²', disp: 'un.', vel
 const PROY_METRICS = [
   { id: 'ticket', label: 'Ticket UF',            keys: ['ticket'],                      agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'ufm2',   label: 'UF/m²',               keys: ['uf/m', 'uf / m'],              agg: 'avg', fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
-  { id: 'util',   label: 'Útil (m²)',            keys: ['útil', 'util', 'vendible'],    agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
+  { id: 'util',   label: 'Útil (m²)',            keys: ['útil', 'util', 'vendible'],    agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'disp',   label: 'Disponibles',          keys: ['disponib'],                    agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'vel',    label: 'Vel. Venta (un./mes)', keys: ['vel. venta', 'vel venta'],     agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
   { id: 'oferta', label: 'Oferta total proyecto',keys: ['oferta total', 'oferta'],      agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
@@ -1032,6 +1032,11 @@ export function populateDistribSelectors() {
       });
     }
 
+    document.querySelector('.distrib-mp-btn')?.addEventListener('click', () => {
+      document.querySelector('.distrib-mp-btn').classList.toggle('active');
+      renderDistrib();
+    });
+
     $('#distribExportPngBtn')?.addEventListener('click', async () => {
       if (!distribChart) return;
       const btn = $('#distribExportPngBtn');
@@ -1236,7 +1241,8 @@ export function renderDistrib() {
   });
 
   // Mi Proyecto annotations
-  if (mp.inDistrib && mp.tipologias.length > 0) {
+  const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
+  if (showMpDistrib && mp.inDistrib && mp.tipologias.length > 0) {
     const normFn  = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
     const nc      = normFn(col);
     const isUfm2   = nc.includes('uf/m') || nc.includes('uf / m');
