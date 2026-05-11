@@ -572,11 +572,26 @@ export function renderProyectos() {
 let svpListenersReady = false;
 
 export function populateSvpSelectors() {
-  if (!$('#svpTrendToggle')) return;
+  if (!$('#svpExportPngBtn')) return;
 
   if (!svpListenersReady) {
     svpListenersReady = true;
-    $('#svpTrendToggle')?.addEventListener('change', renderSupVsPrecio);
+
+    const toggle = (sel, re) => document.querySelectorAll(sel).forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll(sel).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (re) renderSupVsPrecio();
+      });
+    });
+    toggle('.svp-tend-btn', true);
+    toggle('.svp-pred-btn', false); // solo re-dibuja el canvas, no recrea el chart
+
+    // svp-pred-btn no necesita recrear el chart — fuerza un redibujado manual
+    document.querySelectorAll('.svp-pred-btn').forEach(btn => {
+      btn.addEventListener('click', () => { state.chart?.update(); });
+    });
+
     $('#svpExportPngBtn')?.addEventListener('click', () => {
       if (!state.chart) return;
       const a = document.createElement('a');
@@ -660,12 +675,13 @@ export function renderSupVsPrecio() {
     : null;
 
   // Mi Proyecto dataset (se construye primero para que aparezca primero en la leyenda)
+  let mpFiltered = [];
   const mpDatasets = [];
   if (mp.inSvp && mp.tipologias.length > 0) {
     const mpColor = '#1e293b';
     const mpName  = mp.edificio || mp.propietario || 'Mi Proyecto';
     const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.ufm2 != null);
-    const mpFiltered = activeTipos
+    mpFiltered = activeTipos
       ? mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)))
       : mpTipos;
 
@@ -732,7 +748,7 @@ export function renderSupVsPrecio() {
   // ── Regresión lineal sobre todos los puntos comparables ──
   const allCompPts = compDatasets.flatMap(ds => ds.data);
   let reg = null;
-  const showTrend = $('#svpTrendToggle')?.checked ?? true;
+  const showTrend = (document.querySelector('.svp-tend-btn.active')?.dataset.show ?? '1') === '1';
   if (showTrend && allCompPts.length >= 3) {
     reg = linearRegression(allCompPts);
     if (reg) {
@@ -780,10 +796,66 @@ export function renderSupVsPrecio() {
     },
   };
 
+  // Plugin: predicción de la regresión para cada tipología de Mi Proyecto
+  const svpMpPredPlugin = {
+    id: 'svpMpPred',
+    afterDraw(chart) {
+      const showPred = (document.querySelector('.svp-pred-btn.active')?.dataset.show ?? '1') === '1';
+      if (!reg || !mpFiltered.length || !showPred) return;
+      const { ctx: c, scales, chartArea: ca } = chart;
+      c.save();
+      for (const t of mpFiltered) {
+        const predY   = reg.m * t.sup + reg.b;
+        const px      = scales.x.getPixelForValue(t.sup);
+        const pyPred  = scales.y.getPixelForValue(predY);
+        const pyReal  = scales.y.getPixelForValue(t.ufm2);
+        if (px < ca.left || px > ca.right || pyPred < ca.top || pyPred > ca.bottom) continue;
+
+        // Línea vertical punteada del punto real al predicho
+        c.setLineDash([4, 3]);
+        c.strokeStyle = '#64748b';
+        c.lineWidth = 1.2;
+        c.beginPath();
+        c.moveTo(px, Math.min(Math.max(pyReal, ca.top), ca.bottom));
+        c.lineTo(px, pyPred);
+        c.stroke();
+        c.setLineDash([]);
+
+        // Cruz (×) en la regresión
+        const r = 5;
+        c.strokeStyle = '#ef4444';
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(px - r, pyPred - r); c.lineTo(px + r, pyPred + r);
+        c.moveTo(px + r, pyPred - r); c.lineTo(px - r, pyPred + r);
+        c.stroke();
+
+        // Caja con el valor predicho
+        const label = `${fmtTipo(t.nombre)}: ${predY.toLocaleString('es-CL', { maximumFractionDigits: 0 })} UF/m²`;
+        c.font = 'bold 11px system-ui, sans-serif';
+        const tw = c.measureText(label).width;
+        const pad = 5, bh = 18;
+        let lx = px + 10;
+        if (lx + tw + pad * 2 > ca.right) lx = px - tw - pad * 2 - 10;
+        const ly = pyPred - bh / 2;
+        c.fillStyle = 'rgba(255,255,255,0.95)';
+        c.fillRect(lx, ly, tw + pad * 2, bh);
+        c.strokeStyle = '#ef4444';
+        c.lineWidth = 1;
+        c.strokeRect(lx, ly, tw + pad * 2, bh);
+        c.fillStyle = '#ef4444';
+        c.textAlign = 'left';
+        c.textBaseline = 'middle';
+        c.fillText(label, lx + pad, ly + bh / 2);
+      }
+      c.restore();
+    },
+  };
+
   state.chart = new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
-    plugins: [svpR2Plugin],
+    plugins: [svpR2Plugin, svpMpPredPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,

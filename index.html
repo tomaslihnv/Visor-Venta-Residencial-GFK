@@ -164,10 +164,20 @@
         <!-- TAB: SUP. VS PRECIO -->
         <div class="tab-panel" data-panel="svp">
           <div class="chart-controls">
-            <label class="toggle-check">
-              <input type="checkbox" id="svpTrendToggle" checked />
-              <span>Línea de tendencia</span>
-            </label>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Tendencia</label>
+              <div class="distrib-ratio-row">
+                <button class="svp-tend-btn" data-show="1">Mostrar</button>
+                <button class="svp-tend-btn active" data-show="0">Ocultar</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Predicción MP</label>
+              <div class="distrib-ratio-row">
+                <button class="svp-pred-btn" data-show="1">Mostrar</button>
+                <button class="svp-pred-btn active" data-show="0">Ocultar</button>
+              </div>
+            </div>
             <button id="svpExportPngBtn" class="primary-btn">Exportar PNG</button>
           </div>
           <div class="chart-wrap">
