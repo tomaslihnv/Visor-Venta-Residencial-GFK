@@ -698,7 +698,7 @@ export function renderSupVsPrecio() {
     }
   }
 
-  // Comparables: un punto por fila (sin promediar sub-tipologías)
+  // Muestras: un punto por fila, coloreado por tipología pero un solo ítem en la leyenda
   const compDatasets = [];
   if (tipoCol) {
     const tipoGroups = {};
@@ -711,17 +711,18 @@ export function renderSupVsPrecio() {
       if (!tipoGroups[tipo]) tipoGroups[tipo] = [];
       tipoGroups[tipo].push({ x: sup, y: ufm2, label: edif });
     }
-    Object.keys(tipoGroups).sort().forEach((tipo, i) => {
-      const hex = palette[i % palette.length];
-      compDatasets.push({
-        label: `Comparables ${tipo}`,
-        data: tipoGroups[tipo],
-        backgroundColor: hex + 'AA',
-        borderColor: hex,
-        borderWidth: 1,
-        pointRadius: 5,
-        pointHoverRadius: 7,
-      });
+    const allPts = [];
+    Object.keys(tipoGroups).sort().forEach(tipo => {
+      for (const pt of tipoGroups[tipo]) allPts.push(pt);
+    });
+    compDatasets.push({
+      label: 'Muestras',
+      data: allPts,
+      backgroundColor: palette[0] + 'AA',
+      borderColor: palette[0],
+      borderWidth: 1,
+      pointRadius: 5,
+      pointHoverRadius: 7,
     });
   } else {
     const pts = [];
@@ -733,7 +734,7 @@ export function renderSupVsPrecio() {
       pts.push({ x: sup, y: ufm2, label: edif });
     }
     compDatasets.push({
-      label: 'Comparables',
+      label: 'Muestras',
       data: pts,
       backgroundColor: palette[0] + 'AA',
       borderColor: palette[0],
