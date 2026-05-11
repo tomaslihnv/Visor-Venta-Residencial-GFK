@@ -25,7 +25,7 @@ const F = {
   propietario:  new Set(),
   edificio:     new Set(),
   tipologia:    new Set(),
-  supMin: null, supMax: null,
+  supMin: null, supMax: null, supRanges: {},
   ticketMin: null, ticketMax: null,
   ufm2Min: null, ufm2Max: null,
   estado:       new Set(),
@@ -76,6 +76,7 @@ export function buildFilters() {
 
   F.propietario.clear(); F.edificio.clear(); F.tipologia.clear();
   F.supMin = F.supMax = F.ticketMin = F.ticketMax = F.ufm2Min = F.ufm2Max = null;
+  F.supRanges = {};
   F.estado.clear(); F.fechaEntrega.clear();
   Object.keys(refs).forEach(k => delete refs[k]);
 
@@ -83,7 +84,8 @@ export function buildFilters() {
   container.innerHTML = '';
 
   if (cols.tipologia)    _buildMulti('tipologia',     cols.tipologia,    'Tipología',                                    container, fmtTipo);
-  if (cols.superficie)   _buildSlider('sup',          cols.superficie,   '<span class="keep-case">m</span>² útil',       container);
+  if (cols.superficie && cols.tipologia) _buildSupTipo('sup', cols.superficie, cols.tipologia, '<span class="keep-case">m</span>² útil', container);
+  else if (cols.superficie) _buildSlider('sup', cols.superficie, '<span class="keep-case">m</span>² útil', container);
   if (cols.ufm2)         _buildSlider('ufm2',         cols.ufm2,         'UF/<span class="keep-case">m</span>²',         container);
   if (cols.ticket)       _buildSlider('ticket',       cols.ticket,       'Ticket UF',                                    container);
   if (cols.edificio)     _buildMulti('edificio',      cols.edificio,     'Edificio',                                     container, fmt, true);
@@ -183,6 +185,81 @@ function _buildRange(key, colName, label, unit, container) {
   }, 250);
   inMin.addEventListener('input', onChange);
   inMax.addEventListener('input', onChange);
+}
+
+// --- Rango por tipología ---
+function _buildSupTipo(key, supCol, tipoCol, label, container) {
+  const tipoMap = {};
+  for (const r of state.raw) {
+    const tipo = fmtTipo(r[tipoCol]);
+    const v = Number(r[supCol]);
+    if (!tipo || isNaN(v) || v <= 0) continue;
+    if (!tipoMap[tipo]) tipoMap[tipo] = [];
+    tipoMap[tipo].push(v);
+  }
+  const tipos = Object.keys(tipoMap).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  if (!tipos.length) return;
+
+  F.supRanges = {};
+  const defaults = {};
+  for (const tipo of tipos) {
+    const vals = tipoMap[tipo];
+    defaults[tipo] = { dMin: Math.floor(Math.min(...vals)), dMax: Math.ceil(Math.max(...vals)) };
+    F.supRanges[tipo] = { min: null, max: null };
+  }
+
+  const group = document.createElement('div');
+  group.className = 'filter-group';
+  group.innerHTML = `<label class="title">${label}</label>`;
+
+  const grid = document.createElement('div');
+  grid.className = 'sup-tipo-grid';
+
+  for (const tipo of tipos) {
+    const { dMin, dMax } = defaults[tipo];
+    const row = document.createElement('div');
+    row.className = 'sup-tipo-row';
+
+    const tipoLbl = document.createElement('span');
+    tipoLbl.className = 'sup-tipo-label';
+    tipoLbl.textContent = tipo;
+
+    const minLbl = document.createElement('span');
+    minLbl.className = 'sup-tipo-minmax-label';
+    minLbl.textContent = 'min';
+
+    const iMin = document.createElement('input');
+    iMin.type = 'number'; iMin.className = 'sup-tipo-input';
+    iMin.value = dMin; iMin.step = 1;
+
+    const maxLbl = document.createElement('span');
+    maxLbl.className = 'sup-tipo-minmax-label';
+    maxLbl.textContent = 'max';
+
+    const iMax = document.createElement('input');
+    iMax.type = 'number'; iMax.className = 'sup-tipo-input';
+    iMax.value = dMax; iMax.step = 1;
+
+    row.append(tipoLbl, minLbl, iMin, maxLbl, iMax);
+    grid.appendChild(row);
+
+    const onChange = debounce(() => {
+      const lo = iMin.value.trim() === '' ? null : Number(iMin.value);
+      const hi = iMax.value.trim() === '' ? null : Number(iMax.value);
+      F.supRanges[tipo] = { min: lo, max: hi };
+      applyFilters();
+    }, 250);
+    iMin.addEventListener('input', onChange);
+    iMax.addEventListener('input', onChange);
+    iMin.addEventListener('blur', () => { if (iMin.value.trim() === '') { iMin.value = dMin; F.supRanges[tipo].min = null; applyFilters(); } });
+    iMax.addEventListener('blur', () => { if (iMax.value.trim() === '') { iMax.value = dMax; F.supRanges[tipo].max = null; applyFilters(); } });
+    iMin.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+    iMax.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+  }
+
+  group.appendChild(grid);
+  container.appendChild(group);
+  refs[key] = { type: 'tipo-range', colName: supCol };
 }
 
 // --- Slider dual ---
@@ -320,9 +397,19 @@ export function applyFilters() {
     if (F.edificio.size     && cols.edificio     && !F.edificio.has(row[cols.edificio]))         return false;
     if (F.tipologia.size    && cols.tipologia    && !F.tipologia.has(row[cols.tipologia]))       return false;
     if (cols.superficie) {
-      const v = Number(row[cols.superficie]);
-      if (F.supMin !== null && (isNaN(v) || v < F.supMin)) return false;
-      if (F.supMax !== null && (isNaN(v) || v > F.supMax)) return false;
+      if (Object.keys(F.supRanges).length) {
+        const tipo = cols.tipologia ? fmtTipo(row[cols.tipologia]) : null;
+        const range = tipo ? F.supRanges[tipo] : null;
+        if (range) {
+          const v = Number(row[cols.superficie]);
+          if (range.min !== null && (isNaN(v) || v < range.min)) return false;
+          if (range.max !== null && (isNaN(v) || v > range.max)) return false;
+        }
+      } else {
+        const v = Number(row[cols.superficie]);
+        if (F.supMin !== null && (isNaN(v) || v < F.supMin)) return false;
+        if (F.supMax !== null && (isNaN(v) || v > F.supMax)) return false;
+      }
     }
     if (cols.ticket) {
       const v = Number(row[cols.ticket]);
@@ -376,6 +463,7 @@ function _updateRangeLimits() {
     const newMin = Math.floor(Math.min(...nums));
     const newMax = Math.ceil(Math.max(...nums));
 
+    if (ref.type === 'tipo-range') continue;
     if (ref.type === 'slider') {
       const noUserFilter = F[`${key}Min`] === null && F[`${key}Max`] === null;
       if (noUserFilter) {
