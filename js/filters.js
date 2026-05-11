@@ -204,8 +204,10 @@ function _buildSupTipo(key, supCol, tipoCol, label, container) {
   const defaults = {};
   for (const tipo of tipos) {
     const vals = tipoMap[tipo];
-    defaults[tipo] = { dMin: Math.floor(Math.min(...vals)), dMax: Math.ceil(Math.max(...vals)) };
-    F.supRanges[tipo] = { min: null, max: null };
+    const dMin = Math.floor(Math.min(...vals));
+    const dMax = Math.ceil(Math.max(...vals));
+    defaults[tipo] = { dMin, dMax };
+    F.supRanges[tipo] = { min: null, max: null, dMin, dMax };
   }
 
   const group = document.createElement('div');
@@ -246,7 +248,8 @@ function _buildSupTipo(key, supCol, tipoCol, label, container) {
     const onChange = debounce(() => {
       const lo = iMin.value.trim() === '' ? null : Number(iMin.value);
       const hi = iMax.value.trim() === '' ? null : Number(iMax.value);
-      F.supRanges[tipo] = { min: lo, max: hi };
+      F.supRanges[tipo].min = lo;
+      F.supRanges[tipo].max = hi;
       applyFilters();
     }, 250);
     iMin.addEventListener('input', onChange);
@@ -545,8 +548,22 @@ export function getActiveFiltersSummary() {
   if (F.tipologia.size > 0)
     items.push({ label: 'Tipología', value: [...F.tipologia].map(fmtTipo).join(', ') });
 
+  if (Object.keys(F.supRanges).length) {
+    for (const [tipo, range] of Object.entries(F.supRanges)) {
+      if (range.min !== null || range.max !== null) {
+        const lo = range.min ?? range.dMin;
+        const hi = range.max ?? range.dMax;
+        items.push({ label: `m² ${tipo}`, value: `${lo} – ${hi}` });
+      }
+    }
+  } else if (F.supMin !== null || F.supMax !== null) {
+    const ref = refs.sup;
+    const lo  = ref ? ref.lblMin.textContent : String(F.supMin ?? '—');
+    const hi  = ref ? ref.lblMax.textContent : String(F.supMax ?? '—');
+    items.push({ label: 'm² útil', value: `${lo} – ${hi}` });
+  }
+
   const sliders = [
-    { key: 'sup',    label: 'm² útil',   minKey: 'supMin',    maxKey: 'supMax'    },
     { key: 'ufm2',   label: 'UF/m²',     minKey: 'ufm2Min',   maxKey: 'ufm2Max'   },
     { key: 'ticket', label: 'Ticket UF', minKey: 'ticketMin', maxKey: 'ticketMax' },
   ];
