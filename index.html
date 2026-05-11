@@ -203,9 +203,25 @@
                 <span id="proyFontSizeVal">11px</span>
               </div>
             </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="proy-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="proy-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="proy-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Eje X</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-xrot-btn active" data-rot="diagonal">Diagonal</button>
+                <button class="proy-xrot-btn" data-rot="vertical">Vertical</button>
+              </div>
+            </div>
             <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="proyWrap">
             <canvas id="proyChart"></canvas>
           </div>
         </div>

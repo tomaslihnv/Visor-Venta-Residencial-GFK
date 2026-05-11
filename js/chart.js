@@ -312,13 +312,37 @@ export function populateProyectosSelectors() {
     });
   }
 
+  document.querySelectorAll('.proy-ratio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-ratio-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.proy-xrot-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-xrot-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProyectos();
+    });
+  });
+
   $('#proyExportPngBtn')?.addEventListener('click', async () => {
     if (!proyChart) return;
     const btn = $('#proyExportPngBtn');
     const scale = 4;
+    const pad = 32;
+    const wrap = $('#proyWrap');
+    const ratio = document.querySelector('.proy-ratio-btn.active')?.dataset.ratio ?? 'auto';
+
     const origDPR = proyChart.options.devicePixelRatio ?? window.devicePixelRatio;
+    const exportW = wrap.clientWidth - pad;
+    const exportH = ratio === 'auto'
+      ? proyChart.height
+      : Math.round(exportW / parseFloat(ratio));
+
     proyChart.options.devicePixelRatio = scale;
-    proyChart.resize();
+    proyChart.resize(exportW, exportH);
     const url = proyChart.toBase64Image('image/png', 1);
     proyChart.options.devicePixelRatio = origDPR;
     proyChart.resize();
@@ -349,6 +373,9 @@ export function renderProyectos() {
   if (!edifCol || !metricCol) return;
 
   const fs = parseInt($('#proyFontSize')?.value ?? '11');
+  const xRot = document.querySelector('.proy-xrot-btn.active')?.dataset.rot ?? 'diagonal';
+  const xMaxRot = xRot === 'vertical' ? 90 : 45;
+  const xMinRot = xRot === 'vertical' ? 90 : 30;
 
   if (proyChart) { proyChart.destroy(); proyChart = null; }
   const ctx = $('#proyChart').getContext('2d');
@@ -503,7 +530,7 @@ export function renderProyectos() {
       },
       scales: {
         x: {
-          ticks: { maxRotation: 45, minRotation: 30, font: { size: fs } },
+          ticks: { maxRotation: xMaxRot, minRotation: xMinRot, font: { size: fs } },
           grid: { display: false },
         },
         y: {
@@ -1009,8 +1036,8 @@ export function renderDistrib() {
 
   // Construir anotaciones
   const annotations = {};
-  const pctColor   = '#ef4444';
-  const priceColor = '#ef4444';
+  const pctColor   = '#6b7280';
+  const priceColor = '#6b7280';
 
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
     const color = pctColor;
@@ -1075,7 +1102,7 @@ export function renderDistrib() {
       }
     }
 
-    const mpColor = '#1e3a5f';
+    const mpColor = '#ef4444';
     mpTipos.forEach(t => {
       let val = null;
       if (isUfm2)        val = t.ufm2;
