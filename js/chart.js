@@ -572,25 +572,10 @@ export function renderProyectos() {
 let svpListenersReady = false;
 
 export function populateSvpSelectors() {
-  const tipoSel = $('#svpTipoFilter');
-  if (!tipoSel) return;
-
-  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-  const tipoCol = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k)));
-
-  tipoSel.innerHTML = '<option value="">Todas</option>';
-  if (tipoCol) {
-    const tipos = [...new Set(state.raw.map(r => r[tipoCol.name]).filter(Boolean))].sort();
-    for (const t of tipos) {
-      const o = document.createElement('option');
-      o.value = t; o.textContent = t;
-      tipoSel.appendChild(o);
-    }
-  }
+  if (!$('#svpTrendToggle')) return;
 
   if (!svpListenersReady) {
     svpListenersReady = true;
-    tipoSel.addEventListener('change', renderSupVsPrecio);
     $('#svpTrendToggle')?.addEventListener('change', renderSupVsPrecio);
     $('#svpExportPngBtn')?.addEventListener('click', () => {
       if (!state.chart) return;
@@ -662,17 +647,17 @@ export function renderSupVsPrecio() {
   if (state.chart) { state.chart.destroy(); state.chart = null; }
   const ctx = $('#svpChart').getContext('2d');
 
-  const tipoFilter = $('#svpTipoFilter')?.value ?? '';
-
   const fmtTipo = v => {
     const s = String(v ?? '').trim();
     return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
   };
 
-  let rows = state.filtered;
-  if (tipoFilter) {
-    rows = rows.filter(r => tipoCol && String(r[tipoCol.name] ?? '') === tipoFilter);
-  }
+  const rows = state.filtered;
+
+  // Tipologías activas según state.filtered (respeta el filtro del sidebar)
+  const activeTipos = tipoCol
+    ? new Set(rows.map(r => fmtTipo(r[tipoCol.name])).filter(Boolean))
+    : null;
 
   // Mi Proyecto dataset (se construye primero para que aparezca primero en la leyenda)
   const mpDatasets = [];
@@ -680,8 +665,8 @@ export function renderSupVsPrecio() {
     const mpColor = '#1e293b';
     const mpName  = mp.edificio || mp.propietario || 'Mi Proyecto';
     const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.ufm2 != null);
-    const mpFiltered = tipoFilter
-      ? mpTipos.filter(t => fmtTipo(t.nombre) === fmtTipo(tipoFilter))
+    const mpFiltered = activeTipos
+      ? mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)))
       : mpTipos;
 
     if (mpFiltered.length > 0) {
@@ -699,7 +684,7 @@ export function renderSupVsPrecio() {
 
   // Comparables: un punto por fila (sin promediar sub-tipologías)
   const compDatasets = [];
-  if (tipoCol && !tipoFilter) {
+  if (tipoCol) {
     const tipoGroups = {};
     for (const r of rows) {
       const sup  = Number(r[supCol.name]);
@@ -731,9 +716,8 @@ export function renderSupVsPrecio() {
       const edif = edifCol ? String(r[edifCol.name] ?? '—') : '—';
       pts.push({ x: sup, y: ufm2, label: edif });
     }
-    const tipo = tipoFilter ? fmtTipo(tipoFilter) : '';
     compDatasets.push({
-      label: tipo ? `Comparables ${tipo}` : 'Comparables',
+      label: 'Comparables',
       data: pts,
       backgroundColor: palette[0] + 'AA',
       borderColor: palette[0],
