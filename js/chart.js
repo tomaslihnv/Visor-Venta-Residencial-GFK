@@ -327,6 +327,14 @@ export function populateProyectosSelectors() {
     });
   });
 
+  document.querySelectorAll('.proy-median-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-median-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProyectos();
+    });
+  });
+
   $('#proyExportPngBtn')?.addEventListener('click', async () => {
     if (!proyChart) return;
     const btn = $('#proyExportPngBtn');
@@ -376,6 +384,7 @@ export function renderProyectos() {
   const xRot = document.querySelector('.proy-xrot-btn.active')?.dataset.rot ?? 'diagonal';
   const xMaxRot = xRot === 'vertical' ? 90 : 45;
   const xMinRot = xRot === 'vertical' ? 90 : 30;
+  const showMedian = (document.querySelector('.proy-median-btn.active')?.dataset.median ?? 'show') === 'show';
 
   if (proyChart) { proyChart.destroy(); proyChart = null; }
   const ctx = $('#proyChart').getContext('2d');
@@ -541,7 +550,7 @@ export function renderProyectos() {
         },
       },
     },
-    plugins: [barLabelsPlugin, medianPlugin, {
+    plugins: [barLabelsPlugin, ...(showMedian ? [medianPlugin] : []), {
       id: 'yAxisHLabel',
       afterDraw(chart) {
         const { ctx, chartArea } = chart;
