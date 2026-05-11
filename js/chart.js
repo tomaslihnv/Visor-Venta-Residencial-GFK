@@ -523,7 +523,9 @@ export function renderProyectos() {
         ctx.fillStyle = '#666';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
-        ctx.fillText(metric.label, chartArea.left, chartArea.top - 22);
+        const labelY = Math.max(chartArea.top - 22, fs + 4);
+        const labelX = Math.max(chartArea.left, ctx.measureText(metric.label).width + 4);
+        ctx.fillText(metric.label, labelX, labelY);
         ctx.restore();
       },
     }],
