@@ -164,23 +164,12 @@
         <!-- TAB: SUP. VS PRECIO -->
         <div class="tab-panel" data-panel="svp">
           <div class="chart-controls">
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Tendencia</label>
-              <div class="distrib-ratio-row">
-                <button class="svp-tend-btn" data-show="1">Mostrar</button>
-                <button class="svp-tend-btn active" data-show="0">Ocultar</button>
-              </div>
-            </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Predicción MP</label>
-              <div class="distrib-ratio-row">
-                <button class="svp-pred-btn" data-show="1">Mostrar</button>
-                <button class="svp-pred-btn active" data-show="0">Ocultar</button>
-              </div>
-            </div>
+            <button class="svp-tend-btn" title="Mostrar/ocultar tendencia">Tendencia</button>
+            <button class="svp-pred-btn" title="Mostrar/ocultar predicción MP">Predicción MP</button>
+            <button id="svpFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
             <button id="svpExportPngBtn" class="primary-btn">Exportar PNG</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>
           </div>
         </div>

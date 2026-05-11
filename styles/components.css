@@ -114,7 +114,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .toggle-check input[type="checkbox"] { accent-color: #1e3a5f; width: 14px; height: 14px; cursor: pointer; }
 .chart-wrap {
-  flex: 1; min-height: 400px;
+  flex: 1; min-height: 400px; position: relative;
   background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
   padding: 16px; position: relative;
 }

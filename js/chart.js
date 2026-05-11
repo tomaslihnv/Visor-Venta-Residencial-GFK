@@ -577,19 +577,13 @@ export function populateSvpSelectors() {
   if (!svpListenersReady) {
     svpListenersReady = true;
 
-    const toggle = (sel, re) => document.querySelectorAll(sel).forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll(sel).forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        if (re) renderSupVsPrecio();
-      });
+    document.querySelector('.svp-tend-btn')?.addEventListener('click', () => {
+      document.querySelector('.svp-tend-btn').classList.toggle('active');
+      renderSupVsPrecio();
     });
-    toggle('.svp-tend-btn', true);
-    toggle('.svp-pred-btn', false); // solo re-dibuja el canvas, no recrea el chart
-
-    // svp-pred-btn no necesita recrear el chart — fuerza un redibujado manual
-    document.querySelectorAll('.svp-pred-btn').forEach(btn => {
-      btn.addEventListener('click', () => { state.chart?.update(); });
+    document.querySelector('.svp-pred-btn')?.addEventListener('click', () => {
+      document.querySelector('.svp-pred-btn').classList.toggle('active');
+      state.chart?.update();
     });
 
     $('#svpExportPngBtn')?.addEventListener('click', () => {
@@ -749,7 +743,7 @@ export function renderSupVsPrecio() {
   // ── Regresión lineal sobre todos los puntos comparables ──
   const allCompPts = compDatasets.flatMap(ds => ds.data);
   let reg = null;
-  const showTrend = (document.querySelector('.svp-tend-btn.active')?.dataset.show ?? '1') === '1';
+  const showTrend = document.querySelector('.svp-tend-btn')?.classList.contains('active') ?? false;
   if (showTrend && allCompPts.length >= 3) {
     reg = linearRegression(allCompPts);
     if (reg) {
@@ -773,35 +767,13 @@ export function renderSupVsPrecio() {
     }
   }
 
-  // Plugin inline: caja R² en esquina superior derecha del área del gráfico
-  const svpR2Plugin = {
-    id: 'svpR2',
-    afterDraw(chart) {
-      if (!reg) return;
-      const { ctx: c, chartArea: { right, top } } = chart;
-      const text = `R² = ${reg.r2.toFixed(3)}`;
-      c.save();
-      c.font = 'bold 12px system-ui, sans-serif';
-      c.textAlign = 'right';
-      c.textBaseline = 'middle';
-      const w = c.measureText(text).width;
-      const pad = 6, h = 22, rx = right - w - pad * 2 - 2, ry = top + 6;
-      c.fillStyle = 'rgba(255,255,255,0.92)';
-      c.fillRect(rx, ry, w + pad * 2, h);
-      c.strokeStyle = '#cbd5e1';
-      c.lineWidth = 1;
-      c.strokeRect(rx, ry, w + pad * 2, h);
-      c.fillStyle = '#1e3a5f';
-      c.fillText(text, right - pad, ry + h / 2);
-      c.restore();
-    },
-  };
+
 
   // Plugin: predicción de la regresión para cada tipología de Mi Proyecto
   const svpMpPredPlugin = {
     id: 'svpMpPred',
     afterDraw(chart) {
-      const showPred = (document.querySelector('.svp-pred-btn.active')?.dataset.show ?? '1') === '1';
+      const showPred = document.querySelector('.svp-pred-btn')?.classList.contains('active') ?? false;
       if (!reg || !mpFiltered.length || !showPred) return;
       const { ctx: c, scales, chartArea: ca } = chart;
       c.save();
@@ -856,7 +828,7 @@ export function renderSupVsPrecio() {
   state.chart = new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
-    plugins: [svpR2Plugin, svpMpPredPlugin],
+    plugins: [svpMpPredPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -885,6 +857,85 @@ export function renderSupVsPrecio() {
         },
       },
     },
+  });
+
+  if (!svpWidgetInited) initSvpFilterWidget();
+  else updateSvpFilterWidget();
+}
+
+// ============== Widget de filtros activos (SVP) ==============
+let svpWidgetInited = false;
+
+function initSvpFilterWidget() {
+  const toggleBtn = document.getElementById('svpFilterWidgetBtn');
+  const container = document.getElementById('svpWrap');
+  if (!toggleBtn || !container) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'svpFilterWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="svpFwHeader">
+      <span>Filtros activos</span>
+      <button class="mfw-close" id="svpFwClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="svpFwBody"></div>
+  `;
+  container.appendChild(widget);
+
+  const header = document.getElementById('svpFwHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'svpFwClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || (container.offsetWidth - 240);
+    const startT = parseInt(widget.style.top)  || 10;
+    widget.style.left = startL + 'px';
+    widget.style.top  = startT + 'px';
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('svpFwClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        widget.style.left = (container.offsetWidth - 240) + 'px';
+        widget.style.top  = '10px';
+      }
+      updateSvpFilterWidget();
+    }
+  });
+
+  svpWidgetInited = true;
+}
+
+export function updateSvpFilterWidget() {
+  const body = document.getElementById('svpFwBody');
+  if (!body) return;
+  const widget = document.getElementById('svpFilterWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+  import('./filters.js').then(({ getActiveFiltersSummary }) => {
+    const items = getActiveFiltersSummary();
+    body.innerHTML = items.length
+      ? items.map(it => `<div class="mfw-row"><span class="mfw-label">${it.label}</span><span class="mfw-value">${it.value}</span></div>`).join('')
+      : '<div class="mfw-empty">Sin filtros aplicados</div>';
   });
 }
 
