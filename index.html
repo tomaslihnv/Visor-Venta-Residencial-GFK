@@ -80,7 +80,7 @@
             </label>
             <label class="mp-check-row">
               <input type="checkbox" id="mpInSvp" />
-              <span>Sup. vs Precio</span>
+              <span>Dispersión</span>
             </label>
             <label class="mp-check-row">
               <input type="checkbox" id="mpInProy" />
@@ -119,7 +119,7 @@
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
           <button class="tab" data-tab="comparativa">Tabla comparativa</button>
-          <button class="tab" data-tab="svp">Sup. Vs Precio</button>
+          <button class="tab" data-tab="svp">Dispersión</button>
           <button class="tab" data-tab="proyectos">Proyectos</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="tabla">Tabla</button>
@@ -167,7 +167,24 @@
             <button class="svp-tend-btn" title="Mostrar/ocultar tendencia">Tendencia</button>
             <button class="svp-pred-btn" title="Mostrar/ocultar predicción MP">Predicción MP</button>
             <button id="svpFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
-            <button id="svpExportPngBtn" class="primary-btn">Exportar PNG</button>
+            <div style="flex:1"></div>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="svpFontSize" min="8" max="22" step="1" value="12">
+                <span id="svpFontSizeVal">12px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="svp-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="svp-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="svp-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="svp-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <button id="svpExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
           <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>

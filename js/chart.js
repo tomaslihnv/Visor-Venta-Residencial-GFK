@@ -586,12 +586,47 @@ export function populateSvpSelectors() {
       state.chart?.update();
     });
 
-    $('#svpExportPngBtn')?.addEventListener('click', () => {
+    document.querySelectorAll('.svp-ratio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.svp-ratio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    const svpFontSlider = $('#svpFontSize');
+    if (svpFontSlider) {
+      svpFontSlider.addEventListener('input', () => {
+        $('#svpFontSizeVal').textContent = svpFontSlider.value + 'px';
+        renderSupVsPrecio();
+      });
+    }
+
+    $('#svpExportPngBtn')?.addEventListener('click', async () => {
       if (!state.chart) return;
-      const a = document.createElement('a');
-      a.href = state.chart.toBase64Image('image/png', 1);
-      a.download = `sup_vs_precio_${Date.now()}.png`;
-      a.click();
+      const btn = $('#svpExportPngBtn');
+      const scale = 4;
+      const pad = 32;
+      const wrap = $('#svpWrap');
+      const ratio = document.querySelector('.svp-ratio-btn.active')?.dataset.ratio ?? 'auto';
+
+      const origDPR = state.chart.options.devicePixelRatio ?? window.devicePixelRatio;
+      const exportW = wrap.clientWidth - pad;
+      const exportH = ratio === 'auto'
+        ? state.chart.height
+        : Math.round(exportW / parseFloat(ratio));
+
+      state.chart.options.devicePixelRatio = scale;
+      state.chart.resize(exportW, exportH);
+      const url = state.chart.toBase64Image('image/png', 1);
+      state.chart.options.devicePixelRatio = origDPR;
+      state.chart.resize();
+
+      const blob = await _withMargin(url, 64);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      const prev = btn.textContent;
+      btn.textContent = '¡Copiado!';
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
     });
   }
 }
@@ -636,6 +671,7 @@ function _avgByEdif(rows, supCol, ufm2Col, edifCol) {
 export function renderSupVsPrecio() {
   if (state.filtered.length === 0) return;
 
+  const fs = parseInt($('#svpFontSize')?.value ?? '12');
   const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   const supCol = state.columns.find(c =>
     c.type === 'number' &&
@@ -834,7 +870,7 @@ export function renderSupVsPrecio() {
       maintainAspectRatio: false,
       parsing: false,
       plugins: {
-        legend: { position: 'top' },
+        legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
           callbacks: {
             label: item => {
@@ -848,12 +884,12 @@ export function renderSupVsPrecio() {
       },
       scales: {
         x: {
-          title: { display: true, text: 'Útil (m²)' },
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: 'Útil (m²)', font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
         y: {
-          title: { display: true, text: 'UF/m²' },
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: 'UF/m²', font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
       },
     },
