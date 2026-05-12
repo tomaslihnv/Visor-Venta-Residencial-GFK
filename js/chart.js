@@ -586,6 +586,46 @@ export function renderProyectos() {
 // ============== Sup. vs Precio ==============
 let svpListenersReady = false;
 
+// Estado del triángulo de pendiente (draggable)
+let svpSlopeXPct   = 0.22;   // posición a lo largo del eje X (0–1)
+let svpSlopeDragging = false;
+let svpSlopeBbox   = null;    // { x, y, w, h } en coordenadas canvas (CSS px)
+
+const _svpSlpDown = e => {
+  if (!svpSlopeBbox) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  if (mx >= svpSlopeBbox.x && mx <= svpSlopeBbox.x + svpSlopeBbox.w &&
+      my >= svpSlopeBbox.y && my <= svpSlopeBbox.y + svpSlopeBbox.h) {
+    svpSlopeDragging = true;
+    e.preventDefault();
+  }
+};
+const _svpSlpMove = e => {
+  const canvas = e.currentTarget;
+  const showTrend = document.querySelector('.svp-tend-btn')?.classList.contains('active') ?? false;
+  if (!showTrend || !svpSlopeBbox) { canvas.style.cursor = ''; return; }
+  const r = canvas.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  if (!svpSlopeDragging) {
+    const hit = mx >= svpSlopeBbox.x && mx <= svpSlopeBbox.x + svpSlopeBbox.w &&
+                my >= svpSlopeBbox.y && my <= svpSlopeBbox.y + svpSlopeBbox.h;
+    canvas.style.cursor = hit ? 'grab' : '';
+    return;
+  }
+  canvas.style.cursor = 'grabbing';
+  if (!state.chart) return;
+  const { scales } = state.chart;
+  const xMin = scales.x.min, xMax = scales.x.max, range = xMax - xMin;
+  const dataX = scales.x.getValueForPixel(mx);
+  svpSlopeXPct = Math.max(0.02, Math.min(0.78, (dataX - xMin) / range));
+  state.chart.update('none');
+};
+const _svpSlpUp = e => {
+  svpSlopeDragging = false;
+  e.currentTarget.style.cursor = '';
+};
+
 export function populateSvpSelectors() {
   if (!$('#svpExportPngBtn')) return;
 
@@ -889,8 +929,8 @@ export function renderSupVsPrecio() {
       const xMin = Math.min(...xs), xMax = Math.max(...xs);
       const range = xMax - xMin;
 
-      // Posición del triángulo: 22% del rango x desde el mínimo
-      const x0 = xMin + range * 0.22;
+      // Posición del triángulo: controlada por svpSlopeXPct (draggable)
+      const x0 = xMin + range * svpSlopeXPct;
       const dxData = range * 0.14;
       const x1 = x0 + dxData;
       const y0 = reg.m * x0 + reg.b;
@@ -920,22 +960,6 @@ export function renderSupVsPrecio() {
       c.strokeStyle = 'rgba(30,58,95,0.35)';
       c.lineWidth = 1;
       c.stroke();
-
-      // ── Cateto horizontal: "+Δx m²" ──
-      c.font = `${lfs}px system-ui, sans-serif`;
-      c.fillStyle = '#374151';
-      c.textAlign = 'center';
-      c.textBaseline = negSlope ? 'bottom' : 'top';
-      c.fillText(`+${Math.round(dxData)} m²`, (px0 + px1) / 2, py0 + (negSlope ? -4 : 4));
-
-      // ── Cateto vertical: "Δy UF/m²" ──
-      const dyData = y1 - y0; // = reg.m * dxData
-      const dyLabel = (dyData >= 0 ? '+' : '') +
-        dyData.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + ' UF/m²';
-      c.font = `bold ${lfs}px system-ui, sans-serif`;
-      c.textAlign = 'left';
-      c.textBaseline = 'middle';
-      c.fillText(dyLabel, px1 + 5, (py0 + py1) / 2);
 
       // ── Flecha desde vértice recto → cajita de interpretación ──
       const aX1 = px1, aY1 = py0;
@@ -979,6 +1003,22 @@ export function renderSupVsPrecio() {
       c.textAlign = 'left';
       c.textBaseline = 'middle';
       c.fillText(callout, bx + bp, by + bh / 2);
+
+      // Actualizar bounding box del objeto completo para drag
+      const bboxX = Math.min(px0, bx) - 4;
+      const bboxY = Math.min(py0, py1, by) - 6;
+      const bboxR = Math.max(px1 + 10, bx + bw) + 4;
+      const bboxB = Math.max(py0, py1, by + bh) + 6;
+      svpSlopeBbox = { x: bboxX, y: bboxY, w: bboxR - bboxX, h: bboxB - bboxY };
+
+      // Indicador visual de arrastre
+      if (svpSlopeDragging) {
+        c.strokeStyle = 'rgba(30,58,95,0.5)';
+        c.lineWidth = 1;
+        c.setLineDash([3, 3]);
+        c.strokeRect(bboxX, bboxY, bboxR - bboxX, bboxB - bboxY);
+        c.setLineDash([]);
+      }
 
       c.restore();
     },
@@ -1034,6 +1074,15 @@ export function renderSupVsPrecio() {
       },
     },
   });
+
+  // Handlers de drag del triángulo de pendiente
+  const svpCanvas = $('#svpChart');
+  svpCanvas.removeEventListener('mousedown', _svpSlpDown);
+  svpCanvas.removeEventListener('mousemove', _svpSlpMove);
+  svpCanvas.removeEventListener('mouseup',   _svpSlpUp);
+  svpCanvas.addEventListener('mousedown', _svpSlpDown);
+  svpCanvas.addEventListener('mousemove', _svpSlpMove);
+  svpCanvas.addEventListener('mouseup',   _svpSlpUp);
 
   if (!svpWidgetInited) initSvpFilterWidget();
   else updateSvpFilterWidget();
