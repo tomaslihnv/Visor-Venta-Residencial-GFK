@@ -1177,6 +1177,7 @@ export function populateDistribSelectors() {
   const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   const ticketCol = state.columns.find(c => normStr(c.name).includes('ticket'));
   const ufm2Col   = state.columns.find(c => normStr(c.name).includes('uf/m') || normStr(c.name).includes('uf / m'));
+  const utilCol   = state.columns.find(c => ['util (m', 'util(m', 'sup. util', 'superficie util', 'sup util'].some(k => normStr(c.name).includes(k)));
 
   colSel.innerHTML = '';
   if (ticketCol) {
@@ -1187,6 +1188,11 @@ export function populateDistribSelectors() {
   if (ufm2Col) {
     const o = document.createElement('option');
     o.value = ufm2Col.name; o.textContent = 'UF/m²';
+    colSel.appendChild(o);
+  }
+  if (utilCol) {
+    const o = document.createElement('option');
+    o.value = utilCol.name; o.textContent = 'Útil (m²)';
     colSel.appendChild(o);
   }
   if (!colSel.options.length) {
@@ -1392,7 +1398,9 @@ export function renderDistrib() {
 
   const col = colSel.value;
   const _nc = col.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-  distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²' : 'UF';
+  distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²'
+              : (_nc.includes('util') || _nc.includes('sup')) ? 'm²'
+              : 'UF';
   const fs = parseInt($('#distribFontSize')?.value ?? '11');
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
