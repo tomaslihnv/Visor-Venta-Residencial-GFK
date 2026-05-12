@@ -564,6 +564,21 @@ export function renderProyectos() {
         ctx.fillText(metric.label, labelX, labelY);
         ctx.restore();
       },
+    }, {
+      id: 'proySettings',
+      afterDraw(chart) {
+        const { ctx, chartArea: { right, top } } = chart;
+        const ratioVal = document.querySelector('.proy-ratio-btn.active')?.dataset.ratio ?? 'auto';
+        const ratioMap = { auto: 'Auto', '1.78': '16:9', '1.33': '4:3', '1': '1:1' };
+        const text = `${ratioMap[ratioVal] ?? ratioVal} · ${fs}px`;
+        ctx.save();
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.fillStyle = '#c8c8c8';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, right - 2, top + 4);
+        ctx.restore();
+      },
     }],
   });
 }
@@ -1315,6 +1330,22 @@ export function renderDistrib() {
   distribChart = new Chart(ctx, {
     type: 'line',
     data: { datasets },
+    plugins: [{
+      id: 'distribSettings',
+      afterDraw(chart) {
+        const { ctx, chartArea: { right, top } } = chart;
+        const ratioVal = document.querySelector('.ratio-btn.active')?.dataset.ratio ?? 'auto';
+        const ratioMap = { auto: 'Auto', '1.78': '16:9', '1.33': '4:3', '1': '1:1' };
+        const text = `${ratioMap[ratioVal] ?? ratioVal} · ${fs}px`;
+        ctx.save();
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.fillStyle = '#c8c8c8';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, right - 2, top + 4);
+        ctx.restore();
+      },
+    }],
     options: {
       responsive: true,
       maintainAspectRatio: false,
