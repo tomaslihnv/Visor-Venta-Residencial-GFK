@@ -1205,6 +1205,14 @@ export function populateDistribSelectors() {
   if (!distribListenersReady) {
     distribListenersReady = true;
 
+    document.querySelectorAll('.distrib-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.distrib-mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderDistrib();
+      });
+    });
+
     document.querySelectorAll('.ratio-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
@@ -1320,6 +1328,38 @@ function computeQuantileCurve(rows, col) {
   return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
 }
 
+// Ajuste log-normal: X = valor (>0), Y = densidad
+function computeLogNormal(sortedVals, nPoints = 300) {
+  const posVals = sortedVals.filter(v => v > 0);
+  const n = posVals.length;
+  if (n < 2) return [];
+  const logVals = posVals.map(v => Math.log(v));
+  const mu  = logVals.reduce((a, b) => a + b, 0) / n;
+  const sig = Math.sqrt(logVals.reduce((a, v) => a + (v - mu) ** 2, 0) / (n - 1));
+  if (sig === 0) return [];
+  const xMin = posVals[0] * 0.5;
+  const xMax = posVals[n - 1] * 1.15;
+  const step = (xMax - xMin) / nPoints;
+  const K = 1 / (sig * Math.sqrt(2 * Math.PI));
+  return Array.from({ length: nPoints + 1 }, (_, i) => {
+    const x = xMin + i * step;
+    if (x <= 0) return { x, y: 0 };
+    const y = K / x * Math.exp(-0.5 * ((Math.log(x) - mu) / sig) ** 2);
+    return { x, y };
+  });
+}
+
+function lerpDensity(data, x) {
+  if (!data.length) return undefined;
+  for (let i = 0; i < data.length - 1; i++) {
+    if (data[i].x <= x && x <= data[i + 1].x) {
+      const t = (x - data[i].x) / (data[i + 1].x - data[i].x);
+      return data[i].y + t * (data[i + 1].y - data[i].y);
+    }
+  }
+  return 0;
+}
+
 function lerpAtX(data, x) {
   if (!data.length) return null;
   if (x <= data[0].x) return data[0].y;
@@ -1369,15 +1409,19 @@ export function renderDistrib() {
     return sortedVals[Math.max(0, idx)];
   };
 
+  const isDens  = document.querySelector('.distrib-mode-btn.active')?.dataset.mode === 'dens';
   const refData = computeQuantileCurve(state.filtered, col);
+  const kdeData = isDens ? computeLogNormal(sortedVals) : [];
+
+  const chartData = isDens ? kdeData : refData;
   const datasets = [{
     label: col,
-    data: refData,
+    data: chartData,
     borderColor: palette[0],
     backgroundColor: 'rgba(59,130,246,0.08)',
     pointRadius: 0,
     borderWidth: 2,
-    tension: 0.4,
+    tension: isDens ? 0.3 : 0.4,
     fill: true,
   }];
 
@@ -1385,49 +1429,71 @@ export function renderDistrib() {
   const annotations = {};
   const pctColor   = '#6b7280';
   const priceColor = '#6b7280';
-
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
-    const color = pctColor;
-    const price = lerpAtX(refData, pct);
-    if (price == null) return;
-    const priceLabel = price.toLocaleString('es-CL', { maximumFractionDigits: 0 });
-    annotations[`pv_${pct}`] = {
-      type: 'line', xMin: pct, xMax: pct, yMax: price,
-      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `P${pct}`, display: true, position: 'start',
-        color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
-    };
-    annotations[`ph_${pct}`] = {
-      type: 'line', yMin: price, yMax: price, xMax: pct,
-      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${priceLabel} ${distribUnit}`, display: true, position: 'start',
-        color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
-    };
+  const annLabel   = (content, color) => ({
+    content, display: true, position: 'start',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
-    const color = priceColor;
-    const pct   = lerpAtY(refData, price);
-    const pctForLabel = pct !== null ? pct : 100;
-    annotations[`prh_${price}`] = {
-      type: 'line', yMin: price, yMax: price, xMax: pctForLabel,
-      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${price.toLocaleString('es-CL')} ${distribUnit}`, display: true, position: 'start',
-        color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
-    };
-    if (pct !== null) {
-      annotations[`prv_${price}`] = {
+  if (!isDens) {
+    // ── Modo acumulada: mismo comportamiento original ──
+    [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+      const color = pctColor;
+      const price = lerpAtX(refData, pct);
+      if (price == null) return;
+      const priceLabel = price.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+      annotations[`pv_${pct}`] = {
         type: 'line', xMin: pct, xMax: pct, yMax: price,
         borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-        label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
-          color, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+        label: annLabel(`P${pct}`, color),
       };
-    }
-  });
+      annotations[`ph_${pct}`] = {
+        type: 'line', yMin: price, yMax: price, xMax: pct,
+        borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`${priceLabel} ${distribUnit}`, color),
+      };
+    });
+
+    [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+      const color = priceColor;
+      const pct   = lerpAtY(refData, price);
+      const pctForLabel = pct !== null ? pct : 100;
+      annotations[`prh_${price}`] = {
+        type: 'line', yMin: price, yMax: price, xMax: pctForLabel,
+        borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`${price.toLocaleString('es-CL')} ${distribUnit}`, color),
+      };
+      if (pct !== null) {
+        annotations[`prv_${price}`] = {
+          type: 'line', xMin: pct, xMax: pct, yMax: price,
+          borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+          label: annLabel(`P${pct.toFixed(1)}`, color),
+        };
+      }
+    });
+  } else {
+    // ── Modo densidad: líneas verticales en el eje X ──
+    [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+      const val = valAtPct(pct);
+      if (val == null) return;
+      const valLabel = val.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+      annotations[`dpv_${pct}`] = {
+        type: 'line', xMin: val, xMax: val, yMax: lerpDensity(kdeData, val),
+        borderColor: pctColor, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`P${pct}: ${valLabel} ${distribUnit}`, pctColor),
+      };
+    });
+
+    [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+      const pct = lerpAtY(refData, price);
+      const pctStr = pct !== null ? ` (P${pct.toFixed(1)})` : '';
+      annotations[`dprv_${price}`] = {
+        type: 'line', xMin: price, xMax: price, yMax: lerpDensity(kdeData, price),
+        borderColor: priceColor, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`${price.toLocaleString('es-CL')} ${distribUnit}${pctStr}`, priceColor),
+      };
+    });
+  }
 
   // Mi Proyecto annotations
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
@@ -1457,29 +1523,37 @@ export function renderDistrib() {
       else if (isTicket) val = (t.sup != null && t.ufm2 != null) ? t.sup * t.ufm2 : null;
       else               val = t.sup;
       if (val == null) return;
-      const pct = lerpAtY(refData, val);
-      if (pct === null) return;
       const valLabel = val.toLocaleString('es-CL', { maximumFractionDigits: 0 });
-      annotations[`mp_h_${t.id}`] = {
-        type: 'line', yMin: val, yMax: val, xMax: pct,
-        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: {
-          content: `${t.nombre}: ${valLabel}`,
-          display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
-        },
-      };
-      annotations[`mp_v_${t.id}`] = {
-        type: 'line', xMin: pct, xMax: pct, yMax: val,
-        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: {
-          content: `P${pct.toFixed(1)}`,
-          display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
-        },
-      };
+      const mpAnnLabel = (content) => ({
+        content, display: true, position: 'start',
+        color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+      });
+
+      if (isDens) {
+        // Modo densidad: muestra percentil + valor + tipología en paréntesis
+        const pct = lerpAtY(refData, val);
+        const pctStr = pct !== null ? `P${Math.round(pct)}: ` : '';
+        annotations[`mp_v_${t.id}`] = {
+          type: 'line', xMin: val, xMax: val, yMax: lerpDensity(kdeData, val),
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`${pctStr}${valLabel} ${distribUnit} (${t.nombre})`),
+        };
+      } else {
+        // Modo acumulada: líneas cruzadas
+        const pct = lerpAtY(refData, val);
+        if (pct === null) return;
+        annotations[`mp_h_${t.id}`] = {
+          type: 'line', yMin: val, yMax: val, xMax: pct,
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`${t.nombre}: ${valLabel}`),
+        };
+        annotations[`mp_v_${t.id}`] = {
+          type: 'line', xMin: pct, xMax: pct, yMax: val,
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`P${pct.toFixed(1)}`),
+        };
+      }
     });
   }
 
@@ -1513,7 +1587,18 @@ export function renderDistrib() {
           mode: 'nearest',
           intersect: false,
           axis: 'x',
-          callbacks: {
+          callbacks: isDens ? {
+            title: items => {
+              const pt = chartData[items[0]?.dataIndex];
+              return pt ? pt.x.toLocaleString('es-CL', { maximumFractionDigits: 0 }) + ' ' + distribUnit : '';
+            },
+            label: item => {
+              const pt = chartData[item.dataIndex];
+              if (!pt) return '';
+              const pct = lerpAtY(refData, pt.x);
+              return pct !== null ? ` P${pct.toFixed(1)}` : '';
+            },
+          } : {
             title: items => {
               const pt = refData[items[0]?.dataIndex];
               return pt ? `P${pt.x.toFixed(1)}` : '';
@@ -1527,7 +1612,18 @@ export function renderDistrib() {
         },
         annotation: { annotations },
       },
-      scales: {
+      scales: isDens ? {
+        x: {
+          type: 'linear',
+          title: { display: true, text: col, font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+        },
+        y: {
+          title: { display: true, text: 'Densidad', font: { size: fs } },
+          ticks: { display: false },
+          grid: { display: false },
+        },
+      } : {
         x: {
           type: 'linear', min: 0, max: 100,
           title: { display: true, text: 'Percentil (%)', font: { size: fs } },
