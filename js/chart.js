@@ -646,7 +646,8 @@ function linearRegression(pts) {
   const ssTot = pts.reduce((s, p) => s + (p.y - yMean) ** 2, 0);
   const ssRes = pts.reduce((s, p) => s + (p.y - (m * p.x + b)) ** 2, 0);
   const r2 = ssTot === 0 ? 1 : 1 - ssRes / ssTot;
-  return { m, b, r2 };
+  const r2adj = n > 2 ? 1 - (1 - r2) * (n - 1) / (n - 2) : r2;
+  return { m, b, r2, r2adj };
 }
 
 function _avgByEdif(rows, supCol, ufm2Col, edifCol) {
@@ -786,7 +787,7 @@ export function renderSupVsPrecio() {
       const xs = allCompPts.map(p => p.x);
       const xMin = Math.min(...xs), xMax = Math.max(...xs);
       datasets.push({
-        label: `Tendencia  (R² = ${reg.r2.toFixed(2)})`,
+        label: `Tendencia  (R² = ${reg.r2.toFixed(2)},  R² aj. = ${reg.r2adj.toFixed(2)})`,
         data: [
           { x: xMin, y: reg.m * xMin + reg.b },
           { x: xMax, y: reg.m * xMax + reg.b },
@@ -864,7 +865,24 @@ export function renderSupVsPrecio() {
   state.chart = new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
-    plugins: [svpMpPredPlugin],
+    plugins: [svpMpPredPlugin, {
+      id: 'svpSettings',
+      afterDraw(chart) {
+        const { ctx, chartArea: { right, top } } = chart;
+        const ratioVal = document.querySelector('.svp-ratio-btn.active')?.dataset.ratio ?? 'auto';
+        const ratioMap = { auto: 'Auto', '1.78': '16:9', '1.33': '4:3', '1': '1:1' };
+        const ratioLabel = ratioMap[ratioVal] ?? ratioVal;
+        const fsSetting = $('#svpFontSize')?.value ?? '12';
+        const text = `${ratioLabel} · ${fsSetting}px`;
+        ctx.save();
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.fillStyle = '#c8c8c8';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, right - 2, top + 4);
+        ctx.restore();
+      },
+    }],
     options: {
       responsive: true,
       maintainAspectRatio: false,
