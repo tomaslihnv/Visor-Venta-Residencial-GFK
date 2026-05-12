@@ -897,9 +897,9 @@ export function renderSupVsPrecio() {
 
         // Caja con el valor predicho
         const label = `${fmtTipo(t.nombre)}: ${predY.toLocaleString('es-CL', { maximumFractionDigits: 0 })} UF/m²`;
-        c.font = 'bold 11px system-ui, sans-serif';
+        c.font = `bold ${fs}px system-ui, sans-serif`;
         const tw = c.measureText(label).width;
-        const pad = 5, bh = 18;
+        const pad = 5, bh = fs + pad * 2;
         let lx = px + 10;
         if (lx + tw + pad * 2 > ca.right) lx = px - tw - pad * 2 - 10;
         const ly = pyPred - bh / 2;
@@ -945,7 +945,7 @@ export function renderSupVsPrecio() {
           Math.min(py0, py1) < ca.top || Math.max(py0, py1) > ca.bottom) return;
 
       const negSlope = py1 > py0; // pendiente negativa → py1 más abajo en canvas
-      const lfs = Math.max(9, Math.min(fs, 11));
+      const lfs = fs;
       c.save();
       c.setLineDash([]);
 
