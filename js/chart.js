@@ -877,10 +877,117 @@ export function renderSupVsPrecio() {
     },
   };
 
+  // Plugin: triángulo de pendiente sobre la línea de tendencia
+  const svpSlopePlugin = {
+    id: 'svpSlope',
+    afterDraw(chart) {
+      const showTrend = document.querySelector('.svp-tend-btn')?.classList.contains('active') ?? false;
+      if (!showTrend || !reg || !allCompPts.length) return;
+
+      const { ctx: c, scales, chartArea: ca } = chart;
+      const xs = allCompPts.map(p => p.x);
+      const xMin = Math.min(...xs), xMax = Math.max(...xs);
+      const range = xMax - xMin;
+
+      // Posición del triángulo: 22% del rango x desde el mínimo
+      const x0 = xMin + range * 0.22;
+      const dxData = range * 0.14;
+      const x1 = x0 + dxData;
+      const y0 = reg.m * x0 + reg.b;
+      const y1 = reg.m * x1 + reg.b;
+
+      const px0 = scales.x.getPixelForValue(x0);
+      const px1 = scales.x.getPixelForValue(x1);
+      const py0 = scales.y.getPixelForValue(y0);
+      const py1 = scales.y.getPixelForValue(y1);
+
+      if (px0 < ca.left || px1 > ca.right ||
+          Math.min(py0, py1) < ca.top || Math.max(py0, py1) > ca.bottom) return;
+
+      const negSlope = py1 > py0; // pendiente negativa → py1 más abajo en canvas
+      const lfs = Math.max(9, Math.min(fs, 11));
+      c.save();
+      c.setLineDash([]);
+
+      // ── Triángulo relleno ──
+      c.beginPath();
+      c.moveTo(px0, py0);
+      c.lineTo(px1, py0);  // vértice recto
+      c.lineTo(px1, py1);
+      c.closePath();
+      c.fillStyle = 'rgba(30,58,95,0.10)';
+      c.fill();
+      c.strokeStyle = 'rgba(30,58,95,0.35)';
+      c.lineWidth = 1;
+      c.stroke();
+
+      // ── Cateto horizontal: "+Δx m²" ──
+      c.font = `${lfs}px system-ui, sans-serif`;
+      c.fillStyle = '#374151';
+      c.textAlign = 'center';
+      c.textBaseline = negSlope ? 'bottom' : 'top';
+      c.fillText(`+${Math.round(dxData)} m²`, (px0 + px1) / 2, py0 + (negSlope ? -4 : 4));
+
+      // ── Cateto vertical: "Δy UF/m²" ──
+      const dyData = y1 - y0; // = reg.m * dxData
+      const dyLabel = (dyData >= 0 ? '+' : '') +
+        dyData.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + ' UF/m²';
+      c.font = `bold ${lfs}px system-ui, sans-serif`;
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      c.fillText(dyLabel, px1 + 5, (py0 + py1) / 2);
+
+      // ── Flecha desde vértice recto → cajita de interpretación ──
+      const aX1 = px1, aY1 = py0;
+      const aX2 = px1 + 20, aY2 = py0 + (negSlope ? -22 : 22);
+      c.beginPath();
+      c.moveTo(aX1, aY1);
+      c.lineTo(aX2, aY2);
+      c.strokeStyle = '#9ca3af';
+      c.lineWidth = 1;
+      c.setLineDash([3, 3]);
+      c.stroke();
+      c.setLineDash([]);
+
+      // Punta de flecha
+      const ang = Math.atan2(aY2 - aY1, aX2 - aX1);
+      const hl = 6;
+      c.beginPath();
+      c.moveTo(aX2, aY2);
+      c.lineTo(aX2 - hl * Math.cos(ang - Math.PI / 6), aY2 - hl * Math.sin(ang - Math.PI / 6));
+      c.moveTo(aX2, aY2);
+      c.lineTo(aX2 - hl * Math.cos(ang + Math.PI / 6), aY2 - hl * Math.sin(ang + Math.PI / 6));
+      c.strokeStyle = '#9ca3af';
+      c.lineWidth = 1;
+      c.stroke();
+
+      // Cajita de interpretación
+      const mStr = (reg.m >= 0 ? '+' : '') +
+        reg.m.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+      const callout = `+1 m²  →  ${mStr} UF/m²`;
+      c.font = `bold ${lfs}px system-ui, sans-serif`;
+      const tw = c.measureText(callout).width;
+      const bp = 5, bh = lfs + bp * 2, bw = tw + bp * 2;
+      const bx = Math.min(aX2 + 4, ca.right - bw - 4);
+      const by = aY2 - bh / 2;
+      c.fillStyle = 'rgba(255,255,255,0.94)';
+      c.fillRect(bx, by, bw, bh);
+      c.strokeStyle = '#d1d5db';
+      c.lineWidth = 0.8;
+      c.strokeRect(bx, by, bw, bh);
+      c.fillStyle = '#1e3a5f';
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      c.fillText(callout, bx + bp, by + bh / 2);
+
+      c.restore();
+    },
+  };
+
   state.chart = new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
-    plugins: [svpMpPredPlugin, {
+    plugins: [svpMpPredPlugin, svpSlopePlugin, {
       id: 'svpSettings',
       afterDraw(chart) {
         const { ctx, chartArea: { right, top } } = chart;
