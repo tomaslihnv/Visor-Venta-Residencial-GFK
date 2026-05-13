@@ -155,6 +155,9 @@ let mapInitialized = false;
 let legendControl = null;
 let countControl = null;
 let lastOrderedPoints = [];
+let streetLayer = null;
+let satelliteLayer = null;
+let isSatellite = false;
 
 // Selección por polígono (vértices con clic)
 let selMode          = false;
@@ -280,12 +283,34 @@ async function copyMapTable() {
 function initLeafletMap() {
   leafletMap = L.map('map', { zoomSnap: 0.25, wheelPxPerZoomLevel: 120 });
   initRankingResize();
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+  streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
     maxZoom: 19,
     crossOrigin: 'anonymous',
-  }).addTo(leafletMap);
+  });
+  satelliteLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxZoom: 19,
+    crossOrigin: 'anonymous',
+  });
+  streetLayer.addTo(leafletMap);
   markersLayer = L.layerGroup().addTo(leafletMap);
+
+  document.getElementById('mapSatelliteBtn')?.addEventListener('click', () => {
+    isSatellite = !isSatellite;
+    if (isSatellite) {
+      leafletMap.removeLayer(streetLayer);
+      satelliteLayer.addTo(leafletMap);
+      satelliteLayer.bringToBack();
+    } else {
+      leafletMap.removeLayer(satelliteLayer);
+      streetLayer.addTo(leafletMap);
+      streetLayer.bringToBack();
+    }
+    document.getElementById('mapSatelliteBtn').classList.toggle('active', isSatellite);
+  });
 
   // Control leyenda (bottom-left)
   legendControl = L.control({ position: 'bottomleft' });
@@ -305,10 +330,10 @@ function initLeafletMap() {
   };
   countControl.addTo(leafletMap);
 
-  // Botones de modo
-  document.querySelectorAll('.map-mode-btn').forEach(btn => {
+  // Botones de modo (solo los que tienen data-mode)
+  document.querySelectorAll('.map-mode-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.map-mode-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.map-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       mapMode = btn.dataset.mode;
       renderMap();
