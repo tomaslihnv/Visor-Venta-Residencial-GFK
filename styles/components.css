@@ -511,28 +511,27 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   position: sticky;
   top: 0;
   z-index: 3;
-  font-size: 11px; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase;
+  font-size: 12.5px; font-weight: 700;
   border-bottom: 1px solid #c7d0dc;
 }
 .comp-head-sub th {
   position: sticky;
   top: 36px;   /* = height of comp-head-top row */
   z-index: 2;
-  background: #f1f5f9;
-  font-size: 11px; font-weight: 600;
-  color: #374151;
-  border-bottom: 2px solid #e2e8f0;
+  background: #444D54;
+  font-size: 12.5px; font-weight: 700;
+  color: #fff;
+  border-bottom: 2px solid #3a4249;
 }
 
 .comp-th-section {
-  background: #444D54; color: #fff;
+  background: #fff;
   text-align: left;
 }
 .comp-th-tipo {
-  background: #475569; color: #e2e8f0;
+  background: #DDE0E3; color: #0f172a; font-weight: 700;
   text-align: center;
-  border-left: 2px solid #cbd5e1;
+  border-left: 2px solid #c9cdd6;
 }
 .comp-th-label  { text-align: left; }
 .comp-th-metric { text-align: right; }
@@ -561,41 +560,51 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Promedio / tfoot row */
 .comp-promedio td {
-  background: #f8fafc;
-  border-top: 2px solid #cbd5e1;
+  background: #F2F2F2;
+  border-top: 2px solid #d1d5db;
   height: 36px;
   padding: 0 10px;
   box-sizing: border-box;
   vertical-align: middle;
   font-size: 12.5px;
+  color: #0f172a;
+  font-weight: 700;
 }
 
 /* ── Mi Proyecto row en tabla comparativa ── */
 .comp-situ td {
-  background: #eef2ff;
-  border-top: 2px solid #1e3a5f;
+  background: #fff;
+  border-top: 2px solid #d1d5db;
   height: 36px;
   padding: 0 10px;
   box-sizing: border-box;
   vertical-align: middle;
   font-size: 12.5px;
-  color: #1e3a5f;
+  color: #0f172a;
+  font-weight: 700;
 }
 .comp-situ-vs td {
-  background: #f0f9ff;
-  border-top: 1px solid #bfdbfe;
+  background: #2E3338;
+  border-top: 1px solid #3a4047;
   height: 36px;
   padding: 0 10px;
   box-sizing: border-box;
   vertical-align: middle;
-  font-size: 12px;
+  font-size: 12.5px;
+  color: #fff;
+  font-weight: 700;
+  font-style: italic;
 }
-.situ-vs-label { font-style: italic; color: #475569; }
+.situ-vs-label { font-style: italic; color: #fff; }
 
 /* Percentage coloring */
 .vs-pos  { color: #15803d; font-weight: 600; }
 .vs-neg  { color: #b91c1c; font-weight: 600; }
 .vs-zero { color: #6b7280; font-weight: 600; }
+/* Keep all text white in the dark vs row */
+.comp-situ-vs .vs-pos,
+.comp-situ-vs .vs-neg,
+.comp-situ-vs .vs-zero { color: #fff; }
 
 /* ========== Panel Mi Proyecto (sidebar) ========== */
 .mp-panel {
