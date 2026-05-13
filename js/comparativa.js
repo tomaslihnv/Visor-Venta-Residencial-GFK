@@ -178,6 +178,7 @@ export function renderComparativa() {
   const colTicket      = findCol(['ticket']);
   const colUfm2        = findCol(['uf/m', 'uf / m']);
   const colDisponibles = findCol(['disponibles', 'disponible']);
+  const colOfertaTotal = findCol(['oferta total', 'stock programa', 'stock prog', 'oferta prog']);
   const colVelVenta    = findCol(['velocidad', 'vel. venta', 'vel venta', 'vel.venta', 'vel ven']);
 
   if (!colEdificio) {
@@ -216,6 +217,12 @@ export function renderComparativa() {
     const disponibles = colDisponibles
       ? p.rows.reduce((s, r) => s + (numVal(r[colDisponibles]) ?? 0), 0) || null
       : null;
+    const ofertaTotal = colOfertaTotal
+      ? p.rows.reduce((s, r) => s + (numVal(r[colOfertaTotal]) ?? 0), 0) || null
+      : null;
+    const pctDisp = disponibles != null && ofertaTotal != null && ofertaTotal > 0
+      ? disponibles / ofertaTotal * 100
+      : null;
     const velVenta = colVelVenta ? pick(colVelVenta) : null;
 
     const byTipo = {};
@@ -234,11 +241,12 @@ export function renderComparativa() {
       ticket: avg(p.rows.map(r => numVal(colTicket  ? r[colTicket] : null))),
     };
 
-    return { ...p, disponibles, velVenta, byTipo, overall };
+    return { ...p, disponibles, ofertaTotal, pctDisp, velVenta, byTipo, overall };
   });
 
   // Promedios de mercado
   const promedioDisponibles  = avg(proyectos.map(p => p.disponibles).filter(v => v !== null));
+  const promedioPctDisp      = avg(proyectos.map(p => p.pctDisp).filter(v => v !== null));
   const promedioVelVenta = avg(proyectos.map(p => p.velVenta).filter(v => v !== null));
   const promedioTipo = {};
   for (const tipo of tipologias) {
@@ -254,10 +262,11 @@ export function renderComparativa() {
     ticket: avg(proyectos.map(p => p.overall?.ticket).filter(v => v !== null)),
   };
 
-  const hasTipos    = tipologias.length > 0;
-  const hasDisponibles  = colDisponibles  !== null;
-  const hasVelVenta = colVelVenta !== null;
-  const hasProp     = colPropietario !== null;
+  const hasTipos       = tipologias.length > 0;
+  const hasDisponibles = colDisponibles  !== null;
+  const hasOferta      = colOfertaTotal  !== null;
+  const hasVelVenta    = colVelVenta !== null;
+  const hasProp        = colPropietario !== null;
 
   // Map pin numbers (only available when coordinates exist)
   const mapOrder   = getMapOrder();
@@ -272,7 +281,7 @@ export function renderComparativa() {
     });
   }
 
-  const generalCols  = 1 + (hasProp ? 1 : 0) + (hasDisponibles ? 1 : 0) + (hasVelVenta ? 1 : 0);
+  const generalCols  = 1 + (hasProp ? 1 : 0) + (hasDisponibles ? 1 : 0) + (hasOferta ? 1 : 0) + (hasVelVenta ? 1 : 0);
   const metricGroups = hasTipos ? tipologias : ['_overall'];
 
   // ── HTML ────────────────────────────────────────────────────────────────
@@ -293,6 +302,7 @@ export function renderComparativa() {
   html += th('Edificio',    'class="comp-th-label"');
   if (hasProp)     html += th('Propietario',         'class="comp-th-label"');
   if (hasDisponibles)  html += th('Disponibles',           'class="comp-th-label comp-num"');
+  if (hasOferta)       html += th('% Stock disp.',         'class="comp-th-label comp-num"');
   if (hasVelVenta) html += th('Vel. Venta (un./mes)', 'class="comp-th-label comp-num"');
   for (const _ of metricGroups) {
     html += th('Útil m²',   'class="comp-th-metric comp-num comp-sep"');
@@ -309,6 +319,7 @@ export function renderComparativa() {
     html += cell(esc(p.edificio), 'comp-edificio');
     if (hasProp)     html += cell(esc(p.propietario) || '—');
     if (hasDisponibles)  html += cell(p.disponibles != null ? fmtDec(p.disponibles, 0) : '—', 'comp-num');
+    if (hasOferta)       html += cell(p.pctDisp != null ? fmtDec(p.pctDisp, 0) + '%' : '—', 'comp-num');
     if (hasVelVenta) html += cell(p.velVenta != null ? fmtDec(p.velVenta, 1) : '—',       'comp-num');
     if (hasTipos) {
       for (const tipo of tipologias) {
@@ -335,6 +346,7 @@ export function renderComparativa() {
   html += `<td><strong>Promedio</strong></td>`;
   if (hasProp)     html += `<td></td>`;
   if (hasDisponibles)  html += `<td class="comp-num"><strong>${promedioDisponibles != null ? fmtDec(promedioDisponibles, 0) : '—'}</strong></td>`;
+  if (hasOferta)       html += `<td class="comp-num"><strong>${promedioPctDisp != null ? fmtDec(promedioPctDisp, 0) + '%' : '—'}</strong></td>`;
   if (hasVelVenta) html += `<td class="comp-num"><strong>${promedioVelVenta != null ? fmtDec(promedioVelVenta, 1) : '—'}</strong></td>`;
   if (hasTipos) {
     for (const tipo of tipologias) {
@@ -356,9 +368,10 @@ export function renderComparativa() {
     html += `<tr class="comp-situ">`;
     if (hasMapNums) html += `<td></td>`;
     html += `<td class="comp-edificio"><strong>${esc(mp.edificio)}</strong></td>`;
-    if (hasProp)     html += `<td>${esc(mp.propietario) || ''}</td>`;
+    if (hasProp)         html += `<td>${esc(mp.propietario) || ''}</td>`;
     if (hasDisponibles)  html += `<td></td>`;
-    if (hasVelVenta) html += `<td></td>`;
+    if (hasOferta)       html += `<td></td>`;
+    if (hasVelVenta)     html += `<td></td>`;
     if (hasTipos) {
       for (const tipo of tipologias) {
         const t = findMpTipo(tipo);
@@ -378,9 +391,10 @@ export function renderComparativa() {
     html += `<tr class="comp-situ-vs">`;
     if (hasMapNums) html += `<td></td>`;
     html += `<td class="situ-vs-label"><em>${esc(mp.edificio)} vs Promedio</em></td>`;
-    if (hasProp)     html += `<td></td>`;
+    if (hasProp)         html += `<td></td>`;
     if (hasDisponibles)  html += `<td></td>`;
-    if (hasVelVenta) html += `<td></td>`;
+    if (hasOferta)       html += `<td></td>`;
+    if (hasVelVenta)     html += `<td></td>`;
     if (hasTipos) {
       for (const tipo of tipologias) {
         const t    = findMpTipo(tipo);
