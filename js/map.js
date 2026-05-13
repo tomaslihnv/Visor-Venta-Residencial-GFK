@@ -281,7 +281,7 @@ async function copyMapTable() {
 }
 
 function initLeafletMap() {
-  leafletMap = L.map('map', { zoomSnap: 0.25, wheelPxPerZoomLevel: 120 });
+  leafletMap = L.map('map', { zoomSnap: 0.5, wheelPxPerZoomLevel: 350 });
   initRankingResize();
 
   streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
