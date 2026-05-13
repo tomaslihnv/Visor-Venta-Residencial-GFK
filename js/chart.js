@@ -2,95 +2,6 @@ import { $, fmt } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 
-// ── Normal distribution helpers ───────────────────────────────────────────
-
-function _probit(p) {
-  if (p <= 0) return -Infinity;
-  if (p >= 1) return  Infinity;
-  const a = [-3.969683028665376e+01,  2.209460984245205e+02, -2.759285104469687e+02,
-              1.383577518672690e+02, -3.066479806614716e+01,  2.506628277459239e+00];
-  const b = [-5.447609879822406e+01,  1.615858368580409e+02, -1.556989798598866e+02,
-              6.680131188771972e+01, -1.328068155288572e+01];
-  const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
-             -2.549732539343734e+00,  4.374664141464968e+00,  2.938163982698783e+00];
-  const d = [ 7.784695709041462e-03,  3.224671290700398e-01,  2.445134137142996e+00,
-              3.754408661907416e+00];
-  const pLow = 0.02425, pHigh = 1 - pLow;
-  if (p < pLow) {
-    const q = Math.sqrt(-2 * Math.log(p));
-    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
-           ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
-  } else if (p <= pHigh) {
-    const q = p - 0.5, r = q * q;
-    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q /
-           (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
-  } else {
-    const q = Math.sqrt(-2 * Math.log(1 - p));
-    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
-              ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
-  }
-}
-
-function _computeHistogram(sortedVals) {
-  const n = sortedVals.length;
-  const binCount = Math.min(50, Math.max(10, Math.ceil(Math.log2(n) + 1)));
-  const minV = sortedVals[0], maxV = sortedVals[n - 1];
-  const bw = (maxV - minV) / binCount;
-  if (bw === 0) return { bins: [], bw: 0 };
-  const bins = Array.from({ length: binCount }, (_, i) => ({ x: minV + (i + 0.5) * bw, y: 0 }));
-  for (const v of sortedVals) {
-    const i = Math.min(Math.floor((v - minV) / bw), binCount - 1);
-    bins[i].y += 100 / n;
-  }
-  return { bins, bw };
-}
-
-function _computeKDE(sortedVals, sigma, histBw, evalPoints = 120) {
-  const n = sortedVals.length;
-  const h = Math.max(1.06 * sigma * Math.pow(n, -0.2), histBw * 0.1);
-  const x0 = sortedVals[0] - 2 * sigma, x1 = sortedVals[n - 1] + 2 * sigma;
-  const step = (x1 - x0) / evalPoints;
-  const INV_SQRT2PI = 1 / Math.sqrt(2 * Math.PI);
-  return Array.from({ length: evalPoints }, (_, i) => {
-    const x = x0 + (i + 0.5) * step;
-    let sum = 0;
-    for (const xi of sortedVals) { const u = (x - xi) / h; sum += Math.exp(-0.5 * u * u); }
-    return { x, y: (sum / (n * h)) * INV_SQRT2PI * histBw * 100 };
-  });
-}
-
-function _normalPDFcurve(mu, sigma, histBw, x0, x1, points = 120) {
-  const step = (x1 - x0) / points;
-  const INV_SQRT2PI = 1 / Math.sqrt(2 * Math.PI);
-  return Array.from({ length: points }, (_, i) => {
-    const x = x0 + (i + 0.5) * step;
-    return { x, y: INV_SQRT2PI / sigma * Math.exp(-0.5 * ((x - mu) / sigma) ** 2) * histBw * 100 };
-  });
-}
-
-function _computeNormalFit(sortedVals, refData) {
-  const n = sortedVals.length;
-  if (n < 3) return null;
-  const mu    = sortedVals.reduce((a, b) => a + b, 0) / n;
-  const sigma = Math.sqrt(sortedVals.reduce((s, v) => s + (v - mu) ** 2, 0) / n);
-  if (sigma === 0) return null;
-  const curve = Array.from({ length: 99 }, (_, i) => {
-    const pct = i + 1;
-    return { x: pct, y: mu + sigma * _probit(pct / 100) };
-  });
-  let ssRes = 0, ssTot = 0;
-  const slice = refData.slice(5, 96);
-  const empMean = slice.reduce((s, p) => s + p.y, 0) / slice.length;
-  for (let pct = 5; pct <= 95; pct++) {
-    const emp  = refData[pct].y;
-    const theo = mu + sigma * _probit(pct / 100);
-    ssRes += (emp - theo) ** 2;
-    ssTot += (emp - empMean) ** 2;
-  }
-  const r2 = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
-  return { curve, mu, sigma, r2 };
-}
-
 // ============== KPIs ==============
 export function renderKpis() {
   const rows = state.filtered;
@@ -1299,15 +1210,6 @@ export function populateDistribSelectors() {
 
   if (!distribListenersReady) {
     distribListenersReady = true;
-    $('#distribNormalToggle')?.addEventListener('change', renderDistrib);
-
-    document.querySelectorAll('.distrib-mode-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.distrib-mode-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        renderDistrib();
-      });
-    });
 
     document.querySelectorAll('.distrib-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1500,10 +1402,6 @@ export function renderDistrib() {
               : (_nc.includes('util') || _nc.includes('sup')) ? 'm²'
               : 'UF';
   const fs = parseInt($('#distribFontSize')?.value ?? '11');
-  distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²' : 'UF';
-  const fs   = parseInt($('#distribFontSize')?.value ?? '11');
-  const mode = document.querySelector('.distrib-mode-btn.active')?.dataset.mode ?? 'acumulada';
-  const fmtV = v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 });
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
   const ctx = $('#distribChart').getContext('2d');
@@ -1512,17 +1410,6 @@ export function renderDistrib() {
     .map(r => Number(r[col]))
     .filter(v => !isNaN(v))
     .sort((a, b) => a - b);
-
-  if (sortedVals.length < 2) return;
-
-  const showNormal = $('#distribNormalToggle')?.checked ?? false;
-
-  if (mode === 'densidad') {
-    _renderDensidadVenta(ctx, sortedVals, col, fs, showNormal, fmtV);
-    return;
-  }
-
-  // ── Modo Acumulada (CDF) ──────────────────────────────────────────────
 
   const valAtPct = pct => {
     if (!sortedVals.length) return null;
@@ -1545,17 +1432,6 @@ export function renderDistrib() {
     tension: isDens ? 0.3 : 0.4,
     fill: true,
   }];
-
-  if (normalFit) {
-    datasets.push({
-      label: `Normal (μ=${fmtV(normalFit.mu)}, σ=${fmtV(normalFit.sigma)})`,
-      data: normalFit.curve,
-      borderColor: '#f97316',
-      backgroundColor: 'transparent',
-      pointRadius: 0, borderWidth: 2, borderDash: [6, 3],
-      tension: 0.3, fill: false,
-    });
-  }
 
   // Construir anotaciones
   const annotations = {};
@@ -1655,59 +1531,43 @@ export function renderDistrib() {
       else if (isTicket) val = (t.sup != null && t.ufm2 != null) ? t.sup * t.ufm2 : null;
       else               val = t.sup;
       if (val == null) return;
-      const pct = lerpAtY(refData, val);
-      if (pct === null) return;
       const valLabel = val.toLocaleString('es-CL', { maximumFractionDigits: 0 });
-      annotations[`mp_h_${t.id}`] = {
-        type: 'line', yMin: val, yMax: val, xMax: pct,
-        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: {
-          content: `${t.nombre}: ${valLabel}`,
-          display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
-        },
-      };
-      annotations[`mp_v_${t.id}`] = {
-        type: 'line', xMin: pct, xMax: pct, yMax: val,
-        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: {
-          content: `P${pct.toFixed(1)}`,
-          display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
-        },
-      };
+      const mpAnnLabel = (content) => ({
+        content, display: true, position: 'start',
+        color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+      });
+
+      if (isDens) {
+        // Modo densidad: muestra percentil + valor + tipología en paréntesis
+        const pct = lerpAtY(refData, val);
+        const pctStr = pct !== null ? `P${Math.round(pct)}: ` : '';
+        annotations[`mp_v_${t.id}`] = {
+          type: 'line', xMin: val, xMax: val, yMax: lerpDensity(kdeData, val),
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`${pctStr}${valLabel} ${distribUnit} (${t.nombre})`),
+        };
+      } else {
+        // Modo acumulada: líneas cruzadas
+        const pct = lerpAtY(refData, val);
+        if (pct === null) return;
+        annotations[`mp_h_${t.id}`] = {
+          type: 'line', yMin: val, yMax: val, xMax: pct,
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`${t.nombre}: ${valLabel}`),
+        };
+        annotations[`mp_v_${t.id}`] = {
+          type: 'line', xMin: pct, xMax: pct, yMax: val,
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`P${pct.toFixed(1)}`),
+        };
+      }
     });
   }
-
-  const normalStatsPlugin = {
-    id: 'normalStats',
-    afterDraw(chart) {
-      if (!normalFit) return;
-      const { ctx: c, chartArea: { left, top } } = chart;
-      const lines = [
-        `μ = ${fmtV(normalFit.mu)}   σ = ${fmtV(normalFit.sigma)}`,
-        `Ajuste R² = ${normalFit.r2.toFixed(3)}`,
-      ];
-      c.save();
-      c.font = `bold ${fs}px system-ui, sans-serif`;
-      const maxW = Math.max(...lines.map(l => c.measureText(l).width));
-      const pad = 6, lh = fs + 6, boxH = lines.length * lh + pad * 2;
-      c.fillStyle = 'rgba(255,255,255,0.92)';
-      c.fillRect(left + 8, top + 8, maxW + pad * 2, boxH);
-      c.strokeStyle = '#f97316'; c.lineWidth = 1.5;
-      c.strokeRect(left + 8, top + 8, maxW + pad * 2, boxH);
-      c.fillStyle = '#f97316'; c.textBaseline = 'top';
-      lines.forEach((line, i) => c.fillText(line, left + 8 + pad, top + 8 + pad + i * lh));
-      c.restore();
-    },
-  };
 
   distribChart = new Chart(ctx, {
     type: 'line',
     data: { datasets },
-    plugins: [normalStatsPlugin],
     plugins: [{
       id: 'distribSettings',
       afterDraw(chart) {
@@ -1735,7 +1595,18 @@ export function renderDistrib() {
           mode: 'nearest',
           intersect: false,
           axis: 'x',
-          callbacks: {
+          callbacks: isDens ? {
+            title: items => {
+              const pt = chartData[items[0]?.dataIndex];
+              return pt ? pt.x.toLocaleString('es-CL', { maximumFractionDigits: 0 }) + ' ' + distribUnit : '';
+            },
+            label: item => {
+              const pt = chartData[item.dataIndex];
+              if (!pt) return '';
+              const pct = lerpAtY(refData, pt.x);
+              return pct !== null ? ` P${pct.toFixed(1)}` : '';
+            },
+          } : {
             title: items => {
               const pt = refData[items[0]?.dataIndex];
               return pt ? `P${pt.x.toFixed(1)}` : '';
@@ -1774,96 +1645,4 @@ export function renderDistrib() {
     },
   });
 
-}
-
-// ── Modo Densidad (venta) ─────────────────────────────────────────────────
-
-function _renderDensidadVenta(ctx, sortedVals, col, fs, showNormal, fmtV) {
-  const refData = Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1);
-    return { x: pct, y: sortedVals[idx] };
-  });
-  const normalFit = _computeNormalFit(sortedVals, refData);
-  const mu    = normalFit?.mu    ?? sortedVals.reduce((a, b) => a + b, 0) / sortedVals.length;
-  const sigma = normalFit?.sigma ?? Math.sqrt(sortedVals.reduce((s, v) => s + (v - mu) ** 2, 0) / sortedVals.length);
-
-  const { bins, bw } = _computeHistogram(sortedVals);
-  if (!bins.length) return;
-
-  const pad = 1.5 * Math.max(sigma, bw);
-  const x0 = sortedVals[0] - pad;
-  const x1 = sortedVals[sortedVals.length - 1] + pad;
-
-  const kdeData    = _computeKDE(sortedVals, sigma, bw);
-  const normalData = showNormal && normalFit ? _normalPDFcurve(mu, sigma, bw, x0, x1) : null;
-
-  const datasets = [
-    {
-      type: 'bar', label: 'Frecuencia',
-      data: bins,
-      backgroundColor: 'rgba(59,130,246,0.30)', borderColor: palette[0], borderWidth: 1,
-      barPercentage: 1.0, categoryPercentage: 1.0, order: 3,
-    },
-    {
-      type: 'line', label: 'Densidad',
-      data: kdeData,
-      borderColor: '#2563eb', backgroundColor: 'transparent',
-      borderWidth: 2, pointRadius: 0, tension: 0.4, fill: false, order: 2,
-    },
-  ];
-
-  if (normalData) {
-    datasets.push({
-      type: 'line',
-      label: `Normal (μ=${fmtV(mu)}, σ=${fmtV(sigma)})`,
-      data: normalData,
-      borderColor: '#f97316', backgroundColor: 'transparent',
-      borderWidth: 2, borderDash: [6, 3], pointRadius: 0, tension: 0.3, fill: false, order: 1,
-    });
-  }
-
-  const statsPlugin = {
-    id: 'normalStats',
-    afterDraw(chart) {
-      if (!normalFit || !showNormal) return;
-      const { ctx: c, chartArea: { left, top } } = chart;
-      const lines = [`μ = ${fmtV(mu)}   σ = ${fmtV(sigma)}`, `Ajuste R² = ${normalFit.r2.toFixed(3)}`];
-      c.save();
-      c.font = `bold ${fs}px system-ui, sans-serif`;
-      const maxW = Math.max(...lines.map(l => c.measureText(l).width));
-      const p = 6, lh = fs + 6, boxH = lines.length * lh + p * 2;
-      c.fillStyle = 'rgba(255,255,255,0.92)';
-      c.fillRect(left + 8, top + 8, maxW + p * 2, boxH);
-      c.strokeStyle = '#f97316'; c.lineWidth = 1.5;
-      c.strokeRect(left + 8, top + 8, maxW + p * 2, boxH);
-      c.fillStyle = '#f97316'; c.textBaseline = 'top';
-      lines.forEach((line, i) => c.fillText(line, left + 8 + p, top + 8 + p + i * lh));
-      c.restore();
-    },
-  };
-
-  distribChart = new Chart(ctx, {
-    type: 'bar', data: { datasets }, plugins: [statsPlugin],
-    options: {
-      responsive: true, maintainAspectRatio: false, parsing: false,
-      plugins: {
-        legend: { position: 'top', labels: { font: { size: fs } } },
-        tooltip: {
-          mode: 'nearest', intersect: false, axis: 'x',
-          callbacks: {
-            title: items => { const x = items[0]?.raw?.x; return x != null ? `${fmtV(x)} ${distribUnit}` : ''; },
-            label: item => { const y = item.raw?.y; return y != null ? ` ${item.dataset.label}: ${y.toFixed(2)}%` : ''; },
-          },
-        },
-      },
-      scales: {
-        x: { type: 'linear', min: x0, max: x1,
-          title: { display: true, text: col, font: { size: fs } },
-          ticks: { callback: v => fmtV(v), font: { size: fs } } },
-        y: { beginAtZero: true,
-          title: { display: true, text: '% de datos', font: { size: fs } },
-          ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } } },
-      },
-    },
-  });
 }
