@@ -141,6 +141,9 @@
                 <button id="mapSelectBtn" class="map-mode-btn" title="Dibuja un polígono para excluir/mantener proyectos. Esc para cancelar.">&#x2B1A; Seleccionar zona</button>
                 <button id="mapUndoBtn" class="map-mode-btn map-undo-btn hidden" title="Deshacer última acción de selección (Ctrl+Z)">&#x21A9; Deshacer</button>
                 <button id="mapClearPolyBtn" class="map-mode-btn map-clearpoly-btn hidden" title="Quitar la zona marcada del mapa">&#x2715; Limpiar zona</button>
+                <button id="mapResumenWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar resumen de stock">&#x2263; Resumen</button>
+                <button id="mapSatelliteBtn" class="map-mode-btn" title="Alternar mapa / satélite">Satélite</button>
+                <button id="mapTableExportBtn" class="primary-btn">Copiar tabla</button>
                 <div class="heat-metric-pills hidden" id="heatMetricPills">
                   <span class="heat-metric-label">Métrica:</span>
                   <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
@@ -200,7 +203,7 @@
             <div class="ctrl distrib-font-ctrl">
               <label>Texto</label>
               <div class="distrib-font-row">
-                <input type="range" id="svpFontSize" min="8" max="22" step="1" value="11">
+                <input type="range" id="svpFontSize" min="8" max="36" step="1" value="11">
                 <span id="svpFontSizeVal">11px</span>
               </div>
             </div>
@@ -233,9 +236,39 @@
                 <option value="count">N° Unidades</option>
               </select>
             </div>
-            <button id="proyExportPngBtn" class="primary-btn">Exportar PNG</button>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="proyFontSize" min="8" max="36" step="1" value="11">
+                <span id="proyFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="proy-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="proy-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="proy-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Eje X</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-xrot-btn active" data-rot="diagonal">Diagonal</button>
+                <button class="proy-xrot-btn" data-rot="vertical">Vertical</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Mediana</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-median-btn active" data-median="show">Mostrar</button>
+                <button class="proy-median-btn" data-median="hide">Ocultar</button>
+              </div>
+            </div>
+            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="proyWrap">
             <canvas id="proyChart"></canvas>
           </div>
         </div>

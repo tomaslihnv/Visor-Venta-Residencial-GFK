@@ -182,20 +182,63 @@ export function populateProyectosSelectors() {
   if (proyListenersReady) return;
   proyListenersReady = true;
   $('#proyMetrica')?.addEventListener('change', renderProyectos);
+
+  const proyFontSlider = $('#proyFontSize');
+  const proyFontVal    = $('#proyFontSizeVal');
+  if (proyFontSlider) {
+    proyFontSlider.addEventListener('input', () => {
+      proyFontVal.textContent = proyFontSlider.value + 'px';
+      renderProyectos();
+    });
+  }
+
+  document.querySelectorAll('.proy-ratio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-ratio-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.proy-xrot-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-xrot-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProyectos();
+    });
+  });
+
+  document.querySelectorAll('.proy-median-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-median-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProyectos();
+    });
+  });
+
   $('#proyExportPngBtn')?.addEventListener('click', async () => {
     if (!proyChart) return;
     const btn = $('#proyExportPngBtn');
-    const prev = btn.textContent;
     const scale = 4;
+    const pad = 32;
+    const wrap = $('#proyWrap');
+    const ratio = document.querySelector('.proy-ratio-btn.active')?.dataset.ratio ?? 'auto';
+
     const origDPR = proyChart.options.devicePixelRatio ?? window.devicePixelRatio;
+    const exportW = wrap ? wrap.clientWidth - pad : proyChart.width;
+    const exportH = ratio === 'auto'
+      ? proyChart.height
+      : Math.round(exportW / parseFloat(ratio));
+
     proyChart.options.devicePixelRatio = scale;
-    proyChart.resize();
+    proyChart.resize(exportW, exportH);
     const url = proyChart.toBase64Image('image/png', 1);
     proyChart.options.devicePixelRatio = origDPR;
     proyChart.resize();
+    const prev = btn.textContent;
     const blob = await _withMargin(url, 64);
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    btn.textContent = '¡Copiado!'; btn.disabled = true;
+    btn.textContent = '¡Copiado!';
+    btn.disabled = true;
     setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
   });
 }
@@ -216,6 +259,12 @@ export function renderProyectos() {
 
   if (!edifCol) return;
   if (metricId !== 'count' && !metricCol) return;
+
+  const fs = parseInt($('#proyFontSize')?.value ?? '11');
+  const xRot = document.querySelector('.proy-xrot-btn.active')?.dataset.rot ?? 'diagonal';
+  const xMaxRot = xRot === 'vertical' ? 90 : 45;
+  const xMinRot = xRot === 'vertical' ? 90 : 30;
+  const showMedian = (document.querySelector('.proy-median-btn.active')?.dataset.median ?? 'show') === 'show';
 
   if (proyChart) { proyChart.destroy(); proyChart = null; }
   const ctx = $('#proyChart')?.getContext('2d');
@@ -266,13 +315,18 @@ export function renderProyectos() {
   const MP_COLOR  = '#f59e0b';
   const BAR_COLOR = '#1e3a5f';
 
+  const sortedVals = entries.map(([, v]) => v).sort((a, b) => a - b);
+  const medianVal  = showMedian && sortedVals.length
+    ? sortedVals[Math.floor(sortedVals.length / 2)]
+    : null;
+
   const barLabelsPlugin = {
     id: 'barLabels',
     afterDatasetsDraw(chart) {
       const { ctx: c } = chart;
       const meta = chart.getDatasetMeta(0);
       c.save();
-      c.font = 'bold 10px system-ui, sans-serif';
+      c.font = `bold ${fs}px system-ui, sans-serif`;
       c.textAlign = 'center';
       c.textBaseline = 'bottom';
       meta.data.forEach((bar, i) => {
@@ -285,6 +339,14 @@ export function renderProyectos() {
       c.restore();
     },
   };
+
+  const medianAnnotations = medianVal != null ? {
+    mediana: {
+      type: 'line', yMin: medianVal, yMax: medianVal,
+      borderColor: '#dc2626', borderWidth: 1.5, borderDash: [5, 4],
+      label: { content: `Mediana: ${metric.fmt(medianVal)}`, display: true, position: 'end', font: { size: fs - 1 }, color: '#dc2626', backgroundColor: 'rgba(255,255,255,0.85)' },
+    },
+  } : {};
 
   proyChart = new Chart(ctx, {
     type: 'bar',
@@ -306,12 +368,13 @@ export function renderProyectos() {
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: item => ` ${metric.fmt(item.raw)}` } },
+        annotation: { annotations: medianAnnotations },
       },
       scales: {
-        x: { ticks: { maxRotation: 45, minRotation: 30, font: { size: 11 } } },
+        x: { ticks: { maxRotation: xMaxRot, minRotation: xMinRot, font: { size: fs } } },
         y: {
           title: { display: false },
-          ticks: { callback: v => metric.fmt(v) },
+          ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
         },
       },
