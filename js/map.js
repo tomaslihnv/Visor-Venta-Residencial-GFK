@@ -155,6 +155,9 @@ let mapInitialized = false;
 let legendControl = null;
 let countControl = null;
 let lastOrderedPoints = [];
+let streetLayer = null;
+let satelliteLayer = null;
+let isSatellite = false;
 
 // Selección por polígono (vértices con clic)
 let selMode          = false;
@@ -278,14 +281,36 @@ async function copyMapTable() {
 }
 
 function initLeafletMap() {
-  leafletMap = L.map('map', { zoomSnap: 0.25, wheelPxPerZoomLevel: 120 });
+  leafletMap = L.map('map', { zoomSnap: 0.5, wheelPxPerZoomLevel: 350 });
   initRankingResize();
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+  streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
     maxZoom: 19,
     crossOrigin: 'anonymous',
-  }).addTo(leafletMap);
+  });
+  satelliteLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxZoom: 19,
+    crossOrigin: 'anonymous',
+  });
+  streetLayer.addTo(leafletMap);
   markersLayer = L.layerGroup().addTo(leafletMap);
+
+  document.getElementById('mapSatelliteBtn')?.addEventListener('click', () => {
+    isSatellite = !isSatellite;
+    if (isSatellite) {
+      leafletMap.removeLayer(streetLayer);
+      satelliteLayer.addTo(leafletMap);
+      satelliteLayer.bringToBack();
+    } else {
+      leafletMap.removeLayer(satelliteLayer);
+      streetLayer.addTo(leafletMap);
+      streetLayer.bringToBack();
+    }
+    document.getElementById('mapSatelliteBtn').classList.toggle('active', isSatellite);
+  });
 
   // Control leyenda (bottom-left)
   legendControl = L.control({ position: 'bottomleft' });
@@ -305,10 +330,10 @@ function initLeafletMap() {
   };
   countControl.addTo(leafletMap);
 
-  // Botones de modo
-  document.querySelectorAll('.map-mode-btn').forEach(btn => {
+  // Botones de modo (solo los que tienen data-mode)
+  document.querySelectorAll('.map-mode-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.map-mode-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.map-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       mapMode = btn.dataset.mode;
       renderMap();
@@ -333,6 +358,7 @@ function initLeafletMap() {
 
   initSelectionMode();
   initFilterWidget();
+  initResumenWidget();
 
   // Copiar imagen
   document.getElementById('mapExportBtn')?.addEventListener('click', async () => {
@@ -423,6 +449,138 @@ function initFilterWidget() {
         widget.style.top  = '48px';
       }
       updateFilterWidget();
+    }
+  });
+}
+
+// ============== Widget de resumen de stock ==============
+let resumenWidgetInited = false;
+
+function _computeResumen() {
+  const fmtTipo = v => {
+    const s = String(v ?? '').trim();
+    return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
+  };
+  const tipoCol = state.columns.find(c =>
+    ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k))
+  )?.name;
+  const dispCol = state.columns.find(c =>
+    norm(c.name).includes('disponib') && c.type === 'number'
+  )?.name;
+  const ofertaCol = dispCol ? null : state.columns.find(c =>
+    ['oferta total', 'oferta'].some(k => norm(c.name).includes(k)) && c.type === 'number'
+  )?.name;
+  const stockCol = dispCol || ofertaCol;
+  if (!stockCol) return null;
+
+  const byTipo = {};
+  let total = 0;
+  for (const r of state.filtered) {
+    const v = Number(r[stockCol]);
+    if (isNaN(v) || v < 0) continue;
+    total += v;
+    if (tipoCol) {
+      const t = fmtTipo(r[tipoCol]) || '—';
+      byTipo[t] = (byTipo[t] || 0) + v;
+    }
+  }
+  return { total: Math.round(total), byTipo };
+}
+
+function updateResumenWidget() {
+  const body = document.getElementById('mapResumenBody');
+  if (!body) return;
+  const widget = document.getElementById('mapResumenWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+
+  const data = _computeResumen();
+  if (!data) {
+    body.innerHTML = '<div class="mfw-empty">Sin columna de stock disponible</div>';
+    return;
+  }
+
+  const { total, byTipo } = data;
+  const fmtN = v => Math.round(v).toLocaleString('es-CL');
+
+  // Ordenar tipologías: 1D, 2D, 3D, 4D primero, luego el resto
+  const tipoOrder = ['1D', '2D', '3D', '4D'];
+  const tipoKeys = [
+    ...tipoOrder.filter(k => byTipo[k] != null),
+    ...Object.keys(byTipo).filter(k => !tipoOrder.includes(k)).sort(),
+  ];
+
+  const rows = tipoKeys.map(k => {
+    const pct = total > 0 ? Math.round((byTipo[k] / total) * 100) : 0;
+    return `<div class="mfw-row">
+      <span class="mfw-label">${k}</span>
+      <span class="mfw-value">${fmtN(byTipo[k])} un. <span style="color:#9ca3af;font-weight:400">(${pct}%)</span></span>
+    </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="mfw-row" style="border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-bottom:4px;">
+      <span class="mfw-label" style="font-weight:700">Total disponible</span>
+      <span class="mfw-value" style="font-weight:700">${fmtN(total)} un.</span>
+    </div>
+    ${rows || '<div class="mfw-empty">Sin datos de tipología</div>'}
+  `;
+}
+
+function initResumenWidget() {
+  const toggleBtn = document.getElementById('mapResumenWidgetBtn');
+  if (!toggleBtn || resumenWidgetInited) return;
+  resumenWidgetInited = true;
+
+  const widget = document.createElement('div');
+  widget.id = 'mapResumenWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="mapResumenHeader">
+      <span>Resumen stock</span>
+      <button class="mfw-close" id="mapResumenClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="mapResumenBody"></div>
+  `;
+  leafletMap.getContainer().appendChild(widget);
+  L.DomEvent.disableClickPropagation(widget);
+  L.DomEvent.disableScrollPropagation(widget);
+
+  const header = document.getElementById('mapResumenHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'mapResumenClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || 0;
+    const startT = parseInt(widget.style.top)  || 0;
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('mapResumenClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        const cW = leafletMap.getContainer().offsetWidth;
+        widget.style.left = (cW - 230) + 'px';
+        widget.style.top  = '90px';
+      }
+      updateResumenWidget();
     }
   });
 }
@@ -822,6 +980,7 @@ export function renderMap() {
   setTimeout(() => leafletMap.invalidateSize(), 150);
 
   renderRanking();
+  updateResumenWidget();
 }
 
 // ============== Ranking lateral ==============
