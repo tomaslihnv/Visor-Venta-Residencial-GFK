@@ -487,8 +487,6 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   flex: 1; min-height: 0;
   overflow: auto;
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
 }
 .comp-table {
   width: 100%; border-collapse: collapse;
@@ -527,14 +525,16 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .comp-th-section {
   background: #fff;
   text-align: left;
+  border-bottom: none;
 }
 .comp-th-tipo {
   background: #DDE0E3; color: #0f172a; font-weight: 700;
   text-align: center;
-  border-left: 2px solid #c9cdd6;
+  border-left: 1px solid #e2e8f0;
 }
 .comp-th-label  { text-align: left; }
-.comp-th-metric { text-align: right; }
+.comp-th-metric { text-align: center; }
+.comp-col-kpi   { min-width: 150px; }
 
 /* Body rows */
 .comp-table tbody tr { border-bottom: 1px solid #f1f5f9; }
@@ -544,18 +544,16 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .comp-edificio  { font-weight: 500; color: #1e3a5f; }
 
 /* Numeric cells */
-.comp-num { text-align: right; font-variant-numeric: tabular-nums; }
+.comp-num { text-align: center; font-variant-numeric: tabular-nums; }
 /* Left border separating tipologia groups */
-.comp-sep { border-left: 2px solid #e2e8f0; }
+.comp-sep { border-left: 1px solid #e2e8f0; }
 /* Map pin number column */
 .comp-th-num {
   text-align: center; width: 32px; min-width: 32px;
-  border-right: 2px solid #e2e8f0;
 }
 .comp-map-num {
   text-align: center;
   font-weight: 700; color: #1e3a5f;
-  border-right: 1px solid #e2e8f0;
 }
 
 /* Promedio / tfoot row */

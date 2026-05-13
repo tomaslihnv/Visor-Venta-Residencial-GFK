@@ -81,7 +81,6 @@ function _cellInlineStyle(srcEl) {
   s.push(`white-space:nowrap`);
   s.push(`mso-wrap-style:none`);          // desactiva ajuste de texto en PPT
   s.push(`overflow:hidden`);
-  s.push(`border:1px solid #e2e8f0`);
 
   // Color de fondo
   const bg = c.backgroundColor;
@@ -94,13 +93,18 @@ function _cellInlineStyle(srcEl) {
   if (c.fontStyle === 'italic') s.push(`font-style:italic`);
   if (c.textTransform === 'uppercase') s.push(`text-transform:uppercase`);
 
-  // Bordes superiores más gruesos (separadores de sección)
-  const btw = parseFloat(c.borderTopWidth);
-  if (btw > 1) s.push(`border-top:${c.borderTopWidth} ${c.borderTopStyle} ${c.borderTopColor}`);
+  // Bordes: leer los 4 lados desde computed style (cualquier ancho > 0)
+  for (const side of ['Top', 'Right', 'Bottom', 'Left']) {
+    const w = parseFloat(c[`border${side}Width`]);
+    if (w > 0) {
+      s.push(`border-${side.toLowerCase()}:${c[`border${side}Width`]} ${c[`border${side}Style`]} ${c[`border${side}Color`]}`);
+    }
+  }
 
-  // Borde izquierdo de separación de tipología
-  const blw = parseFloat(c.borderLeftWidth);
-  if (blw > 1) s.push(`border-left:${c.borderLeftWidth} ${c.borderLeftStyle} ${c.borderLeftColor}`);
+  // Separador de fila para celdas de datos (border-bottom está en <tr>, no en <td>)
+  if (srcEl.tagName === 'TD' && srcEl.closest('tbody') && parseFloat(c.borderBottomWidth) === 0) {
+    s.push('border-bottom:1px solid #f1f5f9');
+  }
 
   return s.join(';');
 }
@@ -301,9 +305,9 @@ export function renderComparativa() {
   if (hasMapNums) html += th('N°', 'class="comp-th-num"');
   html += th('Edificio',    'class="comp-th-label"');
   if (hasProp)     html += th('Propietario',         'class="comp-th-label"');
-  if (hasDisponibles)  html += th('Disponibles',           'class="comp-th-label comp-num"');
-  if (hasOferta)       html += th('% Stock disp.',         'class="comp-th-label comp-num"');
-  if (hasVelVenta) html += th('Vel. Venta (un./mes)', 'class="comp-th-label comp-num"');
+  if (hasDisponibles)  html += th('Disponibles',           'class="comp-th-label comp-num comp-col-kpi"');
+  if (hasOferta)       html += th('% Stock disp.',         'class="comp-th-label comp-num comp-col-kpi"');
+  if (hasVelVenta) html += th('Vel. Venta (un./mes)', 'class="comp-th-label comp-num comp-col-kpi"');
   for (const _ of metricGroups) {
     html += th('Útil m²',   'class="comp-th-metric comp-num comp-sep"');
     html += th('UF/m²',     'class="comp-th-metric comp-num"');
