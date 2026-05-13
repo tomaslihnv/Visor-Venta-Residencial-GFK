@@ -1,5 +1,6 @@
 import { $, $$ } from '../utils.js';
 import { resetFilters } from './filters.js';
+import { initFilterIO } from '../core/filter-io.js';
 
 // Re-renderizar la pestaña activa cuando cambia Mi Proyecto
 document.addEventListener('mpchange', () => {
@@ -54,6 +55,16 @@ $$('.tab').forEach(tab => {
 });
 
 // ============== Copiar tabla comparativa ==============
+// ============== Filter IO ==============
+import('./filters.js').then(({ getFilterState, applyFilterState }) => {
+  initFilterIO({
+    visorId:    'renta',
+    getState:   getFilterState,
+    applyState: applyFilterState,
+    panelEl:    document.getElementById('filtrosPanelBody'),
+  });
+});
+
 $('#exportCompBtn').addEventListener('click', async () => {
   const btn = $('#exportCompBtn');
   const { copyComparativaHtml } = await import('./comparativa.js');

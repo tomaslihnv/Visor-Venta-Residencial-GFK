@@ -101,6 +101,10 @@
           <div id="filtersContainer" class="filters">
             <p class="hint">Cargá un Excel para empezar.</p>
           </div>
+          <div class="filter-io-row">
+            <button id="exportFiltersBtn" class="filter-io-btn" title="Exportar filtros como JSON. También podés arrastrar un .json aquí para cargar filtros.">&#x21E9; Exportar filtros</button>
+            <span id="filterIOFeedback" class="filter-io-feedback" style="display:none"></span>
+          </div>
         </div>
       </div>
     </aside>
@@ -118,11 +122,11 @@
 
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
-          <button class="tab" data-tab="comparativa">Tabla comparativa</button>
-          <button class="tab" data-tab="svp">Sup. vs Renta</button>
           <button class="tab" data-tab="proyectos">Proyectos</button>
+          <button class="tab" data-tab="svp">Dispersión</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
-          <button class="tab" data-tab="tabla">Tabla</button>
+          <button class="tab" data-tab="comparativa">Resumen</button>
+          <button class="tab" data-tab="tabla">Datos</button>
         </div>
 
         <!-- TAB: MAPA -->
@@ -168,9 +172,10 @@
           </div>
         </div>
 
-        <!-- TAB: SUP. VS RENTA -->
+        <!-- TAB: DISPERSIÓN -->
         <div class="tab-panel" data-panel="svp">
           <div class="chart-controls">
+            <button id="svpFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
             <div class="ctrl">
               <label>Tipología</label>
               <select id="svpTipoFilter">
@@ -305,6 +310,7 @@
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
+            <button class="distrib-mp-btn active" title="Mostrar/ocultar unidad del proyecto">Mi Proyecto</button>
             <div class="distrib-tags-row">
               <div id="distribPctTags" class="marker-tags"></div>
               <div id="distribPriceTags" class="marker-tags"></div>

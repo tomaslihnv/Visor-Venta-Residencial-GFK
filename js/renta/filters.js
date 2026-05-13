@@ -52,10 +52,10 @@ export function buildFilters() {
 
   if (cols.tipologia)  _buildMulti('tipologia', cols.tipologia, 'Tipología', container);
 
-  if (cols.superficie) _buildSlider('sup',    cols.superficie, 'm² útil',             container, 1);
-  if (cols.renta)      _buildSlider('renta',  cols.renta,      'Renta UF',            container, 1);
-  if (cols.ufm2)       _buildSlider('ufm2',   cols.ufm2,       'UF/m²',               container, 0.01);
-  if (cols.gastos)     _buildSlider('gastos', cols.gastos,     'Gastos Comunes (CLP)', container, 1000);
+  if (cols.superficie) _buildMinMax('sup',    cols.superficie, 'm² útil',             container);
+  if (cols.renta)      _buildMinMax('renta',  cols.renta,      'Renta UF',            container);
+  if (cols.ufm2)       _buildMinMax('ufm2',   cols.ufm2,       'UF/<span class="keep-case">m</span>²', container, 2);
+  if (cols.gastos)     _buildMinMax('gastos', cols.gastos,     'Gastos Comunes (UF)', container);
   if (cols.corredor)   _buildMulti('corredor', cols.corredor,  'Corredor',            container);
   if (cols.tipo)       _buildMulti('tipo',     cols.tipo,      'Tipo de propiedad',   container);
   if (cols.comuna)     _buildMulti('comuna',   cols.comuna,    'Comuna',              container);
@@ -93,6 +93,71 @@ function _buildMulti(key, colName, label, container) {
 }
 
 // --- Slider dual con inputs editables en los extremos ---
+function _buildMinMax(key, colName, label, container, decimals = 0) {
+  const nums = state.raw.map(r => Number(r[colName])).filter(v => !isNaN(v) && v > 0);
+  if (!nums.length) return;
+  const inv  = decimals > 0 ? Math.pow(10, decimals) : 1;
+  const dMin = Math.floor(Math.min(...nums) * inv) / inv;
+  const dMax = Math.ceil(Math.max(...nums)  * inv) / inv;
+
+  const fmtNum = v => v.toLocaleString('es-CL', {
+    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+  });
+  const parseNum = s => {
+    const n = parseFloat(String(s).replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? null : n;
+  };
+
+  const group = document.createElement('div');
+  group.className = 'filter-group';
+  group.innerHTML = `<label class="title">${label}</label>`;
+
+  const row = document.createElement('div');
+  row.className = 'sup-tipo-row';
+
+  const minLbl = document.createElement('span');
+  minLbl.className = 'sup-tipo-minmax-label';
+  minLbl.textContent = 'min';
+
+  const iMin = document.createElement('input');
+  iMin.type = 'text'; iMin.className = 'sup-tipo-input minmax-wide';
+  iMin.value = fmtNum(dMin);
+
+  const maxLbl = document.createElement('span');
+  maxLbl.className = 'sup-tipo-minmax-label';
+  maxLbl.textContent = 'max';
+
+  const iMax = document.createElement('input');
+  iMax.type = 'text'; iMax.className = 'sup-tipo-input minmax-wide';
+  iMax.value = fmtNum(dMax);
+
+  row.append(minLbl, iMin, maxLbl, iMax);
+  group.appendChild(row);
+  container.appendChild(group);
+
+  refs[key] = { type: 'minmax', inMin: iMin, inMax: iMax, colName, dMin, dMax, fmtNum };
+
+  const onChange = debounce(() => {
+    F[`${key}Min`] = parseNum(iMin.value);
+    F[`${key}Max`] = parseNum(iMax.value);
+    applyFilters();
+  }, 350);
+  iMin.addEventListener('input', onChange);
+  iMax.addEventListener('input', onChange);
+  iMin.addEventListener('blur', () => {
+    const n = parseNum(iMin.value);
+    if (n === null) { iMin.value = fmtNum(refs[key].dMin); F[`${key}Min`] = null; applyFilters(); }
+    else { iMin.value = fmtNum(n); }
+  });
+  iMax.addEventListener('blur', () => {
+    const n = parseNum(iMax.value);
+    if (n === null) { iMax.value = fmtNum(refs[key].dMax); F[`${key}Max`] = null; applyFilters(); }
+    else { iMax.value = fmtNum(n); }
+  });
+  iMin.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+  iMax.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+}
+
 function _buildSlider(key, colName, label, container, step = 1) {
   const nums = state.raw.map(r => Number(r[colName])).filter(v => !isNaN(v) && v > 0);
   if (!nums.length) return;
@@ -332,9 +397,67 @@ export function getActiveFiltersSummary() {
     const hasMin = F[`${key}Min`] !== null;
     const hasMax = F[`${key}Max`] !== null;
     if (!hasMin && !hasMax) continue;
-    const lo = hasMin ? ref.iMin.value : '—';
-    const hi = hasMax ? ref.iMax.value : '—';
+    const lo = hasMin ? (ref.inMin ?? ref.iMin)?.value ?? '—' : '—';
+    const hi = hasMax ? (ref.inMax ?? ref.iMax)?.value ?? '—' : '—';
     items.push({ label, value: `${lo} – ${hi}` });
   }
   return items;
+}
+
+// ============== Export / Import de filtros ==============
+
+export function getFilterState() {
+  return {
+    multi: {
+      tipologia: [...F.tipologia],
+      corredor:  [...F.corredor],
+      tipo:      [...F.tipo],
+      comuna:    [...F.comuna],
+    },
+    ranges: {
+      sup:    { min: F.supMin,    max: F.supMax },
+      ufm2:   { min: F.ufm2Min,  max: F.ufm2Max },
+      renta:  { min: F.rentaMin,  max: F.rentaMax },
+      gastos: { min: F.gastosMin, max: F.gastosMax },
+    },
+  };
+}
+
+export function applyFilterState(data) {
+  if (!data) return;
+
+  for (const [key, values] of Object.entries(data.multi ?? {})) {
+    if (!(key in F) || !(F[key] instanceof Set)) continue;
+    const cbs = [...document.querySelectorAll(`input[type="checkbox"][id^="f_${key}_"]`)];
+    if (!cbs.length) continue;
+    const valueSet = new Set(values.map(String));
+    F[key].clear();
+    for (const cb of cbs) {
+      cb.checked = valueSet.size === 0 || valueSet.has(cb.value);
+      if (cb.checked && valueSet.size > 0) F[key].add(cb._realVal ?? cb.value);
+    }
+  }
+
+  for (const [key, range] of Object.entries(data.ranges ?? {})) {
+    F[`${key}Min`] = range.min ?? null;
+    F[`${key}Max`] = range.max ?? null;
+    const ref = refs[key];
+    if (!ref) continue;
+    if (ref.type === 'minmax') {
+      if (range.min != null) ref.inMin.value = ref.fmtNum(range.min);
+      else ref.inMin.value = ref.fmtNum(ref.dMin);
+      if (range.max != null) ref.inMax.value = ref.fmtNum(range.max);
+      else ref.inMax.value = ref.fmtNum(ref.dMax);
+    } else {
+      const lo = range.min ?? ref.curMin ?? ref.dMin;
+      const hi = range.max ?? ref.curMax ?? ref.dMax;
+      if (ref.sMin) ref.sMin.value = lo;
+      if (ref.sMax) ref.sMax.value = hi;
+      if (ref.iMin) ref.iMin.value = lo;
+      if (ref.iMax) ref.iMax.value = hi;
+      ref.updateFill?.();
+    }
+  }
+
+  applyFilters();
 }

@@ -344,8 +344,8 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
   const datasets = [{
     label: col,
     data: refDataClean,
-    borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.10)',
-    pointRadius: 0, borderWidth: 2, tension: 0.55, fill: true,
+    borderColor: '#1e3a5f', backgroundColor: 'rgba(59,130,246,0.08)',
+    pointRadius: 0, borderWidth: 2, tension: 0.4, fill: true,
   }];
 
   if (normalFit) {
@@ -357,25 +357,26 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
     });
   }
 
-  const RED = '#ef4444';
+  const ANN_COLOR = '#6b7280';
   const annotations = {};
+  const annLabel = (content) => ({
+    content, display: true, position: 'start',
+    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+  });
 
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
-    const price = _lerpAtX(refData, pct);
+    const price = _lerpAtX(refDataClean, pct);
     if (!price) return;
     annotations[`pv_${pct}`] = {
       type: 'line', xMin: pct, xMax: pct, yMax: price,
-      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `P${pct}`, display: true, position: 'start',
-        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}`),
     };
     annotations[`ph_${pct}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct,
-      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${_fmtVal(price)} ${_distribUnit}`, display: true, position: 'start',
-        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`),
     };
   });
 
@@ -383,18 +384,14 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
     const pct = _lerpAtY(refDataClean, price);
     annotations[`prh_${price}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct ?? 100,
-      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${_fmtVal(price)} ${_distribUnit}`, display: true, position: 'start',
-        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`),
     };
     if (pct !== null) {
       annotations[`prv_${price}`] = {
         type: 'line', xMin: pct, xMax: pct, yMax: price,
-        borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
-        label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
-          color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+        borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`P${pct.toFixed(1)}`),
       };
     }
   });

@@ -495,7 +495,80 @@ export function populateSvpSelectors() {
       btn.disabled = true;
       setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
     });
+
+    _initSvpFilterWidget();
   }
+}
+
+function _initSvpFilterWidget() {
+  const toggleBtn = document.getElementById('svpFilterWidgetBtn');
+  const container = document.getElementById('svpWrap');
+  if (!toggleBtn || !container) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'svpFilterWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="svpFwHeader">
+      <span>Filtros activos</span>
+      <button class="mfw-close" id="svpFwClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="svpFwBody"></div>
+  `;
+  container.appendChild(widget);
+
+  document.getElementById('svpFwHeader').addEventListener('mousedown', e => {
+    if (e.target.id === 'svpFwClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || (container.offsetWidth - 240);
+    const startT = parseInt(widget.style.top)  || 10;
+    widget.style.left = startL + 'px'; widget.style.top = startT + 'px';
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('svpFwClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        widget.style.left = (container.offsetWidth - 240) + 'px';
+        widget.style.top  = '10px';
+      }
+      _updateSvpFilterWidget();
+    }
+  });
+}
+
+export function updateSvpFilterWidget() { _updateSvpFilterWidget(); }
+
+function _updateSvpFilterWidget() {
+  const body = document.getElementById('svpFwBody');
+  if (!body) return;
+  const widget = document.getElementById('svpFilterWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+  import('./filters.js').then(({ getActiveFiltersSummary }) => {
+    const items = getActiveFiltersSummary();
+    body.innerHTML = items.length
+      ? items.map(it => `<div class="mfw-row"><span class="mfw-label">${it.label}</span><span class="mfw-value">${it.value}</span></div>`).join('')
+      : '<div class="mfw-empty">Sin filtros aplicados</div>';
+  });
 }
 
 function linearRegression(pts) {
@@ -1029,17 +1102,21 @@ export function renderDistrib() {
     return sortedVals[Math.max(0, idx)];
   };
 
-  const refData    = computeQuantileCurve(state.filtered, col);
-  const normalFit  = showNormal ? _computeNormalFit(sortedVals, refData) : null;
+  const n = sortedVals.length;
+  const refData = Array.from({ length: 101 }, (_, pct) => {
+    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
+    return { x: pct, y: sortedVals[idx] };
+  });
+  const normalFit = showNormal ? _computeNormalFit(sortedVals, refData) : null;
 
   const datasets = [{
     label: col,
     data: refData,
-    borderColor: '#38bdf8',
-    backgroundColor: 'rgba(56,189,248,0.10)',
+    borderColor: '#1e3a5f',
+    backgroundColor: 'rgba(59,130,246,0.08)',
     pointRadius: 0,
     borderWidth: 2,
-    tension: 0.55,
+    tension: 0.4,
     fill: true,
   }];
 
@@ -1055,49 +1132,41 @@ export function renderDistrib() {
   }
 
   const annotations = {};
-  const RED = '#ef4444';
+  const ANN_COLOR = '#6b7280';
+  const annLabel = (content) => ({
+    content, display: true, position: 'start',
+    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+  });
 
-  // ── Percentiles ────────────────────────────────────────────
   [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
     const price = lerpAtX(refData, pct);
     if (price == null || price === 0) return;
-    const priceLabel = fmtVal(price);
-    // Línea vertical: desde eje X hasta la curva
     annotations[`pv_${pct}`] = {
       type: 'line', xMin: pct, xMax: pct, yMax: price,
-      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `P${pct}`, display: true, position: 'start',
-        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}`),
     };
-    // Línea horizontal: desde eje Y hasta la curva
     annotations[`ph_${pct}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct,
-      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${priceLabel} ${distribUnit}`, display: true, position: 'start',
-        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${fmtVal(price)} ${distribUnit}`),
     };
   });
 
-  // ── Precios marcados ────────────────────────────────────────
   [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
     const pct = lerpAtY(refData, price);
     const pctForLabel = pct !== null ? pct : 100;
     annotations[`prh_${price}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pctForLabel,
-      borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${fmtVal(price)} ${distribUnit}`, display: true, position: 'start',
-        color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${fmtVal(price)} ${distribUnit}`),
     };
     if (pct !== null) {
       annotations[`prv_${price}`] = {
         type: 'line', xMin: pct, xMax: pct, yMax: price,
-        borderColor: RED, borderWidth: 1.5, borderDash: [6, 4],
-        label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
-          color: RED, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+        borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`P${pct.toFixed(1)}`),
       };
     }
   });
