@@ -1,4 +1,5 @@
 import { $, debounce } from '../utils.js';
+import { extractDormitorios } from './utils.js';
 import { state } from './data.js';
 
 // ============== Resolución de columnas ==============
@@ -50,7 +51,7 @@ export function buildFilters() {
   const container = $('#filtersContainer');
   container.innerHTML = '';
 
-  if (cols.tipologia)  _buildMulti('tipologia', cols.tipologia, 'Tipología', container);
+  if (cols.tipologia)  _buildTipologiaD(container);
 
   if (cols.superficie) _buildMinMax('sup',    cols.superficie, 'm² útil',             container);
   if (cols.renta)      _buildMinMax('renta',  cols.renta,      'Renta UF',            container);
@@ -62,6 +63,48 @@ export function buildFilters() {
 }
 
 // --- Multi checkbox genérico ---
+// Filtro de tipología por dormitorios (XD) únicamente.
+// Agrupa "2D1B" y "2D2B" bajo "2D", ignora "1B", "Studio", etc.
+function _buildTipologiaD(container) {
+  if (!cols.tipologia) return;
+
+  const dValues = [...new Set(
+    state.raw.map(r => extractDormitorios(r[cols.tipologia])).filter(Boolean)
+  )].sort((a, b) => {
+    const na = parseInt(a), nb = parseInt(b);
+    return isNaN(na) || isNaN(nb) ? a.localeCompare(b, 'es') : na - nb;
+  });
+  if (!dValues.length) return;
+
+  const group = document.createElement('div');
+  group.className = 'filter-group';
+  group.innerHTML = '<label class="title">Tipología</label>';
+
+  const multi = document.createElement('div');
+  multi.className = 'multi';
+  const checkboxes = [];
+
+  for (const dVal of dValues) {
+    const id = `f_tipologia_${dVal}`;
+    const lab = document.createElement('label');
+    const cb  = document.createElement('input');
+    cb.type = 'checkbox'; cb.id = id; cb.value = dVal;
+    cb.checked = true;
+    cb.addEventListener('change', () => {
+      const checked = checkboxes.filter(c => c.checked).map(c => c.value);
+      F.tipologia.clear();
+      if (checked.length < dValues.length) checked.forEach(v => F.tipologia.add(v));
+      applyFilters();
+    });
+    lab.append(cb, document.createTextNode(' ' + dVal));
+    multi.appendChild(lab);
+    checkboxes.push(cb);
+  }
+
+  group.appendChild(multi);
+  container.appendChild(group);
+}
+
 function _buildMulti(key, colName, label, container) {
   const vals = [...new Set(
     state.raw.map(r => r[colName]).filter(v => v !== '' && v != null)
@@ -263,7 +306,7 @@ export function applyFilters() {
     }
 
     if (F.excludedProyectos.size && cols.proyecto && F.excludedProyectos.has(String(row[cols.proyecto] ?? '').trim())) return false;
-    if (F.tipologia.size && cols.tipologia && !F.tipologia.has(row[cols.tipologia])) return false;
+    if (F.tipologia.size && cols.tipologia && !F.tipologia.has(extractDormitorios(row[cols.tipologia]))) return false;
     if (F.corredor.size  && cols.corredor  && !F.corredor.has(row[cols.corredor]))  return false;
     if (F.tipo.size        && cols.tipo        && !F.tipo.has(row[cols.tipo]))                       return false;
     if (F.comuna.size      && cols.comuna      && !F.comuna.has(row[cols.comuna]))                   return false;
@@ -420,6 +463,7 @@ export function getFilterState() {
       renta:  { min: F.rentaMin,  max: F.rentaMax },
       gastos: { min: F.gastosMin, max: F.gastosMax },
     },
+    excludedProyectos: F.excludedProyectos.size > 0 ? [...F.excludedProyectos] : null,
   };
 }
 
@@ -457,6 +501,12 @@ export function applyFilterState(data) {
       if (ref.iMax) ref.iMax.value = hi;
       ref.updateFill?.();
     }
+  }
+
+  if (Array.isArray(data.excludedProyectos) && data.excludedProyectos.length > 0) {
+    F.excludedProyectos = new Set(data.excludedProyectos.map(String));
+  } else if (data.excludedProyectos === null) {
+    F.excludedProyectos = new Set();
   }
 
   applyFilters();

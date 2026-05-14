@@ -6,7 +6,7 @@ import { norm } from './utils.js';
 //
 // options: { canvasId, selectId, exportBtnId, projectCandidates }
 
-const palette = ['#1e3a5f','#2563eb','#7c3aed','#db2777','#d97706','#059669','#0891b2','#65a30d'];
+const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#a855f7'];
 
 function _withMargin(dataUrl, m) {
   return new Promise(resolve => {
@@ -161,8 +161,8 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
 
   entries = entries.sort((a, b) => b[1] - a[1]);
 
-  const MP_COLOR  = '#f59e0b';
-  const BAR_COLOR = '#1e3a5f';
+  const MP_COLOR  = '#96323C';
+  const BAR_COLOR = '#DDE0E3';
 
   const sortedVals = entries.map(([, v]) => v).sort((a, b) => a - b);
   const medianVal  = showMedian && sortedVals.length
@@ -182,7 +182,7 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
         const value = entries[i]?.[1];
         if (value == null) return;
         const isMP = entries[i]?.[0] === mpName;
-        c.fillStyle = isMP ? '#d97706' : '#374151';
+        c.fillStyle = isMP ? '#96323C' : '#374151';
         c.fillText(metric.fmt(value), bar.x, bar.y - 3);
       });
       c.restore();
@@ -204,9 +204,8 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
       datasets: [{
         label: metric.label,
         data: entries.map(([, v]) => v),
-        backgroundColor: entries.map(([e]) => (e === mpName ? MP_COLOR : BAR_COLOR) + 'CC'),
-        borderColor:     entries.map(([e]) =>  e === mpName ? '#d97706' : BAR_COLOR),
-        borderWidth: 1,
+        backgroundColor: entries.map(([e]) => e === mpName ? MP_COLOR : BAR_COLOR),
+        borderWidth: 0,
         borderRadius: 3,
       }],
     },

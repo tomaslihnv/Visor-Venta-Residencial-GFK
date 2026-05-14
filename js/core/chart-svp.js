@@ -9,7 +9,7 @@ import { copyChartPng } from './export.js';
 //   projCandidates?:  string[]
 // }
 
-const palette = ['#1e3a5f','#2563eb','#7c3aed','#db2777','#d97706','#059669','#0891b2','#65a30d'];
+const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#a855f7'];
 
 let _svpReady  = false;
 export const svpMarkers = new Set();

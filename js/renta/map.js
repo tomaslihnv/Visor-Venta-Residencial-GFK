@@ -1,5 +1,5 @@
-import { state } from './data.js'; // Ajusta la ruta si renombraste el archivo a data.js
-import { $, fmt } from './utils.js';
+import { state } from './data.js';
+import { $, fmt, extractDormitorios } from './utils.js';
 import { mp } from './miProyecto.js';
 
 // ============== Cache y estado ==============
@@ -306,7 +306,8 @@ function _computeResumenRenta() {
   let total = 0, rentaSum = 0, rentaCount = 0;
   for (const r of state.filtered) {
     total++;
-    const t = tipoCol ? String(r[tipoCol] ?? '').trim() || '—' : null;
+    const rawTipo = tipoCol ? r[tipoCol] : null;
+    const t = rawTipo != null ? (extractDormitorios(rawTipo) ?? null) : null;
     if (t) byTipo[t] = (byTipo[t] || 0) + 1;
     if (rentaCol) {
       const v = Number(r[rentaCol]);
@@ -326,22 +327,13 @@ function updateResumenWidget() {
   const fmtN = v => Math.round(v).toLocaleString('es-CL');
   const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
 
-  const tipoOrder = ['1D', '2D', '3D', '4D'];
-  const normTipo  = s => {
-    const t = String(s ?? '').trim();
-    return (/^\d+$/.test(t) && +t > 0 && +t <= 10) ? `${t}D` : t.toUpperCase();
-  };
-  const tipoKeys = Object.keys(data.byTipo).map(k => ({ raw: k, label: normTipo(k) }));
-  tipoKeys.sort((a, b) => {
-    const ia = tipoOrder.indexOf(a.label), ib = tipoOrder.indexOf(b.label);
-    if (ia >= 0 && ib >= 0) return ia - ib;
-    if (ia >= 0) return -1;
-    if (ib >= 0) return 1;
-    return a.label.localeCompare(b.label);
+  const tipoKeys = Object.keys(data.byTipo).sort((a, b) => {
+    const na = parseInt(a), nb = parseInt(b);
+    return isNaN(na) || isNaN(nb) ? a.localeCompare(b, 'es') : na - nb;
   });
 
-  const rows = tipoKeys.map(({ raw, label }) => {
-    const cnt = data.byTipo[raw];
+  const rows = tipoKeys.map(label => {
+    const cnt = data.byTipo[label];
     const pct = data.total > 0 ? Math.round((cnt / data.total) * 100) : 0;
     return `<div class="mfw-row">
       <span class="mfw-label">${label}</span>
@@ -651,7 +643,9 @@ async function copyMapTable() {
 
   const rows = lastOrderedPoints.map((pt, i) => {
     const proy = proyCol ? String(pt.rows[0]?.[proyCol] ?? '—') : '—';
-    const tipo = tipoCol ? [...new Set(pt.rows.map(r => String(r[tipoCol] ?? '').trim()).filter(Boolean))].join(', ') || '—' : '—';
+    const tipo = tipoCol
+      ? [...new Set(pt.rows.map(r => extractDormitorios(r[tipoCol])).filter(Boolean))].sort((a,b)=>parseInt(a)-parseInt(b)).join(', ') || '—'
+      : '—';
     let renta = null, ufm2 = null;
     if (rentaCol) {
       const vals = pt.rows.map(r => Number(r[rentaCol])).filter(v => !isNaN(v) && v > 0);
@@ -898,7 +892,7 @@ export function renderMap() {
     const nombreProy = mp.proyecto || mp.edificio || 'Mi Proyecto';
     const mpIcon = L.divIcon({
       className: '',
-      html: `<div class="mp-map-marker" title="${String(nombreProy).replace(/"/g, '&quot;')}">★</div>`,
+      html: `<div class="mp-map-marker" title="${String(nombreProy).replace(/"/g, '&quot;')}"><svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="16" fill="#fff" stroke="#96323C" stroke-width="2.5"/><polyline points="8,23 18,13 28,23" fill="none" stroke="#96323C" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`,
       iconSize: [36, 36],
       iconAnchor: [18, 18],
       popupAnchor: [0, -20],

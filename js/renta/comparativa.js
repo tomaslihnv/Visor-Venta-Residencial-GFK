@@ -1,4 +1,5 @@
 import { $ } from '../utils.js';
+import { extractDormitorios } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 
@@ -155,13 +156,12 @@ export function renderComparativa() {
     return;
   }
 
-  // Tipologías únicas ordenadas
+  // Tipologías únicas — solo dormitorios (XD), ignorar baños
   const tipologias = colTipologia
-    ? [...new Set(state.filtered.map(r => r[colTipologia]).filter(v => v !== '' && v != null))]
+    ? [...new Set(state.filtered.map(r => extractDormitorios(r[colTipologia])).filter(Boolean))]
         .sort((a, b) => {
-          const na = parseInt(String(a)), nb = parseInt(String(b));
-          if (!isNaN(na) && !isNaN(nb)) return na - nb;
-          return String(a).localeCompare(String(b), 'es');
+          const na = parseInt(a), nb = parseInt(b);
+          return isNaN(na) || isNaN(nb) ? a.localeCompare(b, 'es') : na - nb;
         })
     : [];
 
@@ -183,7 +183,7 @@ export function renderComparativa() {
   const proyectos = [...map.values()].map(p => {
     const byTipo = {};
     for (const tipo of tipologias) {
-      const tipoRows = p.rows.filter(r => r[colTipologia] === tipo);
+      const tipoRows = p.rows.filter(r => extractDormitorios(r[colTipologia]) === tipo);
       byTipo[tipo] = {
         sup:    avg(tipoRows.map(r => numVal(colSup    ? r[colSup]    : null))),
         ufm2:   avg(tipoRows.map(r => numVal(colUfm2   ? r[colUfm2]  : null))),

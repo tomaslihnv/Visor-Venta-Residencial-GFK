@@ -212,7 +212,10 @@ export function getFilterState(state) {
       };
     }
   }
-  return { multi, slider };
+  const excludedProyectos = state.excludedProjects?.size > 0
+    ? [...state.excludedProjects]
+    : null;
+  return { multi, slider, excludedProyectos };
 }
 
 export function applyFilterState(data, state) {
@@ -241,6 +244,12 @@ export function applyFilterState(data, state) {
     ref.sMin.value = lo; if (ref.iMin) ref.iMin.value = lo;
     ref.sMax.value = hi; if (ref.iMax) ref.iMax.value = hi;
     ref.updateFill?.();
+  }
+
+  if (Array.isArray(data.excludedProyectos) && data.excludedProyectos.length > 0) {
+    state.excludedProjects = new Set(data.excludedProyectos.map(String));
+  } else if (data.excludedProyectos === null) {
+    state.excludedProjects = new Set();
   }
 
   _applyAndNotify(state);

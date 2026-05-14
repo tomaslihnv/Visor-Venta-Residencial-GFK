@@ -958,7 +958,7 @@ export function renderMap(state, mapConfig, mp) {
     const nombre = mp.proyecto || 'Mi Proyecto';
     const mpIcon = L.divIcon({
       className: '',
-      html: `<div class="mp-map-marker" title="${String(nombre).replace(/"/g, '&quot;')}">★</div>`,
+      html: `<div class="mp-map-marker" title="${String(nombre).replace(/"/g, '&quot;')}"><svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="16" fill="#fff" stroke="#96323C" stroke-width="2.5"/><polyline points="8,23 18,13 28,23" fill="none" stroke="#96323C" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`,
       iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20],
     });
     const esc = s => String(s ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');

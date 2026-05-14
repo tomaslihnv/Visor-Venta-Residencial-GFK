@@ -290,6 +290,14 @@
               <div class="distrib-ratio-row">
                 <button class="distrib-mode-btn active" data-mode="acumulada">Acumulada</button>
                 <button class="distrib-mode-btn" data-mode="densidad">Densidad</button>
+                <button class="distrib-mode-btn" data-mode="lognormal">Log-normal</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-bins-ctrl" id="distribBinsCtrl" style="display:none">
+              <label>Bins</label>
+              <div class="distrib-font-row">
+                <input type="range" id="distribBins" min="5" max="80" step="1" value="0">
+                <span id="distribBinsVal">Auto</span>
               </div>
             </div>
             <label class="toggle-check">

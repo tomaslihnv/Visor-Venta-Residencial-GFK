@@ -53,9 +53,9 @@ function _computeNormalFit(sortedVals, refData) {
   return { curve, mu, sigma, r2 };
 }
 
-function _computeHistogram(sortedVals) {
+function _computeHistogram(sortedVals, binCount) {
   const n = sortedVals.length;
-  const binCount = Math.min(50, Math.max(10, Math.ceil(Math.log2(n) + 1)));
+  if (!binCount) binCount = Math.min(50, Math.max(10, Math.ceil(Math.log2(n) + 1)));
   const minV = sortedVals[0], maxV = sortedVals[n - 1];
   const bw = (maxV - minV) / binCount;
   if (bw === 0) return { bins: [], bw: 0 };
@@ -112,14 +112,30 @@ export function initDistribListeners(state, distribCols, mp) {
 
   document.getElementById('distribCol')?.addEventListener('change', rerender);
   document.getElementById('distribNormalToggle')?.addEventListener('change', rerender);
+  document.querySelector('.distrib-mp-btn')?.addEventListener('click', () => {
+    document.querySelector('.distrib-mp-btn').classList.toggle('active');
+    rerender();
+  });
 
   document.querySelectorAll('.distrib-mode-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.distrib-mode-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      const mode = btn.dataset.mode;
+      const binsCtrl = document.getElementById('distribBinsCtrl');
+      if (binsCtrl) binsCtrl.style.display = mode === 'densidad' ? '' : 'none';
       rerender();
     });
   });
+
+  const binsSlider = document.getElementById('distribBins');
+  const binsVal    = document.getElementById('distribBinsVal');
+  if (binsSlider) {
+    binsSlider.addEventListener('input', () => {
+      if (binsVal) binsVal.textContent = +binsSlider.value === 0 ? 'Auto' : binsSlider.value;
+      rerender();
+    });
+  }
 
   document.querySelectorAll('.ratio-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -316,6 +332,8 @@ export function renderDistrib(state, distribCols, mp) {
 
   if (mode === 'densidad') {
     _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp);
+  } else if (mode === 'lognormal') {
+    _renderLognormal(ctx, sortedVals, col, fs, mp);
   } else {
     _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp);
   }
@@ -344,7 +362,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
   const datasets = [{
     label: col,
     data: refDataClean,
-    borderColor: '#1e3a5f', backgroundColor: 'rgba(59,130,246,0.08)',
+    borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.10)',
     pointRadius: 0, borderWidth: 2, tension: 0.4, fill: true,
   }];
 
@@ -396,10 +414,13 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
     }
   });
 
-  if (mp?.inDistrib && mp.tipologias?.length > 0) {
+  const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
+  if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
     const nc = norm(col);
-    const isUfm2  = nc.includes('uf/m'); const mpColor = '#1e3a5f';
+    const isUfm2  = nc.includes('uf/m');
     const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('arriendo') || nc.includes('precio'));
+    const mpColor = '#96323C';
+    const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     mp.tipologias.filter(t => t.nombre).forEach(t => {
       let val = isUfm2 ? t.ufm2 : isRenta ? (t.renta ?? (t.sup != null && t.ufm2 != null ? t.sup * t.ufm2 : null)) : t.sup;
       if (val == null) return;
@@ -408,16 +429,12 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
       annotations[`mp_h_${t.id}`] = {
         type: 'line', yMin: val, yMax: val, xMax: pct,
         borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: { content: `${t.nombre}: ${_fmtVal(val)}`, display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+        label: mpAnn(`${t.nombre}: ${_fmtVal(val)}`),
       };
       annotations[`mp_v_${t.id}`] = {
         type: 'line', xMin: pct, xMax: pct, yMax: val,
         borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+        label: mpAnn(`P${pct.toFixed(1)}`),
       };
     });
   }
@@ -462,6 +479,134 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
 
 // ── Modo Densidad (histograma + KDE + normal PDF) ─────────────────────────
 
+// ── Modo Log-normal ───────────────────────────────────────────────────────
+
+function _computeLogNormal(sortedVals, nPoints = 300) {
+  const posVals = sortedVals.filter(v => v > 0);
+  const n = posVals.length;
+  if (n < 2) return [];
+  const logVals = posVals.map(v => Math.log(v));
+  const mu  = logVals.reduce((a, b) => a + b, 0) / n;
+  const sig = Math.sqrt(logVals.reduce((a, v) => a + (v - mu) ** 2, 0) / (n - 1));
+  if (sig === 0) return [];
+  const xMin = posVals[0] * 0.5;
+  const xMax = posVals[n - 1] * 1.15;
+  const step = (xMax - xMin) / nPoints;
+  const K = 1 / (sig * Math.sqrt(2 * Math.PI));
+  return Array.from({ length: nPoints + 1 }, (_, i) => {
+    const x = xMin + i * step;
+    if (x <= 0) return { x, y: 0 };
+    return { x, y: K / x * Math.exp(-0.5 * ((Math.log(x) - mu) / sig) ** 2) };
+  });
+}
+
+function _renderLognormal(ctx, sortedVals, col, fs, mp) {
+  const lnData = _computeLogNormal(sortedVals);
+  if (!lnData.length) return;
+
+  const refData = Array.from({ length: 101 }, (_, pct) => {
+    const idx = Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1);
+    return { x: pct, y: sortedVals[idx] };
+  });
+  const valAtPct = pct => sortedVals[Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1)];
+
+  const ANN_COLOR = '#6b7280';
+  const annLabel = (content) => ({
+    content, display: true, position: 'start',
+    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+  });
+
+  const annotations = {};
+
+  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+    const val = valAtPct(pct);
+    if (val == null) return;
+    annotations[`dpv_${pct}`] = {
+      type: 'line', xMin: val, xMax: val, yMax: _lerpAtX(lnData, val) ?? undefined,
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}: ${_fmtVal(val)} ${_distribUnit}`),
+    };
+  });
+
+  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+    const pct = _lerpAtY(refData, price);
+    const pctStr = pct !== null ? ` (P${pct.toFixed(1)})` : '';
+    annotations[`dprv_${price}`] = {
+      type: 'line', xMin: price, xMax: price, yMax: _lerpAtX(lnData, price) ?? undefined,
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}${pctStr}`),
+    };
+  });
+
+  const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
+  if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
+    const nc = norm(col);
+    const isUfm2  = nc.includes('uf/m');
+    const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('arriendo') || nc.includes('precio'));
+    const mpColor = '#96323C';
+    const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    mp.tipologias.filter(t => t.nombre).forEach(t => {
+      let val = isUfm2 ? t.ufm2 : isRenta ? (t.renta ?? (t.sup != null && t.ufm2 != null ? t.sup * t.ufm2 : null)) : t.sup;
+      if (val == null) return;
+      const pct = _lerpAtY(refData, val);
+      const pctStr = pct !== null ? `P${Math.round(pct)}: ` : '';
+      annotations[`mp_v_${t.id}`] = {
+        type: 'line', xMin: val, xMax: val, yMax: _lerpAtX(lnData, val) ?? undefined,
+        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+        label: mpAnn(`${pctStr}${_fmtVal(val)} ${_distribUnit} (${t.nombre})`),
+      };
+    });
+  }
+
+  _distribChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [{
+        label: `Log-normal (${col})`,
+        data: lnData,
+        borderColor: '#0ea5e9',
+        backgroundColor: 'rgba(14,165,233,0.08)',
+        pointRadius: 0,
+        borderWidth: 2,
+        tension: 0.3,
+        fill: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      parsing: false,
+      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: fs } } },
+        tooltip: {
+          mode: 'nearest', intersect: false, axis: 'x',
+          callbacks: {
+            title: items => { const x = items[0]?.raw?.x; return x != null ? `${_fmtVal(x)} ${_distribUnit}` : ''; },
+            label: item => { const y = item.raw?.y; return y != null ? ` Densidad: ${y.toFixed(4)}` : ''; },
+          },
+        },
+        annotation: { annotations },
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: col, font: { size: fs } },
+          ticks: { callback: v => _fmtVal(v), font: { size: fs } },
+        },
+        y: {
+          title: { display: true, text: 'Densidad', font: { size: fs } },
+          ticks: { display: false },
+          grid: { display: false },
+        },
+      },
+    },
+  });
+}
+
+// ── Modo Densidad (histograma + KDE + normal PDF) ─────────────────────────
+
 function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp) {
   const refData  = Array.from({ length: 101 }, (_, pct) => {
     const idx = Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1);
@@ -476,7 +621,9 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp) {
     }, 0) / sortedVals.length),
   };
 
-  const { bins, bw } = _computeHistogram(sortedVals);
+  const userBins = parseInt(document.getElementById('distribBins')?.value ?? '0');
+  const binCount = userBins > 0 ? userBins : undefined;
+  const { bins, bw } = _computeHistogram(sortedVals, binCount);
   if (!bins.length) return;
 
   const pad = 1.5 * Math.max(sigma, bw);
@@ -511,20 +658,53 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp) {
     });
   }
 
+  const valAtPct = pct => sortedVals[Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1)];
+
+  const ANN_COLOR_D = '#6b7280';
+  const annLabelD = (content) => ({
+    content, display: true, position: 'start',
+    color: ANN_COLOR_D, backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+  });
+
   const annotations = {};
-  if (mp?.inDistrib && mp.tipologias?.length > 0) {
+
+  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+    const val = valAtPct(pct);
+    if (val == null) return;
+    annotations[`dpv_${pct}`] = {
+      type: 'line', xMin: val, xMax: val, yMax: _lerpAtX(kdeData, val) ?? undefined,
+      borderColor: ANN_COLOR_D, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabelD(`P${pct}: ${_fmtVal(val)} ${_distribUnit}`),
+    };
+  });
+
+  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+    const pct = _lerpAtY(refData, price);
+    const pctStr = pct !== null ? ` (P${pct.toFixed(1)})` : '';
+    annotations[`dprv_${price}`] = {
+      type: 'line', xMin: price, xMax: price, yMax: _lerpAtX(kdeData, price) ?? undefined,
+      borderColor: ANN_COLOR_D, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabelD(`${_fmtVal(price)} ${_distribUnit}${pctStr}`),
+    };
+  });
+
+  const showMpDistribD = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
+  if (showMpDistribD && mp?.inDistrib && mp.tipologias?.length > 0) {
     const nc = norm(col);
-    const isUfm2  = nc.includes('uf/m'); const mpColor = '#1e3a5f';
+    const isUfm2  = nc.includes('uf/m');
     const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('arriendo') || nc.includes('precio'));
+    const mpColor = '#96323C';
+    const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     mp.tipologias.filter(t => t.nombre).forEach(t => {
       let val = isUfm2 ? t.ufm2 : isRenta ? (t.renta ?? (t.sup != null && t.ufm2 != null ? t.sup * t.ufm2 : null)) : t.sup;
       if (val == null) return;
-      annotations[`mp_${t.id}`] = {
-        type: 'line', scaleID: 'x', value: val,
+      const pct = _lerpAtY(refData, val);
+      const pctStr = pct !== null ? `P${Math.round(pct)}: ` : '';
+      annotations[`mp_v_${t.id}`] = {
+        type: 'line', xMin: val, xMax: val, yMax: _lerpAtX(kdeData, val) ?? undefined,
         borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: { content: `${t.nombre}: ${_fmtVal(val)}`, display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+        label: mpAnn(`${pctStr}${_fmtVal(val)} ${_distribUnit} (${t.nombre})`),
       };
     });
   }
