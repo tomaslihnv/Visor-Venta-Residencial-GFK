@@ -1,5 +1,6 @@
 import { $, $$ } from './utils.js';
 import { resetFilters } from './filters.js';
+import { initFilterIO } from './core/filter-io.js';
 
 // Re-renderizar la pestaña activa cuando cambia Mi Proyecto
 document.addEventListener('mpchange', () => {
@@ -64,6 +65,16 @@ $('#exportCompBtn').addEventListener('click', async () => {
     btn.disabled = true;
     setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
   }
+});
+
+// ============== Filter IO ==============
+import('./filters.js').then(({ getFilterState, applyFilterState }) => {
+  initFilterIO({
+    visorId:    'venta',
+    getState:   getFilterState,
+    applyState: applyFilterState,
+    panelEl:    document.getElementById('filtrosPanelBody'),
+  });
 });
 
 // ============== Exportar ==============

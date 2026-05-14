@@ -272,7 +272,7 @@ const PROY_UNITS = { ticket: 'UF', ufm2: 'UF/m²', util: 'm²', disp: 'un.', vel
 const PROY_METRICS = [
   { id: 'ticket', label: 'Ticket UF',            keys: ['ticket'],                      agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'ufm2',   label: 'UF/m²',               keys: ['uf/m', 'uf / m'],              agg: 'avg', fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
-  { id: 'util',   label: 'Útil (m²)',            keys: ['útil', 'util', 'vendible'],    agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
+  { id: 'util',   label: 'Útil (m²)',            keys: ['útil', 'util', 'vendible'],    agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'disp',   label: 'Disponibles',          keys: ['disponib'],                    agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'vel',    label: 'Vel. Venta (un./mes)', keys: ['vel. venta', 'vel venta'],     agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
   { id: 'oferta', label: 'Oferta total proyecto',keys: ['oferta total', 'oferta'],      agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
@@ -281,6 +281,21 @@ const PROY_METRICS = [
     return pct.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + '%';
   }},
 ];
+
+function _withMargin(dataUrl, m) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width + m * 2; c.height = img.height + m * 2;
+      const x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      x.drawImage(img, m, m);
+      c.toBlob(resolve, 'image/png');
+    };
+    img.src = dataUrl;
+  });
+}
 
 export function populateProyectosSelectors() {
   const sel = $('#proyMetrica');
@@ -297,22 +312,51 @@ export function populateProyectosSelectors() {
     });
   }
 
+  document.querySelectorAll('.proy-ratio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-ratio-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.proy-xrot-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-xrot-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProyectos();
+    });
+  });
+
+  document.querySelectorAll('.proy-median-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.proy-median-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProyectos();
+    });
+  });
+
   $('#proyExportPngBtn')?.addEventListener('click', async () => {
     if (!proyChart) return;
     const btn = $('#proyExportPngBtn');
     const scale = 4;
+    const pad = 32;
+    const wrap = $('#proyWrap');
+    const ratio = document.querySelector('.proy-ratio-btn.active')?.dataset.ratio ?? 'auto';
+
     const origDPR = proyChart.options.devicePixelRatio ?? window.devicePixelRatio;
+    const exportW = wrap.clientWidth - pad;
+    const exportH = ratio === 'auto'
+      ? proyChart.height
+      : Math.round(exportW / parseFloat(ratio));
+
     proyChart.options.devicePixelRatio = scale;
-    proyChart.resize();
+    proyChart.resize(exportW, exportH);
     const url = proyChart.toBase64Image('image/png', 1);
     proyChart.options.devicePixelRatio = origDPR;
     proyChart.resize();
-
-    const res  = await fetch(url);
-    const blob = await res.blob();
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-
     const prev = btn.textContent;
+    const blob = await _withMargin(url, 64);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
     btn.textContent = '¡Copiado!';
     btn.disabled = true;
     setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
@@ -337,6 +381,10 @@ export function renderProyectos() {
   if (!edifCol || !metricCol) return;
 
   const fs = parseInt($('#proyFontSize')?.value ?? '11');
+  const xRot = document.querySelector('.proy-xrot-btn.active')?.dataset.rot ?? 'diagonal';
+  const xMaxRot = xRot === 'vertical' ? 90 : 45;
+  const xMinRot = xRot === 'vertical' ? 90 : 30;
+  const showMedian = (document.querySelector('.proy-median-btn.active')?.dataset.median ?? 'show') === 'show';
 
   if (proyChart) { proyChart.destroy(); proyChart = null; }
   const ctx = $('#proyChart').getContext('2d');
@@ -482,7 +530,7 @@ export function renderProyectos() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      layout: { padding: { top: 20 } },
+      layout: { padding: { top: 40, right: 20, bottom: 12, left: 12 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -491,51 +539,149 @@ export function renderProyectos() {
       },
       scales: {
         x: {
-          ticks: { maxRotation: 45, minRotation: 30, font: { size: fs } },
+          ticks: { maxRotation: xMaxRot, minRotation: xMinRot, font: { size: fs } },
           grid: { display: false },
         },
         y: {
-          title: { display: true, text: metric.label, font: { size: fs } },
+          title: { display: false },
           ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
           grid: { display: false },
         },
       },
     },
-    plugins: [barLabelsPlugin, medianPlugin],
+    plugins: [barLabelsPlugin, ...(showMedian ? [medianPlugin] : []), {
+      id: 'yAxisHLabel',
+      afterDraw(chart) {
+        const { ctx, chartArea } = chart;
+        ctx.save();
+        ctx.font = `${fs}px system-ui, sans-serif`;
+        ctx.fillStyle = '#666';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        const labelY = Math.max(chartArea.top - 22, fs + 4);
+        const labelX = Math.max(chartArea.left, ctx.measureText(metric.label).width + 4);
+        ctx.fillText(metric.label, labelX, labelY);
+        ctx.restore();
+      },
+    }, {
+      id: 'proySettings',
+      afterDraw(chart) {
+        const { ctx, chartArea: { right, top } } = chart;
+        const ratioVal = document.querySelector('.proy-ratio-btn.active')?.dataset.ratio ?? 'auto';
+        const ratioMap = { auto: 'Auto', '1.78': '16:9', '1.33': '4:3', '1': '1:1' };
+        const text = `${ratioMap[ratioVal] ?? ratioVal} · ${fs}px`;
+        ctx.save();
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.fillStyle = '#c8c8c8';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, right - 2, top + 4);
+        ctx.restore();
+      },
+    }],
   });
 }
 
 // ============== Sup. vs Precio ==============
 let svpListenersReady = false;
 
-export function populateSvpSelectors() {
-  const tipoSel = $('#svpTipoFilter');
-  if (!tipoSel) return;
+// Estado del triángulo de pendiente (draggable)
+let svpSlopeXPct   = 0.22;   // posición a lo largo del eje X (0–1)
+let svpSlopeDragging = false;
+let svpSlopeBbox   = null;    // { x, y, w, h } en coordenadas canvas (CSS px)
 
-  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-  const tipoCol = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k)));
-
-  tipoSel.innerHTML = '<option value="">Todas</option>';
-  if (tipoCol) {
-    const tipos = [...new Set(state.raw.map(r => r[tipoCol.name]).filter(Boolean))].sort();
-    for (const t of tipos) {
-      const o = document.createElement('option');
-      o.value = t; o.textContent = t;
-      tipoSel.appendChild(o);
-    }
+const _svpSlpDown = e => {
+  if (!svpSlopeBbox) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  if (mx >= svpSlopeBbox.x && mx <= svpSlopeBbox.x + svpSlopeBbox.w &&
+      my >= svpSlopeBbox.y && my <= svpSlopeBbox.y + svpSlopeBbox.h) {
+    svpSlopeDragging = true;
+    e.preventDefault();
   }
+};
+const _svpSlpMove = e => {
+  const canvas = e.currentTarget;
+  const showTrend = document.querySelector('.svp-tend-btn')?.classList.contains('active') ?? false;
+  if (!showTrend || !svpSlopeBbox) { canvas.style.cursor = ''; return; }
+  const r = canvas.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  if (!svpSlopeDragging) {
+    const hit = mx >= svpSlopeBbox.x && mx <= svpSlopeBbox.x + svpSlopeBbox.w &&
+                my >= svpSlopeBbox.y && my <= svpSlopeBbox.y + svpSlopeBbox.h;
+    canvas.style.cursor = hit ? 'grab' : '';
+    return;
+  }
+  canvas.style.cursor = 'grabbing';
+  if (!state.chart) return;
+  const { scales } = state.chart;
+  const xMin = scales.x.min, xMax = scales.x.max, range = xMax - xMin;
+  const dataX = scales.x.getValueForPixel(mx);
+  svpSlopeXPct = Math.max(0.02, Math.min(0.78, (dataX - xMin) / range));
+  state.chart.update('none');
+};
+const _svpSlpUp = e => {
+  svpSlopeDragging = false;
+  e.currentTarget.style.cursor = '';
+};
+
+export function populateSvpSelectors() {
+  if (!$('#svpExportPngBtn')) return;
 
   if (!svpListenersReady) {
     svpListenersReady = true;
-    tipoSel.addEventListener('change', renderSupVsPrecio);
-    $('#svpTrendToggle')?.addEventListener('change', renderSupVsPrecio);
-    $('#svpExportPngBtn')?.addEventListener('click', () => {
+
+    document.querySelector('.svp-tend-btn')?.addEventListener('click', () => {
+      document.querySelector('.svp-tend-btn').classList.toggle('active');
+      renderSupVsPrecio();
+    });
+    document.querySelector('.svp-pred-btn')?.addEventListener('click', () => {
+      document.querySelector('.svp-pred-btn').classList.toggle('active');
+      state.chart?.update();
+    });
+
+    document.querySelectorAll('.svp-ratio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.svp-ratio-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    const svpFontSlider = $('#svpFontSize');
+    if (svpFontSlider) {
+      svpFontSlider.addEventListener('input', () => {
+        $('#svpFontSizeVal').textContent = svpFontSlider.value + 'px';
+        renderSupVsPrecio();
+      });
+    }
+
+    $('#svpExportPngBtn')?.addEventListener('click', async () => {
       if (!state.chart) return;
-      const a = document.createElement('a');
-      a.href = state.chart.toBase64Image('image/png', 1);
-      a.download = `sup_vs_precio_${Date.now()}.png`;
-      a.click();
+      const btn = $('#svpExportPngBtn');
+      const scale = 4;
+      const pad = 32;
+      const wrap = $('#svpWrap');
+      const ratio = document.querySelector('.svp-ratio-btn.active')?.dataset.ratio ?? 'auto';
+
+      const origDPR = state.chart.options.devicePixelRatio ?? window.devicePixelRatio;
+      const exportW = wrap.clientWidth - pad;
+      const exportH = ratio === 'auto'
+        ? state.chart.height
+        : Math.round(exportW / parseFloat(ratio));
+
+      state.chart.options.devicePixelRatio = scale;
+      state.chart.resize(exportW, exportH);
+      const url = state.chart.toBase64Image('image/png', 1);
+      state.chart.options.devicePixelRatio = origDPR;
+      state.chart.resize();
+
+      const blob = await _withMargin(url, 64);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      const prev = btn.textContent;
+      btn.textContent = '¡Copiado!';
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
     });
   }
 }
@@ -555,7 +701,8 @@ function linearRegression(pts) {
   const ssTot = pts.reduce((s, p) => s + (p.y - yMean) ** 2, 0);
   const ssRes = pts.reduce((s, p) => s + (p.y - (m * p.x + b)) ** 2, 0);
   const r2 = ssTot === 0 ? 1 : 1 - ssRes / ssTot;
-  return { m, b, r2 };
+  const r2adj = n > 2 ? 1 - (1 - r2) * (n - 1) / (n - 2) : r2;
+  return { m, b, r2, r2adj };
 }
 
 function _avgByEdif(rows, supCol, ufm2Col, edifCol) {
@@ -580,6 +727,7 @@ function _avgByEdif(rows, supCol, ufm2Col, edifCol) {
 export function renderSupVsPrecio() {
   if (state.filtered.length === 0) return;
 
+  const fs = parseInt($('#svpFontSize')?.value ?? '12');
   const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   const supCol = state.columns.find(c =>
     c.type === 'number' &&
@@ -600,26 +748,27 @@ export function renderSupVsPrecio() {
   if (state.chart) { state.chart.destroy(); state.chart = null; }
   const ctx = $('#svpChart').getContext('2d');
 
-  const tipoFilter = $('#svpTipoFilter')?.value ?? '';
-
   const fmtTipo = v => {
     const s = String(v ?? '').trim();
     return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
   };
 
-  let rows = state.filtered;
-  if (tipoFilter) {
-    rows = rows.filter(r => tipoCol && String(r[tipoCol.name] ?? '') === tipoFilter);
-  }
+  const rows = state.filtered;
+
+  // Tipologías activas según state.filtered (respeta el filtro del sidebar)
+  const activeTipos = tipoCol
+    ? new Set(rows.map(r => fmtTipo(r[tipoCol.name])).filter(Boolean))
+    : null;
 
   // Mi Proyecto dataset (se construye primero para que aparezca primero en la leyenda)
+  let mpFiltered = [];
   const mpDatasets = [];
   if (mp.inSvp && mp.tipologias.length > 0) {
     const mpColor = '#1e293b';
     const mpName  = mp.edificio || mp.propietario || 'Mi Proyecto';
     const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.ufm2 != null);
-    const mpFiltered = tipoFilter
-      ? mpTipos.filter(t => fmtTipo(t.nombre) === fmtTipo(tipoFilter))
+    mpFiltered = activeTipos
+      ? mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)))
       : mpTipos;
 
     if (mpFiltered.length > 0) {
@@ -635,9 +784,9 @@ export function renderSupVsPrecio() {
     }
   }
 
-  // Comparables: un punto por fila (sin promediar sub-tipologías)
+  // Muestras: un punto por fila, coloreado por tipología pero un solo ítem en la leyenda
   const compDatasets = [];
-  if (tipoCol && !tipoFilter) {
+  if (tipoCol) {
     const tipoGroups = {};
     for (const r of rows) {
       const sup  = Number(r[supCol.name]);
@@ -648,17 +797,18 @@ export function renderSupVsPrecio() {
       if (!tipoGroups[tipo]) tipoGroups[tipo] = [];
       tipoGroups[tipo].push({ x: sup, y: ufm2, label: edif });
     }
-    Object.keys(tipoGroups).sort().forEach((tipo, i) => {
-      const hex = palette[i % palette.length];
-      compDatasets.push({
-        label: `Comparables ${tipo}`,
-        data: tipoGroups[tipo],
-        backgroundColor: hex + 'AA',
-        borderColor: hex,
-        borderWidth: 1,
-        pointRadius: 5,
-        pointHoverRadius: 7,
-      });
+    const allPts = [];
+    Object.keys(tipoGroups).sort().forEach(tipo => {
+      for (const pt of tipoGroups[tipo]) allPts.push(pt);
+    });
+    compDatasets.push({
+      label: 'Muestras',
+      data: allPts,
+      backgroundColor: palette[0] + 'AA',
+      borderColor: palette[0],
+      borderWidth: 1,
+      pointRadius: 5,
+      pointHoverRadius: 7,
     });
   } else {
     const pts = [];
@@ -669,9 +819,8 @@ export function renderSupVsPrecio() {
       const edif = edifCol ? String(r[edifCol.name] ?? '—') : '—';
       pts.push({ x: sup, y: ufm2, label: edif });
     }
-    const tipo = tipoFilter ? fmtTipo(tipoFilter) : '';
     compDatasets.push({
-      label: tipo ? `Comparables ${tipo}` : 'Comparables',
+      label: 'Muestras',
       data: pts,
       backgroundColor: palette[0] + 'AA',
       borderColor: palette[0],
@@ -686,14 +835,14 @@ export function renderSupVsPrecio() {
   // ── Regresión lineal sobre todos los puntos comparables ──
   const allCompPts = compDatasets.flatMap(ds => ds.data);
   let reg = null;
-  const showTrend = $('#svpTrendToggle')?.checked ?? true;
+  const showTrend = document.querySelector('.svp-tend-btn')?.classList.contains('active') ?? false;
   if (showTrend && allCompPts.length >= 3) {
     reg = linearRegression(allCompPts);
     if (reg) {
       const xs = allCompPts.map(p => p.x);
       const xMin = Math.min(...xs), xMax = Math.max(...xs);
       datasets.push({
-        label: `Tendencia  (R² = ${reg.r2.toFixed(2)})`,
+        label: `Tendencia  (R² = ${reg.r2.toFixed(2)},  R² aj. = ${reg.r2adj.toFixed(2)})`,
         data: [
           { x: xMin, y: reg.m * xMin + reg.b },
           { x: xMax, y: reg.m * xMax + reg.b },
@@ -710,26 +859,167 @@ export function renderSupVsPrecio() {
     }
   }
 
-  // Plugin inline: caja R² en esquina superior derecha del área del gráfico
-  const svpR2Plugin = {
-    id: 'svpR2',
+
+
+  // Plugin: predicción de la regresión para cada tipología de Mi Proyecto
+  const svpMpPredPlugin = {
+    id: 'svpMpPred',
     afterDraw(chart) {
-      if (!reg) return;
-      const { ctx: c, chartArea: { right, top } } = chart;
-      const text = `R² = ${reg.r2.toFixed(3)}`;
+      const showPred = document.querySelector('.svp-pred-btn')?.classList.contains('active') ?? false;
+      if (!reg || !mpFiltered.length || !showPred) return;
+      const { ctx: c, scales, chartArea: ca } = chart;
       c.save();
-      c.font = 'bold 12px system-ui, sans-serif';
-      c.textAlign = 'right';
-      c.textBaseline = 'middle';
-      const w = c.measureText(text).width;
-      const pad = 6, h = 22, rx = right - w - pad * 2 - 2, ry = top + 6;
-      c.fillStyle = 'rgba(255,255,255,0.92)';
-      c.fillRect(rx, ry, w + pad * 2, h);
-      c.strokeStyle = '#cbd5e1';
+      for (const t of mpFiltered) {
+        const predY   = reg.m * t.sup + reg.b;
+        const px      = scales.x.getPixelForValue(t.sup);
+        const pyPred  = scales.y.getPixelForValue(predY);
+        const pyReal  = scales.y.getPixelForValue(t.ufm2);
+        if (px < ca.left || px > ca.right || pyPred < ca.top || pyPred > ca.bottom) continue;
+
+        // Línea vertical punteada del punto real al predicho
+        c.setLineDash([4, 3]);
+        c.strokeStyle = '#64748b';
+        c.lineWidth = 1.2;
+        c.beginPath();
+        c.moveTo(px, Math.min(Math.max(pyReal, ca.top), ca.bottom));
+        c.lineTo(px, pyPred);
+        c.stroke();
+        c.setLineDash([]);
+
+        // Cruz (×) en la regresión
+        const r = 5;
+        c.strokeStyle = '#ef4444';
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(px - r, pyPred - r); c.lineTo(px + r, pyPred + r);
+        c.moveTo(px + r, pyPred - r); c.lineTo(px - r, pyPred + r);
+        c.stroke();
+
+        // Caja con el valor predicho
+        const label = `${fmtTipo(t.nombre)}: ${predY.toLocaleString('es-CL', { maximumFractionDigits: 0 })} UF/m²`;
+        c.font = `bold ${fs}px system-ui, sans-serif`;
+        const tw = c.measureText(label).width;
+        const pad = 5, bh = fs + pad * 2;
+        let lx = px + 10;
+        if (lx + tw + pad * 2 > ca.right) lx = px - tw - pad * 2 - 10;
+        const ly = pyPred - bh / 2;
+        c.fillStyle = 'rgba(255,255,255,0.95)';
+        c.fillRect(lx, ly, tw + pad * 2, bh);
+        c.strokeStyle = '#ef4444';
+        c.lineWidth = 1;
+        c.strokeRect(lx, ly, tw + pad * 2, bh);
+        c.fillStyle = '#ef4444';
+        c.textAlign = 'left';
+        c.textBaseline = 'middle';
+        c.fillText(label, lx + pad, ly + bh / 2);
+      }
+      c.restore();
+    },
+  };
+
+  // Plugin: triángulo de pendiente sobre la línea de tendencia
+  const svpSlopePlugin = {
+    id: 'svpSlope',
+    afterDraw(chart) {
+      const showTrend = document.querySelector('.svp-tend-btn')?.classList.contains('active') ?? false;
+      if (!showTrend || !reg || !allCompPts.length) return;
+
+      const { ctx: c, scales, chartArea: ca } = chart;
+      const xs = allCompPts.map(p => p.x);
+      const xMin = Math.min(...xs), xMax = Math.max(...xs);
+      const range = xMax - xMin;
+
+      // Posición del triángulo: controlada por svpSlopeXPct (draggable)
+      const x0 = xMin + range * svpSlopeXPct;
+      const dxData = range * 0.14;
+      const x1 = x0 + dxData;
+      const y0 = reg.m * x0 + reg.b;
+      const y1 = reg.m * x1 + reg.b;
+
+      const px0 = scales.x.getPixelForValue(x0);
+      const px1 = scales.x.getPixelForValue(x1);
+      const py0 = scales.y.getPixelForValue(y0);
+      const py1 = scales.y.getPixelForValue(y1);
+
+      if (px0 < ca.left || px1 > ca.right ||
+          Math.min(py0, py1) < ca.top || Math.max(py0, py1) > ca.bottom) return;
+
+      const negSlope = py1 > py0; // pendiente negativa → py1 más abajo en canvas
+      const lfs = fs;
+      c.save();
+      c.setLineDash([]);
+
+      // ── Triángulo relleno ──
+      c.beginPath();
+      c.moveTo(px0, py0);
+      c.lineTo(px1, py0);  // vértice recto
+      c.lineTo(px1, py1);
+      c.closePath();
+      c.fillStyle = 'rgba(30,58,95,0.10)';
+      c.fill();
+      c.strokeStyle = 'rgba(30,58,95,0.35)';
       c.lineWidth = 1;
-      c.strokeRect(rx, ry, w + pad * 2, h);
+      c.stroke();
+
+      // ── Flecha desde vértice recto → cajita de interpretación ──
+      const aX1 = px1, aY1 = py0;
+      const aX2 = px1 + 20, aY2 = py0 + (negSlope ? -22 : 22);
+      c.beginPath();
+      c.moveTo(aX1, aY1);
+      c.lineTo(aX2, aY2);
+      c.strokeStyle = '#9ca3af';
+      c.lineWidth = 1;
+      c.setLineDash([3, 3]);
+      c.stroke();
+      c.setLineDash([]);
+
+      // Punta de flecha
+      const ang = Math.atan2(aY2 - aY1, aX2 - aX1);
+      const hl = 6;
+      c.beginPath();
+      c.moveTo(aX2, aY2);
+      c.lineTo(aX2 - hl * Math.cos(ang - Math.PI / 6), aY2 - hl * Math.sin(ang - Math.PI / 6));
+      c.moveTo(aX2, aY2);
+      c.lineTo(aX2 - hl * Math.cos(ang + Math.PI / 6), aY2 - hl * Math.sin(ang + Math.PI / 6));
+      c.strokeStyle = '#9ca3af';
+      c.lineWidth = 1;
+      c.stroke();
+
+      // Cajita de interpretación
+      const mStr = (reg.m >= 0 ? '+' : '') +
+        reg.m.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+      const callout = `+1 m²  →  ${mStr} UF/m²`;
+      c.font = `bold ${lfs}px system-ui, sans-serif`;
+      const tw = c.measureText(callout).width;
+      const bp = 5, bh = lfs + bp * 2, bw = tw + bp * 2;
+      const bx = Math.min(aX2 + 4, ca.right - bw - 4);
+      const by = aY2 - bh / 2;
+      c.fillStyle = 'rgba(255,255,255,0.94)';
+      c.fillRect(bx, by, bw, bh);
+      c.strokeStyle = '#d1d5db';
+      c.lineWidth = 0.8;
+      c.strokeRect(bx, by, bw, bh);
       c.fillStyle = '#1e3a5f';
-      c.fillText(text, right - pad, ry + h / 2);
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      c.fillText(callout, bx + bp, by + bh / 2);
+
+      // Actualizar bounding box del objeto completo para drag
+      const bboxX = Math.min(px0, bx) - 4;
+      const bboxY = Math.min(py0, py1, by) - 6;
+      const bboxR = Math.max(px1 + 10, bx + bw) + 4;
+      const bboxB = Math.max(py0, py1, by + bh) + 6;
+      svpSlopeBbox = { x: bboxX, y: bboxY, w: bboxR - bboxX, h: bboxB - bboxY };
+
+      // Indicador visual de arrastre
+      if (svpSlopeDragging) {
+        c.strokeStyle = 'rgba(30,58,95,0.5)';
+        c.lineWidth = 1;
+        c.setLineDash([3, 3]);
+        c.strokeRect(bboxX, bboxY, bboxR - bboxX, bboxB - bboxY);
+        c.setLineDash([]);
+      }
+
       c.restore();
     },
   };
@@ -737,13 +1027,30 @@ export function renderSupVsPrecio() {
   state.chart = new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
-    plugins: [svpR2Plugin],
+    plugins: [svpMpPredPlugin, svpSlopePlugin, {
+      id: 'svpSettings',
+      afterDraw(chart) {
+        const { ctx, chartArea: { right, top } } = chart;
+        const ratioVal = document.querySelector('.svp-ratio-btn.active')?.dataset.ratio ?? 'auto';
+        const ratioMap = { auto: 'Auto', '1.78': '16:9', '1.33': '4:3', '1': '1:1' };
+        const ratioLabel = ratioMap[ratioVal] ?? ratioVal;
+        const fsSetting = $('#svpFontSize')?.value ?? '12';
+        const text = `${ratioLabel} · ${fsSetting}px`;
+        ctx.save();
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.fillStyle = '#c8c8c8';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, right - 2, top + 4);
+        ctx.restore();
+      },
+    }],
     options: {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
       plugins: {
-        legend: { position: 'top' },
+        legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
           callbacks: {
             label: item => {
@@ -757,15 +1064,103 @@ export function renderSupVsPrecio() {
       },
       scales: {
         x: {
-          title: { display: true, text: 'Útil (m²)' },
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: 'Útil (m²)', font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
         y: {
-          title: { display: true, text: 'UF/m²' },
-          ticks: { callback: v => v.toLocaleString('es-CL') },
+          title: { display: true, text: 'UF/m²', font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
       },
     },
+  });
+
+  // Handlers de drag del triángulo de pendiente
+  const svpCanvas = $('#svpChart');
+  svpCanvas.removeEventListener('mousedown', _svpSlpDown);
+  svpCanvas.removeEventListener('mousemove', _svpSlpMove);
+  svpCanvas.removeEventListener('mouseup',   _svpSlpUp);
+  svpCanvas.addEventListener('mousedown', _svpSlpDown);
+  svpCanvas.addEventListener('mousemove', _svpSlpMove);
+  svpCanvas.addEventListener('mouseup',   _svpSlpUp);
+
+  if (!svpWidgetInited) initSvpFilterWidget();
+  else updateSvpFilterWidget();
+}
+
+// ============== Widget de filtros activos (SVP) ==============
+let svpWidgetInited = false;
+
+function initSvpFilterWidget() {
+  const toggleBtn = document.getElementById('svpFilterWidgetBtn');
+  const container = document.getElementById('svpWrap');
+  if (!toggleBtn || !container) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'svpFilterWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="svpFwHeader">
+      <span>Filtros activos</span>
+      <button class="mfw-close" id="svpFwClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="svpFwBody"></div>
+  `;
+  container.appendChild(widget);
+
+  const header = document.getElementById('svpFwHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'svpFwClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || (container.offsetWidth - 240);
+    const startT = parseInt(widget.style.top)  || 10;
+    widget.style.left = startL + 'px';
+    widget.style.top  = startT + 'px';
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('svpFwClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        widget.style.left = (container.offsetWidth - 240) + 'px';
+        widget.style.top  = '10px';
+      }
+      updateSvpFilterWidget();
+    }
+  });
+
+  svpWidgetInited = true;
+}
+
+export function updateSvpFilterWidget() {
+  const body = document.getElementById('svpFwBody');
+  if (!body) return;
+  const widget = document.getElementById('svpFilterWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+  import('./filters.js').then(({ getActiveFiltersSummary }) => {
+    const items = getActiveFiltersSummary();
+    body.innerHTML = items.length
+      ? items.map(it => `<div class="mfw-row"><span class="mfw-label">${it.label}</span><span class="mfw-value">${it.value}</span></div>`).join('')
+      : '<div class="mfw-empty">Sin filtros aplicados</div>';
   });
 }
 
@@ -782,6 +1177,7 @@ export function populateDistribSelectors() {
   const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   const ticketCol = state.columns.find(c => normStr(c.name).includes('ticket'));
   const ufm2Col   = state.columns.find(c => normStr(c.name).includes('uf/m') || normStr(c.name).includes('uf / m'));
+  const utilCol   = state.columns.find(c => ['util (m', 'util(m', 'sup. util', 'superficie util', 'sup util'].some(k => normStr(c.name).includes(k)));
 
   colSel.innerHTML = '';
   if (ticketCol) {
@@ -792,6 +1188,11 @@ export function populateDistribSelectors() {
   if (ufm2Col) {
     const o = document.createElement('option');
     o.value = ufm2Col.name; o.textContent = 'UF/m²';
+    colSel.appendChild(o);
+  }
+  if (utilCol) {
+    const o = document.createElement('option');
+    o.value = utilCol.name; o.textContent = 'Útil (m²)';
     colSel.appendChild(o);
   }
   if (!colSel.options.length) {
@@ -810,6 +1211,14 @@ export function populateDistribSelectors() {
   if (!distribListenersReady) {
     distribListenersReady = true;
 
+    document.querySelectorAll('.distrib-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.distrib-mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderDistrib();
+      });
+    });
+
     document.querySelectorAll('.ratio-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
@@ -825,6 +1234,11 @@ export function populateDistribSelectors() {
         renderDistrib();
       });
     }
+
+    document.querySelector('.distrib-mp-btn')?.addEventListener('click', () => {
+      document.querySelector('.distrib-mp-btn').classList.toggle('active');
+      renderDistrib();
+    });
 
     $('#distribExportPngBtn')?.addEventListener('click', async () => {
       if (!distribChart) return;
@@ -847,10 +1261,8 @@ export function populateDistribSelectors() {
       distribChart.options.devicePixelRatio = origDPR;
       distribChart.resize();
 
-      const res  = await fetch(url);
-      const blob = await res.blob();
+      const blob = await _withMargin(url, 64);
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-
       const prev = btn.textContent;
       btn.textContent = '¡Copiado!';
       btn.disabled = true;
@@ -919,10 +1331,39 @@ function computeQuantileCurve(rows, col) {
   if (vals.length < 2) return [];
   vals.sort((a, b) => a - b);
   const n = vals.length;
-  return Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return { x: pct, y: vals[idx] };
+  return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
+}
+
+// Ajuste log-normal: X = valor (>0), Y = densidad
+function computeLogNormal(sortedVals, nPoints = 300) {
+  const posVals = sortedVals.filter(v => v > 0);
+  const n = posVals.length;
+  if (n < 2) return [];
+  const logVals = posVals.map(v => Math.log(v));
+  const mu  = logVals.reduce((a, b) => a + b, 0) / n;
+  const sig = Math.sqrt(logVals.reduce((a, v) => a + (v - mu) ** 2, 0) / (n - 1));
+  if (sig === 0) return [];
+  const xMin = posVals[0] * 0.5;
+  const xMax = posVals[n - 1] * 1.15;
+  const step = (xMax - xMin) / nPoints;
+  const K = 1 / (sig * Math.sqrt(2 * Math.PI));
+  return Array.from({ length: nPoints + 1 }, (_, i) => {
+    const x = xMin + i * step;
+    if (x <= 0) return { x, y: 0 };
+    const y = K / x * Math.exp(-0.5 * ((Math.log(x) - mu) / sig) ** 2);
+    return { x, y };
   });
+}
+
+function lerpDensity(data, x) {
+  if (!data.length) return undefined;
+  for (let i = 0; i < data.length - 1; i++) {
+    if (data[i].x <= x && x <= data[i + 1].x) {
+      const t = (x - data[i].x) / (data[i + 1].x - data[i].x);
+      return data[i].y + t * (data[i + 1].y - data[i].y);
+    }
+  }
+  return 0;
 }
 
 function lerpAtX(data, x) {
@@ -957,7 +1398,9 @@ export function renderDistrib() {
 
   const col = colSel.value;
   const _nc = col.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-  distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²' : 'UF';
+  distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²'
+              : (_nc.includes('util') || _nc.includes('sup')) ? 'm²'
+              : 'UF';
   const fs = parseInt($('#distribFontSize')?.value ?? '11');
 
   if (distribChart) { distribChart.destroy(); distribChart = null; }
@@ -974,68 +1417,95 @@ export function renderDistrib() {
     return sortedVals[Math.max(0, idx)];
   };
 
+  const isDens  = document.querySelector('.distrib-mode-btn.active')?.dataset.mode === 'dens';
   const refData = computeQuantileCurve(state.filtered, col);
+  const kdeData = isDens ? computeLogNormal(sortedVals) : [];
+
+  const chartData = isDens ? kdeData : refData;
   const datasets = [{
     label: col,
-    data: refData,
+    data: chartData,
     borderColor: palette[0],
     backgroundColor: 'rgba(59,130,246,0.08)',
     pointRadius: 0,
     borderWidth: 2,
-    tension: 0.4,
+    tension: isDens ? 0.3 : 0.4,
     fill: true,
   }];
 
   // Construir anotaciones
   const annotations = {};
-  const pctColor   = '#ef4444';
-  const priceColor = '#ef4444';
-
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
-    const color = pctColor;
-    const price = valAtPct(pct);
-    if (price == null) return;
-    const priceLabel = price.toLocaleString('es-CL', { maximumFractionDigits: 0 });
-    annotations[`pv_${pct}`] = {
-      type: 'line', xMin: pct, xMax: pct, yMax: price,
-      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `P${pct}`, display: true, position: 'start',
-        color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
-    };
-    annotations[`ph_${pct}`] = {
-      type: 'line', yMin: price, yMax: price, xMax: pct,
-      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${priceLabel} ${distribUnit}`, display: true, position: 'start',
-        color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
-    };
+  const pctColor   = '#6b7280';
+  const priceColor = '#6b7280';
+  const annLabel   = (content, color) => ({
+    content, display: true, position: 'start',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
-    const color = priceColor;
-    const pct   = lerpAtY(refData, price);
-    const pctForLabel = pct !== null ? pct : 100;
-    annotations[`prh_${price}`] = {
-      type: 'line', yMin: price, yMax: price, xMax: pctForLabel,
-      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-      label: { content: `${price.toLocaleString('es-CL')} ${distribUnit}`, display: true, position: 'start',
-        color, backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
-    };
-    if (pct !== null) {
-      annotations[`prv_${price}`] = {
+  if (!isDens) {
+    // ── Modo acumulada: mismo comportamiento original ──
+    [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+      const color = pctColor;
+      const price = lerpAtX(refData, pct);
+      if (price == null) return;
+      const priceLabel = price.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+      annotations[`pv_${pct}`] = {
         type: 'line', xMin: pct, xMax: pct, yMax: price,
         borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
-        label: { content: `P${pct.toFixed(1)}`, display: true, position: 'start',
-          color, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } },
+        label: annLabel(`P${pct}`, color),
       };
-    }
-  });
+      annotations[`ph_${pct}`] = {
+        type: 'line', yMin: price, yMax: price, xMax: pct,
+        borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`${priceLabel} ${distribUnit}`, color),
+      };
+    });
+
+    [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+      const color = priceColor;
+      const pct   = lerpAtY(refData, price);
+      const pctForLabel = pct !== null ? pct : 100;
+      annotations[`prh_${price}`] = {
+        type: 'line', yMin: price, yMax: price, xMax: pctForLabel,
+        borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`${price.toLocaleString('es-CL')} ${distribUnit}`, color),
+      };
+      if (pct !== null) {
+        annotations[`prv_${price}`] = {
+          type: 'line', xMin: pct, xMax: pct, yMax: price,
+          borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+          label: annLabel(`P${pct.toFixed(1)}`, color),
+        };
+      }
+    });
+  } else {
+    // ── Modo densidad: líneas verticales en el eje X ──
+    [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+      const val = valAtPct(pct);
+      if (val == null) return;
+      const valLabel = val.toLocaleString('es-CL', { maximumFractionDigits: 0 });
+      annotations[`dpv_${pct}`] = {
+        type: 'line', xMin: val, xMax: val, yMax: lerpDensity(kdeData, val),
+        borderColor: pctColor, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`P${pct}: ${valLabel} ${distribUnit}`, pctColor),
+      };
+    });
+
+    [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+      const pct = lerpAtY(refData, price);
+      const pctStr = pct !== null ? ` (P${pct.toFixed(1)})` : '';
+      annotations[`dprv_${price}`] = {
+        type: 'line', xMin: price, xMax: price, yMax: lerpDensity(kdeData, price),
+        borderColor: priceColor, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`${price.toLocaleString('es-CL')} ${distribUnit}${pctStr}`, priceColor),
+      };
+    });
+  }
 
   // Mi Proyecto annotations
-  if (mp.inDistrib && mp.tipologias.length > 0) {
+  const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
+  if (showMpDistrib && mp.inDistrib && mp.tipologias.length > 0) {
     const normFn  = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
     const nc      = normFn(col);
     const isUfm2   = nc.includes('uf/m') || nc.includes('uf / m');
@@ -1054,53 +1524,89 @@ export function renderDistrib() {
       }
     }
 
-    const mpColor = '#1e3a5f';
+    const mpColor = '#ef4444';
     mpTipos.forEach(t => {
       let val = null;
       if (isUfm2)        val = t.ufm2;
       else if (isTicket) val = (t.sup != null && t.ufm2 != null) ? t.sup * t.ufm2 : null;
       else               val = t.sup;
       if (val == null) return;
-      const pct = lerpAtY(refData, val);
-      if (pct === null) return;
       const valLabel = val.toLocaleString('es-CL', { maximumFractionDigits: 0 });
-      annotations[`mp_h_${t.id}`] = {
-        type: 'line', yMin: val, yMax: val, xMax: pct,
-        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: {
-          content: `${t.nombre}: ${valLabel}`,
-          display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
-        },
-      };
-      annotations[`mp_v_${t.id}`] = {
-        type: 'line', xMin: pct, xMax: pct, yMax: val,
-        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
-        label: {
-          content: `P${pct.toFixed(1)}`,
-          display: true, position: 'start',
-          color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
-          padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
-        },
-      };
+      const mpAnnLabel = (content) => ({
+        content, display: true, position: 'start',
+        color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
+        padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+      });
+
+      if (isDens) {
+        // Modo densidad: muestra percentil + valor + tipología en paréntesis
+        const pct = lerpAtY(refData, val);
+        const pctStr = pct !== null ? `P${Math.round(pct)}: ` : '';
+        annotations[`mp_v_${t.id}`] = {
+          type: 'line', xMin: val, xMax: val, yMax: lerpDensity(kdeData, val),
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`${pctStr}${valLabel} ${distribUnit} (${t.nombre})`),
+        };
+      } else {
+        // Modo acumulada: líneas cruzadas
+        const pct = lerpAtY(refData, val);
+        if (pct === null) return;
+        annotations[`mp_h_${t.id}`] = {
+          type: 'line', yMin: val, yMax: val, xMax: pct,
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`${t.nombre}: ${valLabel}`),
+        };
+        annotations[`mp_v_${t.id}`] = {
+          type: 'line', xMin: pct, xMax: pct, yMax: val,
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: mpAnnLabel(`P${pct.toFixed(1)}`),
+        };
+      }
     });
   }
 
   distribChart = new Chart(ctx, {
     type: 'line',
     data: { datasets },
+    plugins: [{
+      id: 'distribSettings',
+      afterDraw(chart) {
+        const { ctx, chartArea: { right, top } } = chart;
+        const ratioVal = document.querySelector('.ratio-btn.active')?.dataset.ratio ?? 'auto';
+        const ratioMap = { auto: 'Auto', '1.78': '16:9', '1.33': '4:3', '1': '1:1' };
+        const text = `${ratioMap[ratioVal] ?? ratioVal} · ${fs}px`;
+        ctx.save();
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.fillStyle = '#c8c8c8';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, right - 2, top + 4);
+        ctx.restore();
+      },
+    }],
     options: {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
+      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
           mode: 'nearest',
           intersect: false,
           axis: 'x',
-          callbacks: {
+          callbacks: isDens ? {
+            title: items => {
+              const pt = chartData[items[0]?.dataIndex];
+              return pt ? pt.x.toLocaleString('es-CL', { maximumFractionDigits: 0 }) + ' ' + distribUnit : '';
+            },
+            label: item => {
+              const pt = chartData[item.dataIndex];
+              if (!pt) return '';
+              const pct = lerpAtY(refData, pt.x);
+              return pct !== null ? ` P${pct.toFixed(1)}` : '';
+            },
+          } : {
             title: items => {
               const pt = refData[items[0]?.dataIndex];
               return pt ? `P${pt.x.toFixed(1)}` : '';
@@ -1114,7 +1620,18 @@ export function renderDistrib() {
         },
         annotation: { annotations },
       },
-      scales: {
+      scales: isDens ? {
+        x: {
+          type: 'linear',
+          title: { display: true, text: col, font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+        },
+        y: {
+          title: { display: true, text: 'Densidad', font: { size: fs } },
+          ticks: { display: false },
+          grid: { display: false },
+        },
+      } : {
         x: {
           type: 'linear', min: 0, max: 100,
           title: { display: true, text: 'Percentil (%)', font: { size: fs } },
@@ -1127,5 +1644,77 @@ export function renderDistrib() {
       },
     },
   });
+  _enableAnnotationLabelDrag(distribChart);
+}
 
+function _enableAnnotationLabelDrag(chart) {
+  const canvas = chart.canvas;
+  let dragging = null;
+
+  function _anns() { return chart.options?.plugins?.annotation?.annotations ?? {}; }
+
+  function _anchor(ann) {
+    const ca = chart.chartArea, sx = chart.scales?.x, sy = chart.scales?.y;
+    if (!ca || !sx || !sy) return null;
+    if (ann.xMin != null && (ann.xMax == null || ann.xMin === ann.xMax))
+      return { ax: sx.getPixelForValue(ann.xMin), ay: sy.getPixelForValue(ann.yMin ?? sy.min ?? 0) };
+    if (ann.yMin != null && (ann.yMax == null || ann.yMin === ann.yMax))
+      return { ax: sx.getPixelForValue(ann.xMin ?? sx.min ?? 0), ay: sy.getPixelForValue(ann.yMin) };
+    return null;
+  }
+
+  function _box(key) {
+    const ann = _anns()[key];
+    if (!ann?.label || ann.label.display === false) return null;
+    const a = _anchor(ann);
+    if (!a) return null;
+    const fs = ann.label.font?.size ?? 11;
+    const text = Array.isArray(ann.label.content) ? ann.label.content.join(' ') : String(ann.label.content ?? '');
+    const ctx2 = canvas.getContext('2d');
+    ctx2.save(); ctx2.font = `bold ${fs}px system-ui, sans-serif`;
+    const tw = ctx2.measureText(text).width; ctx2.restore();
+    return { cx: a.ax + (ann.label.xAdjust ?? 0), cy: a.ay + (ann.label.yAdjust ?? 0), w: tw + 16, h: fs * 1.8 };
+  }
+
+  function _hit(mx, my) {
+    for (const key of Object.keys(_anns())) {
+      const b = _box(key);
+      if (b && Math.abs(mx - b.cx) <= b.w / 2 + 10 && Math.abs(my - b.cy) <= b.h / 2 + 10) return key;
+    }
+    return null;
+  }
+
+  canvas.addEventListener('mousedown', e => {
+    const key = _hit(e.offsetX, e.offsetY);
+    if (!key) return;
+    const ann = _anns()[key];
+    if (!ann?.label) return;
+    e.preventDefault(); e.stopPropagation();
+    if (chart.options.plugins.tooltip) chart.options.plugins.tooltip.enabled = false;
+    dragging = { key, sx: e.offsetX, sy: e.offsetY, ox: ann.label.xAdjust ?? 0, oy: ann.label.yAdjust ?? 0 };
+    canvas.style.cursor = 'grabbing';
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (dragging) {
+      const ann = _anns()[dragging.key];
+      if (!ann?.label) return;
+      ann.label.xAdjust = dragging.ox + (e.offsetX - dragging.sx);
+      ann.label.yAdjust = dragging.oy + (e.offsetY - dragging.sy);
+      chart.update('none');
+      canvas.style.cursor = 'grabbing';
+    } else {
+      const mx = e.offsetX, my = e.offsetY;
+      setTimeout(() => { if (!dragging) canvas.style.cursor = _hit(mx, my) ? 'grab' : ''; }, 0);
+    }
+  });
+
+  function _stop() {
+    if (!dragging) return;
+    dragging = null; canvas.style.cursor = '';
+    if (chart.options.plugins.tooltip) chart.options.plugins.tooltip.enabled = true;
+    chart.update('none');
+  }
+  canvas.addEventListener('mouseup', _stop);
+  canvas.addEventListener('mouseleave', _stop);
 }

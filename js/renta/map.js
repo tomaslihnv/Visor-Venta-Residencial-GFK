@@ -1,5 +1,5 @@
-import { state } from './data.js'; // Ajusta la ruta si renombraste el archivo a data.js
-import { $, fmt } from './utils.js';
+import { state } from './data.js';
+import { $, fmt, extractDormitorios } from './utils.js';
 import { mp } from './miProyecto.js';
 
 // ============== Cache y estado ==============
@@ -8,12 +8,20 @@ const geoStatus = { total: 0, done: 0, running: false };
 let mapMode    = 'general'; // 'general' | 'precio'
 let heatMetric = 'ufm2';   // 'ufm2' | 'renta'
 let mapInitialized = false;
+let streetLayer = null;
+let satelliteLayer = null;
+let isSatellite = false;
+let lastOrderedPoints = [];
 
 export function resetMapOnLoad() {
   mapInitialized = false;
   geoStatus.total = 0;
   geoStatus.done = 0;
   geoStatus.running = false;
+  lastPolyPoints = [];
+  if (persistentPoly) { persistentPoly.remove(); persistentPoly = null; }
+  document.getElementById('mapClearPolyBtn')?.classList.add('hidden');
+  document.getElementById('mapUndoBtn')?.classList.add('hidden');
 }
 
 // ============== Helpers ==============
@@ -169,6 +177,16 @@ let markersLayer = null;
 let legendControl = null;
 let countControl = null;
 
+// Selección por polígono (vértices con clic)
+let selMode           = false;
+let selRect           = null;
+let selPanel          = null;
+let selPoints         = [];
+let lastPolyPoints    = [];
+let persistentPoly    = null;
+let rubberBand        = null;
+let firstVertexMarker = null;
+
 function initRankingResize() {
   const resizer = document.getElementById('mapRankingResizer');
   const ranking = document.getElementById('mapRanking');
@@ -203,14 +221,533 @@ function initRankingResize() {
   });
 }
 
+// ============== Widget de filtros activos ==============
+export function updateFilterWidget() {
+  const body = document.getElementById('mfwBody');
+  if (!body) return;
+  const widget = document.getElementById('mapFilterWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+  import('./filters.js').then(({ getActiveFiltersSummary }) => {
+    const items = getActiveFiltersSummary();
+    body.innerHTML = items.length
+      ? items.map(it => `<div class="mfw-row"><span class="mfw-label">${it.label}</span><span class="mfw-value">${it.value}</span></div>`).join('')
+      : '<div class="mfw-empty">Sin filtros aplicados</div>';
+  });
+}
+
+function initFilterWidget() {
+  const toggleBtn = document.getElementById('mapFilterWidgetBtn');
+  if (!toggleBtn) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'mapFilterWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="mfwHeader">
+      <span>Filtros activos</span>
+      <button class="mfw-close" id="mfwClose" title="Cerrar">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="mfwBody"></div>
+  `;
+  leafletMap.getContainer().appendChild(widget);
+  L.DomEvent.disableClickPropagation(widget);
+  L.DomEvent.disableScrollPropagation(widget);
+
+  const header = document.getElementById('mfwHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'mfwClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || 0;
+    const startT = parseInt(widget.style.top)  || 0;
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('mfwClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        const cW = leafletMap.getContainer().offsetWidth;
+        widget.style.left = (cW - 230) + 'px';
+        widget.style.top  = '48px';
+      }
+      updateFilterWidget();
+    }
+  });
+}
+
+// ============== Widget de resumen ==============
+let resumenWidgetInited = false;
+
+function _computeResumenRenta() {
+  const tipoCol = state.columns.find(c =>
+    ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k))
+  )?.name;
+  const rentaCol = findRentaCol();
+
+  const byTipo = {};
+  let total = 0, rentaSum = 0, rentaCount = 0;
+  for (const r of state.filtered) {
+    total++;
+    const rawTipo = tipoCol ? r[tipoCol] : null;
+    const t = rawTipo != null ? (extractDormitorios(rawTipo) ?? null) : null;
+    if (t) byTipo[t] = (byTipo[t] || 0) + 1;
+    if (rentaCol) {
+      const v = Number(r[rentaCol]);
+      if (!isNaN(v) && v > 0) { rentaSum += v; rentaCount++; }
+    }
+  }
+  return { total, byTipo, avgRenta: rentaCount ? rentaSum / rentaCount : null };
+}
+
+function updateResumenWidget() {
+  const body = document.getElementById('mapResumenBody');
+  if (!body) return;
+  const widget = document.getElementById('mapResumenWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+
+  const data = _computeResumenRenta();
+  const fmtN = v => Math.round(v).toLocaleString('es-CL');
+  const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+
+  const tipoKeys = Object.keys(data.byTipo).sort((a, b) => {
+    const na = parseInt(a), nb = parseInt(b);
+    return isNaN(na) || isNaN(nb) ? a.localeCompare(b, 'es') : na - nb;
+  });
+
+  const rows = tipoKeys.map(label => {
+    const cnt = data.byTipo[label];
+    const pct = data.total > 0 ? Math.round((cnt / data.total) * 100) : 0;
+    return `<div class="mfw-row">
+      <span class="mfw-label">${label}</span>
+      <span class="mfw-value">${fmtN(cnt)} un. <span style="color:#9ca3af;font-weight:400">(${pct}%)</span></span>
+    </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="mfw-row" style="border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-bottom:4px;">
+      <span class="mfw-label" style="font-weight:700">Total unidades</span>
+      <span class="mfw-value" style="font-weight:700">${fmtN(data.total)} un.</span>
+    </div>
+    ${rows || '<div class="mfw-empty">Sin datos de tipología</div>'}
+    ${data.avgRenta != null ? `<div class="mfw-row" style="border-top:1px solid #e5e7eb;padding-top:6px;margin-top:4px;">
+      <span class="mfw-label">Renta prom.</span>
+      <span class="mfw-value">${fmtU(data.avgRenta)} UF</span>
+    </div>` : ''}
+  `;
+}
+
+function initResumenWidget() {
+  const toggleBtn = document.getElementById('mapResumenWidgetBtn');
+  if (!toggleBtn || resumenWidgetInited) return;
+  resumenWidgetInited = true;
+
+  const widget = document.createElement('div');
+  widget.id = 'mapResumenWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="mapResumenHeader">
+      <span>Resumen unidades</span>
+      <button class="mfw-close" id="mapResumenClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="mapResumenBody"></div>
+  `;
+  leafletMap.getContainer().appendChild(widget);
+  L.DomEvent.disableClickPropagation(widget);
+  L.DomEvent.disableScrollPropagation(widget);
+
+  const header = document.getElementById('mapResumenHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'mapResumenClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || 0;
+    const startT = parseInt(widget.style.top)  || 0;
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('mapResumenClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        const cW = leafletMap.getContainer().offsetWidth;
+        widget.style.left = (cW - 230) + 'px';
+        widget.style.top  = '90px';
+      }
+      updateResumenWidget();
+    }
+  });
+}
+
+// ============== Selección por polígono libre ==============
+function _pointInPolygon(lat, lng, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].lng, yi = pts[i].lat;
+    const xj = pts[j].lng, yj = pts[j].lat;
+    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+function _setPersistentPoly() {
+  if (persistentPoly) { persistentPoly.remove(); persistentPoly = null; }
+  if (!lastPolyPoints.length) return;
+  persistentPoly = L.polygon(lastPolyPoints, {
+    color: '#1e3a5f', weight: 2.5,
+    fillColor: '#3b82f6', fillOpacity: 0.07,
+    interactive: false,
+  }).addTo(leafletMap);
+  const clearBtn = document.getElementById('mapClearPolyBtn');
+  if (clearBtn) clearBtn.classList.remove('hidden');
+}
+
+function _cancelSel() {
+  selPoints = [];
+  if (rubberBand)        { rubberBand.remove();        rubberBand = null; }
+  if (firstVertexMarker) { firstVertexMarker.remove(); firstVertexMarker = null; }
+  if (selRect)           { selRect.remove();           selRect = null; }
+  if (selPanel && selPanel.parentNode) selPanel.parentNode.removeChild(selPanel);
+  selPanel = null;
+}
+
+function _endSel() {
+  _cancelSel();
+  selMode = false;
+  const btn = document.getElementById('mapSelectBtn');
+  if (btn) btn.classList.remove('active');
+  if (leafletMap) {
+    leafletMap.dragging.enable();
+    leafletMap.getContainer().style.cursor = '';
+  }
+}
+
+function _updateUndoBtn() {
+  import('./filters.js').then(({ hasProyectoHistory }) => {
+    const btn = document.getElementById('mapUndoBtn');
+    if (btn) btn.classList.toggle('hidden', !hasProyectoHistory());
+  });
+}
+
+function _closePolygon() {
+  if (selPoints.length < 3) { _cancelSel(); return; }
+  if (rubberBand)        { rubberBand.remove();        rubberBand = null; }
+  if (firstVertexMarker) { firstVertexMarker.remove(); firstVertexMarker = null; }
+  if (selRect)           { selRect.remove();           selRect = null; }
+
+  selRect = L.polygon(selPoints, {
+    color: '#2563eb', weight: 2, dashArray: '5 3',
+    fillColor: '#3b82f6', fillOpacity: 0.12, interactive: false,
+  }).addTo(leafletMap);
+
+  lastPolyPoints = [...selPoints];
+  selPoints = [];
+
+  const proyCol = state.columns.find(c =>
+    ['proyecto', 'edificio', 'nombre', 'building'].some(k => norm(c.name).includes(k))
+  )?.name;
+
+  const inside = collectPoints(state.filtered).filter(p =>
+    _pointInPolygon(p.lat, p.lng, lastPolyPoints)
+  );
+  const names = [...new Set(inside.flatMap(p =>
+    p.rows.map(r => proyCol ? String(r[proyCol] ?? '').trim() : '').filter(Boolean)
+  ))];
+
+  if (!names.length) { _cancelSel(); return; }
+  _showSelPanel(names, selRect.getBounds());
+}
+
+function _showSelPanel(names, bounds) {
+  if (selPanel && selPanel.parentNode) selPanel.parentNode.removeChild(selPanel);
+
+  const ne   = leafletMap.latLngToContainerPoint(bounds.getNorthEast());
+  const cW   = leafletMap.getContainer().offsetWidth;
+  const cH   = leafletMap.getContainer().offsetHeight;
+  const panelW = 215;
+  const left = Math.min(ne.x + 10, cW - panelW - 8);
+  const top  = Math.max(Math.min(ne.y, cH - 160), 8);
+
+  selPanel = document.createElement('div');
+  selPanel.className = 'map-sel-panel';
+  selPanel.style.left = left + 'px';
+  selPanel.style.top  = top  + 'px';
+  L.DomEvent.disableClickPropagation(selPanel);
+  selPanel.innerHTML = `
+    <div class="map-sel-count">${names.length} proyecto${names.length !== 1 ? 's' : ''} seleccionado${names.length !== 1 ? 's' : ''}</div>
+    <button class="sel-btn sel-btn-keep"  id="selBtnMantener">Mantener solo estos</button>
+    <button class="sel-btn sel-btn-excl"  id="selBtnExcluir">Excluir estos</button>
+    <label class="sel-check-row">
+      <input type="checkbox" id="selChkMark" checked>
+      <span>Dejar zona marcada</span>
+    </label>
+    <button class="sel-btn sel-btn-ghost" id="selBtnCancelar">Cancelar</button>
+  `;
+  leafletMap.getContainer().appendChild(selPanel);
+
+  const applyAction = async (fn) => {
+    if (document.getElementById('selChkMark').checked) _setPersistentPoly();
+    await fn();
+    _endSel();
+    _updateUndoBtn();
+  };
+
+  document.getElementById('selBtnMantener').addEventListener('click', () =>
+    applyAction(async () => {
+      const { keepOnlyProyectos } = await import('./filters.js');
+      keepOnlyProyectos(names);
+    })
+  );
+  document.getElementById('selBtnExcluir').addEventListener('click', () =>
+    applyAction(async () => {
+      const { excludeProyectos } = await import('./filters.js');
+      excludeProyectos(names);
+    })
+  );
+  document.getElementById('selBtnCancelar').addEventListener('click', _cancelSel);
+}
+
+function initSelectionMode() {
+  const btn = document.getElementById('mapSelectBtn');
+  if (!btn) return;
+
+  const clearPolyBtn = document.getElementById('mapClearPolyBtn');
+  clearPolyBtn?.addEventListener('click', () => {
+    if (persistentPoly) { persistentPoly.remove(); persistentPoly = null; }
+    clearPolyBtn.classList.add('hidden');
+  });
+
+  const undoBtn = document.getElementById('mapUndoBtn');
+  undoBtn?.addEventListener('click', async () => {
+    const { undoProyectoFilter } = await import('./filters.js');
+    const hasMore = undoProyectoFilter();
+    undoBtn.classList.toggle('hidden', !hasMore);
+  });
+
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !undoBtn?.classList.contains('hidden')) {
+      e.preventDefault();
+      undoBtn?.click();
+    }
+  });
+
+  btn.addEventListener('click', () => {
+    selMode = !selMode;
+    btn.classList.toggle('active', selMode);
+    if (selMode) {
+      leafletMap.doubleClickZoom.disable();
+      leafletMap.getContainer().style.cursor = 'crosshair';
+    } else {
+      leafletMap.doubleClickZoom.enable();
+      leafletMap.getContainer().style.cursor = '';
+      _cancelSel();
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && selMode) _endSel();
+  });
+
+  leafletMap.on('click', e => {
+    if (!selMode) return;
+    if (selPoints.length >= 3) {
+      const firstPx = leafletMap.latLngToContainerPoint(selPoints[0]);
+      const clickPx = leafletMap.latLngToContainerPoint(e.latlng);
+      if (Math.hypot(firstPx.x - clickPx.x, firstPx.y - clickPx.y) < 12) {
+        _closePolygon();
+        return;
+      }
+    }
+    selPoints.push(e.latlng);
+    if (selPoints.length === 1) {
+      firstVertexMarker = L.circleMarker(selPoints[0], {
+        radius: 6, color: '#2563eb', weight: 2.5,
+        fillColor: '#fff', fillOpacity: 1, interactive: false,
+      }).addTo(leafletMap);
+    }
+    if (selRect) selRect.setLatLngs(selPoints);
+    else selRect = L.polyline(selPoints, {
+      color: '#2563eb', weight: 2.5, interactive: false,
+    }).addTo(leafletMap);
+  });
+
+  leafletMap.on('mousemove', e => {
+    if (!selMode || !selPoints.length) return;
+    const last = selPoints[selPoints.length - 1];
+    if (rubberBand) rubberBand.setLatLngs([last, e.latlng]);
+    else rubberBand = L.polyline([last, e.latlng], {
+      color: '#2563eb', weight: 1.5, dashArray: '5 4',
+      interactive: false, opacity: 0.6,
+    }).addTo(leafletMap);
+    if (selPoints.length >= 3 && firstVertexMarker) {
+      const firstPx = leafletMap.latLngToContainerPoint(selPoints[0]);
+      const movePx  = leafletMap.latLngToContainerPoint(e.latlng);
+      const near    = Math.hypot(firstPx.x - movePx.x, firstPx.y - movePx.y) < 12;
+      firstVertexMarker.setStyle({ fillColor: near ? '#2563eb' : '#fff', radius: near ? 9 : 6 });
+      leafletMap.getContainer().style.cursor = near ? 'pointer' : 'crosshair';
+    }
+  });
+
+  leafletMap.on('dblclick', e => {
+    if (!selMode || selPoints.length < 4) return;
+    L.DomEvent.stopPropagation(e);
+    selPoints.pop();
+    _closePolygon();
+  });
+}
+
+async function copyMapTable() {
+  if (!lastOrderedPoints.length) return;
+
+  const proyCol  = state.columns.find(c => ['proyecto', 'edificio', 'nombre', 'building'].some(k => norm(c.name).includes(k)))?.name;
+  const tipoCol  = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)))?.name;
+  const rentaCol = findRentaCol();
+  const ufm2ColN = findUfm2Col();
+
+  const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+
+  const rows = lastOrderedPoints.map((pt, i) => {
+    const proy = proyCol ? String(pt.rows[0]?.[proyCol] ?? '—') : '—';
+    const tipo = tipoCol
+      ? [...new Set(pt.rows.map(r => extractDormitorios(r[tipoCol])).filter(Boolean))].sort((a,b)=>parseInt(a)-parseInt(b)).join(', ') || '—'
+      : '—';
+    let renta = null, ufm2 = null;
+    if (rentaCol) {
+      const vals = pt.rows.map(r => Number(r[rentaCol])).filter(v => !isNaN(v) && v > 0);
+      if (vals.length) renta = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    if (ufm2ColN) {
+      const vals = pt.rows.map(r => Number(r[ufm2ColN])).filter(v => !isNaN(v) && v > 0);
+      if (vals.length) ufm2 = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    return { n: i + 1, proy, tipo, renta, ufm2 };
+  });
+
+  const rentaVals = rows.filter(r => r.renta != null).map(r => r.renta);
+  const ufm2Vals  = rows.filter(r => r.ufm2  != null).map(r => r.ufm2);
+  const avgRenta  = rentaVals.length ? rentaVals.reduce((a, b) => a + b, 0) / rentaVals.length : null;
+  const avgUfm2   = ufm2Vals.length  ? ufm2Vals.reduce((a, b) => a + b, 0)  / ufm2Vals.length  : null;
+
+  const TH  = 'background:#1e3a5f;color:#fff;font-weight:700;font-size:8pt;padding:6px 10px;border:1px solid #1e3a5f;white-space:nowrap;font-family:Roboto,Arial,sans-serif;text-align:left;';
+  const THR = TH + 'text-align:right;';
+  const TD  = 'font-size:8pt;padding:6px 10px;border:1px solid #e5e7eb;white-space:nowrap;font-family:Roboto,Arial,sans-serif;color:#0f172a;';
+  const TDR = TD + 'text-align:right;';
+  const TF  = TD + 'font-weight:700;background:#f8fafc;';
+  const TFR = TF + 'text-align:right;';
+
+  const bodyHtml = rows.map(r => `<tr>
+    <td style="${TD}">${r.n}</td>
+    <td style="${TD}">${r.proy}</td>
+    <td style="${TD}">${r.tipo}</td>
+    <td style="${TDR}">${fmtU(r.renta)}</td>
+    <td style="${TDR}">${fmtU(r.ufm2)}</td>
+  </tr>`).join('');
+
+  const footHtml = `<tr>
+    <td style="${TF}" colspan="3">Promedio</td>
+    <td style="${TFR}">${fmtU(avgRenta)}</td>
+    <td style="${TFR}">${fmtU(avgUfm2)}</td>
+  </tr>`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>
+  <table style="border-collapse:collapse;font-family:Roboto,Arial,sans-serif;font-size:8pt;">
+    <thead><tr>
+      <th style="${TH}">N°</th>
+      <th style="${TH}">Proyecto</th>
+      <th style="${TH}">Tipología</th>
+      <th style="${THR}">Renta UF prom.</th>
+      <th style="${THR}">UF/m²</th>
+    </tr></thead>
+    <tbody>${bodyHtml}</tbody>
+    <tfoot>${footHtml}</tfoot>
+  </table></body></html>`;
+
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
+  ]);
+}
+
 function initLeafletMap() {
-  leafletMap = L.map('map');
+  leafletMap = L.map('map', { zoomSnap: 0.5, wheelPxPerZoomLevel: 350 });
   initRankingResize();
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+  streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
     maxZoom: 19,
-  }).addTo(leafletMap);
+    crossOrigin: 'anonymous',
+  });
+  satelliteLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxZoom: 19,
+    crossOrigin: 'anonymous',
+  });
+  streetLayer.addTo(leafletMap);
   markersLayer = L.layerGroup().addTo(leafletMap);
+
+  document.getElementById('mapSatelliteBtn')?.addEventListener('click', () => {
+    isSatellite = !isSatellite;
+    if (isSatellite) {
+      leafletMap.removeLayer(streetLayer);
+      satelliteLayer.addTo(leafletMap);
+      satelliteLayer.bringToBack();
+    } else {
+      leafletMap.removeLayer(satelliteLayer);
+      streetLayer.addTo(leafletMap);
+      streetLayer.bringToBack();
+    }
+    document.getElementById('mapSatelliteBtn').classList.toggle('active', isSatellite);
+  });
+
+  document.getElementById('mapTableExportBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('mapTableExportBtn');
+    btn.textContent = 'Copiando…';
+    btn.disabled = true;
+    try {
+      await copyMapTable();
+      btn.textContent = '¡Copiado!';
+      setTimeout(() => { btn.textContent = 'Copiar tabla'; btn.disabled = false; }, 2000);
+    } catch (err) {
+      console.error(err);
+      btn.textContent = 'Copiar tabla';
+      btn.disabled = false;
+    }
+  });
 
   // Control leyenda (bottom-left)
   legendControl = L.control({ position: 'bottomleft' });
@@ -230,10 +767,10 @@ function initLeafletMap() {
   };
   countControl.addTo(leafletMap);
 
-  // Botones de modo
-  document.querySelectorAll('.map-mode-btn').forEach(btn => {
+  // Botones de modo (solo General / De calor — los que tienen data-mode)
+  document.querySelectorAll('.map-mode-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.map-mode-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.map-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       mapMode = btn.dataset.mode;
       const pills = document.getElementById('heatMetricPills');
@@ -251,6 +788,10 @@ function initLeafletMap() {
       renderMap();
     });
   });
+
+  initSelectionMode();
+  initFilterWidget();
+  initResumenWidget();
 }
 
 export function renderMap() {
@@ -302,9 +843,18 @@ export function renderMap() {
     }
   }
 
+  const orderedPoints = inPriceMode
+    ? points
+    : [...points].sort((a, b) => {
+        const dLng = a.lng - b.lng;
+        return Math.abs(dLng) > 0.0001 ? dLng : b.lat - a.lat;
+      });
+
+  lastOrderedPoints = inPriceMode ? [] : orderedPoints;
+
   const bounds = [];
-  for (const point of points) {
-    const { lat, lng, rows } = point;
+  for (let i = 0; i < orderedPoints.length; i++) {
+    const { lat, lng, rows } = orderedPoints[i];
     let marker;
 
     if (inPriceMode) {
@@ -321,7 +871,14 @@ export function renderMap() {
         className: 'price-marker',
       });
     } else {
-      marker = L.marker([lat, lng]);
+      const numIcon = L.divIcon({
+        className: '',
+        html: `<div class="num-marker">${i + 1}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16],
+      });
+      marker = L.marker([lat, lng], { icon: numIcon });
     }
 
     marker.bindPopup(buildPopup(rows[0]), { maxWidth: 340 });
@@ -335,7 +892,7 @@ export function renderMap() {
     const nombreProy = mp.proyecto || mp.edificio || 'Mi Proyecto';
     const mpIcon = L.divIcon({
       className: '',
-      html: `<div class="mp-map-marker" title="${String(nombreProy).replace(/"/g, '&quot;')}">★</div>`,
+      html: `<div class="mp-map-marker" title="${String(nombreProy).replace(/"/g, '&quot;')}"><svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="16" fill="#fff" stroke="#96323C" stroke-width="2.5"/><polyline points="8,23 18,13 28,23" fill="none" stroke="#96323C" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`,
       iconSize: [36, 36],
       iconAnchor: [18, 18],
       popupAnchor: [0, -20],
@@ -382,6 +939,7 @@ export function renderMap() {
   setTimeout(() => leafletMap.invalidateSize(), 150);
 
   renderRanking();
+  updateResumenWidget();
 }
 
 // ============== Ranking lateral (Adaptado para Renta) ==============

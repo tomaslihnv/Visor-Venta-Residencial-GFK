@@ -9,7 +9,7 @@ import { copyChartPng } from './export.js';
 //   projCandidates?:  string[]
 // }
 
-const palette = ['#1e3a5f','#2563eb','#7c3aed','#db2777','#d97706','#059669','#0891b2','#65a30d'];
+const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#a855f7'];
 
 let _svpReady  = false;
 export const svpMarkers = new Set();
@@ -59,6 +59,93 @@ export function initSvpListeners(state, svpConfig, mp) {
       setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
     }
   });
+
+  _initSvpFilterWidget(state);
+}
+
+function _initSvpFilterWidget(state) {
+  const toggleBtn = document.getElementById('svpFilterWidgetBtn');
+  const container = document.getElementById('svpWrap');
+  if (!toggleBtn || !container) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'svpFilterWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="svpFwHeader">
+      <span>Filtros activos</span>
+      <button class="mfw-close" id="svpFwClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="svpFwBody"></div>
+  `;
+  container.appendChild(widget);
+
+  document.getElementById('svpFwHeader').addEventListener('mousedown', e => {
+    if (e.target.id === 'svpFwClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || (container.offsetWidth - 240);
+    const startT = parseInt(widget.style.top)  || 10;
+    widget.style.left = startL + 'px'; widget.style.top = startT + 'px';
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('svpFwClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        widget.style.left = (container.offsetWidth - 240) + 'px';
+        widget.style.top  = '10px';
+      }
+      _updateSvpFilterWidget(state);
+    }
+  });
+}
+
+export function updateSvpFilterWidget(state) { _updateSvpFilterWidget(state); }
+
+function _updateSvpFilterWidget(state) {
+  const body = document.getElementById('svpFwBody');
+  if (!body) return;
+  const widget = document.getElementById('svpFilterWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+  const defs = state?._filterDefs ?? [];
+  const items = [];
+  for (const def of defs) {
+    if (def.type === 'multi') {
+      const set = state?.filterValues?.[def.key];
+      if (set?.size > 0) items.push({ label: def.label, value: [...set].join(', ') });
+    } else if (def.type === 'slider') {
+      const min = state?.filterValues?.[def.key + 'Min'];
+      const max = state?.filterValues?.[def.key + 'Max'];
+      if (min !== null || max !== null) {
+        const ref = state?.filterRefs?.[def.key];
+        const lo = min !== null ? (ref?.iMin?.value ?? min) : '—';
+        const hi = max !== null ? (ref?.iMax?.value ?? max) : '—';
+        items.push({ label: def.label, value: `${lo} – ${hi}` });
+      }
+    }
+  }
+  body.innerHTML = items.length
+    ? items.map(it => `<div class="mfw-row"><span class="mfw-label">${it.label}</span><span class="mfw-value">${it.value}</span></div>`).join('')
+    : '<div class="mfw-empty">Sin filtros aplicados</div>';
 }
 
 export function populateSvpSelectors(state, svpConfig) {

@@ -25,7 +25,7 @@ const F = {
   propietario:  new Set(),
   edificio:     new Set(),
   tipologia:    new Set(),
-  supMin: null, supMax: null,
+  supMin: null, supMax: null, supRanges: {},
   ticketMin: null, ticketMax: null,
   ufm2Min: null, ufm2Max: null,
   estado:       new Set(),
@@ -76,6 +76,7 @@ export function buildFilters() {
 
   F.propietario.clear(); F.edificio.clear(); F.tipologia.clear();
   F.supMin = F.supMax = F.ticketMin = F.ticketMax = F.ufm2Min = F.ufm2Max = null;
+  F.supRanges = {};
   F.estado.clear(); F.fechaEntrega.clear();
   Object.keys(refs).forEach(k => delete refs[k]);
 
@@ -83,9 +84,10 @@ export function buildFilters() {
   container.innerHTML = '';
 
   if (cols.tipologia)    _buildMulti('tipologia',     cols.tipologia,    'Tipología',                                    container, fmtTipo);
-  if (cols.superficie)   _buildSlider('sup',          cols.superficie,   '<span class="keep-case">m</span>² útil',       container);
-  if (cols.ufm2)         _buildSlider('ufm2',         cols.ufm2,         'UF/<span class="keep-case">m</span>²',         container);
-  if (cols.ticket)       _buildSlider('ticket',       cols.ticket,       'Ticket UF',                                    container);
+  if (cols.superficie && cols.tipologia) _buildSupTipo('sup', cols.superficie, cols.tipologia, '<span class="keep-case">m</span>² útil', container);
+  else if (cols.superficie) _buildSlider('sup', cols.superficie, '<span class="keep-case">m</span>² útil', container);
+  if (cols.ufm2)         _buildMinMax('ufm2',         cols.ufm2,         'UF/<span class="keep-case">m</span>²',         container);
+  if (cols.ticket)       _buildMinMax('ticket',       cols.ticket,       'Ticket UF',                                    container);
   if (cols.edificio)     _buildMulti('edificio',      cols.edificio,     'Edificio',                                     container, fmt, true);
   if (cols.propietario)  _buildMulti('propietario',   cols.propietario,  'Propietario',                                  container);
   if (cols.estado)       _buildMulti('estado',        cols.estado,       'Estado',                                       container);
@@ -138,6 +140,11 @@ function _buildMulti(key, colName, label, container, fmtFn = fmt, searchable = f
     checkboxes.push(cb);
   }
 
+  if (key === 'edificio') {
+    refs.edificioCbs  = checkboxes;
+    refs.edificioVals = vals;
+  }
+
   group.appendChild(multi);
   container.appendChild(group);
 }
@@ -178,6 +185,144 @@ function _buildRange(key, colName, label, unit, container) {
   }, 250);
   inMin.addEventListener('input', onChange);
   inMax.addEventListener('input', onChange);
+}
+
+// --- Rango por tipología ---
+function _buildSupTipo(key, supCol, tipoCol, label, container) {
+  const tipoMap = {};
+  for (const r of state.raw) {
+    const tipo = fmtTipo(r[tipoCol]);
+    const v = Number(r[supCol]);
+    if (!tipo || isNaN(v) || v <= 0) continue;
+    if (!tipoMap[tipo]) tipoMap[tipo] = [];
+    tipoMap[tipo].push(v);
+  }
+  const tipos = Object.keys(tipoMap).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  if (!tipos.length) return;
+
+  F.supRanges = {};
+  const defaults = {};
+  for (const tipo of tipos) {
+    const vals = tipoMap[tipo];
+    const dMin = Math.floor(Math.min(...vals));
+    const dMax = Math.ceil(Math.max(...vals));
+    defaults[tipo] = { dMin, dMax };
+    F.supRanges[tipo] = { min: null, max: null, dMin, dMax };
+  }
+
+  const group = document.createElement('div');
+  group.className = 'filter-group';
+  group.innerHTML = `<label class="title">${label}</label>`;
+
+  const grid = document.createElement('div');
+  grid.className = 'sup-tipo-grid';
+
+  for (const tipo of tipos) {
+    const { dMin, dMax } = defaults[tipo];
+    const row = document.createElement('div');
+    row.className = 'sup-tipo-row';
+
+    const tipoLbl = document.createElement('span');
+    tipoLbl.className = 'sup-tipo-label';
+    tipoLbl.textContent = tipo;
+
+    const minLbl = document.createElement('span');
+    minLbl.className = 'sup-tipo-minmax-label';
+    minLbl.textContent = 'min';
+
+    const iMin = document.createElement('input');
+    iMin.type = 'number'; iMin.className = 'sup-tipo-input';
+    iMin.value = dMin; iMin.step = 1;
+
+    const maxLbl = document.createElement('span');
+    maxLbl.className = 'sup-tipo-minmax-label';
+    maxLbl.textContent = 'max';
+
+    const iMax = document.createElement('input');
+    iMax.type = 'number'; iMax.className = 'sup-tipo-input';
+    iMax.value = dMax; iMax.step = 1;
+
+    row.append(tipoLbl, minLbl, iMin, maxLbl, iMax);
+    grid.appendChild(row);
+
+    const onChange = debounce(() => {
+      const lo = iMin.value.trim() === '' ? null : Number(iMin.value);
+      const hi = iMax.value.trim() === '' ? null : Number(iMax.value);
+      F.supRanges[tipo].min = lo;
+      F.supRanges[tipo].max = hi;
+      applyFilters();
+    }, 250);
+    iMin.addEventListener('input', onChange);
+    iMax.addEventListener('input', onChange);
+    iMin.addEventListener('blur', () => { if (iMin.value.trim() === '') { iMin.value = dMin; F.supRanges[tipo].min = null; applyFilters(); } });
+    iMax.addEventListener('blur', () => { if (iMax.value.trim() === '') { iMax.value = dMax; F.supRanges[tipo].max = null; applyFilters(); } });
+    iMin.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+    iMax.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+  }
+
+  group.appendChild(grid);
+  container.appendChild(group);
+  refs[key] = { type: 'tipo-range', colName: supCol };
+}
+
+// --- Min / Max inputs simples ---
+function _buildMinMax(key, colName, label, container) {
+  const nums = state.raw.map(r => Number(r[colName])).filter(v => !isNaN(v));
+  if (!nums.length) return;
+  const dMin = Math.floor(Math.min(...nums));
+  const dMax = Math.ceil(Math.max(...nums));
+
+  const fmtNum = v => Math.round(v).toLocaleString('es-CL');
+  const parseNum = s => { const n = parseInt(String(s).replace(/[^\d]/g, ''), 10); return isNaN(n) ? null : n; };
+
+  const group = document.createElement('div');
+  group.className = 'filter-group';
+  group.innerHTML = `<label class="title">${label}</label>`;
+
+  const row = document.createElement('div');
+  row.className = 'sup-tipo-row';
+
+  const minLbl = document.createElement('span');
+  minLbl.className = 'sup-tipo-minmax-label';
+  minLbl.textContent = 'min';
+
+  const iMin = document.createElement('input');
+  iMin.type = 'text'; iMin.className = 'sup-tipo-input minmax-wide';
+  iMin.value = fmtNum(dMin);
+
+  const maxLbl = document.createElement('span');
+  maxLbl.className = 'sup-tipo-minmax-label';
+  maxLbl.textContent = 'max';
+
+  const iMax = document.createElement('input');
+  iMax.type = 'text'; iMax.className = 'sup-tipo-input minmax-wide';
+  iMax.value = fmtNum(dMax);
+
+  row.append(minLbl, iMin, maxLbl, iMax);
+  group.appendChild(row);
+  container.appendChild(group);
+
+  refs[key] = { type: 'minmax', inMin: iMin, inMax: iMax, colName, dMin, dMax, fmtNum };
+
+  const onChange = debounce(() => {
+    F[`${key}Min`] = parseNum(iMin.value);
+    F[`${key}Max`] = parseNum(iMax.value);
+    applyFilters();
+  }, 350);
+  iMin.addEventListener('input', onChange);
+  iMax.addEventListener('input', onChange);
+  iMin.addEventListener('blur', () => {
+    const n = parseNum(iMin.value);
+    if (n === null) { iMin.value = fmtNum(refs[key].dMin); F[`${key}Min`] = null; applyFilters(); }
+    else iMin.value = fmtNum(n);
+  });
+  iMax.addEventListener('blur', () => {
+    const n = parseNum(iMax.value);
+    if (n === null) { iMax.value = fmtNum(refs[key].dMax); F[`${key}Max`] = null; applyFilters(); }
+    else iMax.value = fmtNum(n);
+  });
+  iMin.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+  iMax.addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 }
 
 // --- Slider dual ---
@@ -315,9 +460,19 @@ export function applyFilters() {
     if (F.edificio.size     && cols.edificio     && !F.edificio.has(row[cols.edificio]))         return false;
     if (F.tipologia.size    && cols.tipologia    && !F.tipologia.has(row[cols.tipologia]))       return false;
     if (cols.superficie) {
-      const v = Number(row[cols.superficie]);
-      if (F.supMin !== null && (isNaN(v) || v < F.supMin)) return false;
-      if (F.supMax !== null && (isNaN(v) || v > F.supMax)) return false;
+      if (Object.keys(F.supRanges).length) {
+        const tipo = cols.tipologia ? fmtTipo(row[cols.tipologia]) : null;
+        const range = tipo ? F.supRanges[tipo] : null;
+        if (range) {
+          const v = Number(row[cols.superficie]);
+          if (range.min !== null && (isNaN(v) || v < range.min)) return false;
+          if (range.max !== null && (isNaN(v) || v > range.max)) return false;
+        }
+      } else {
+        const v = Number(row[cols.superficie]);
+        if (F.supMin !== null && (isNaN(v) || v < F.supMin)) return false;
+        if (F.supMax !== null && (isNaN(v) || v > F.supMax)) return false;
+      }
     }
     if (cols.ticket) {
       const v = Number(row[cols.ticket]);
@@ -354,9 +509,10 @@ export function applyFilters() {
   if (activeTab === 'comparativa') {
     import('./comparativa.js').then(({ renderComparativa }) => renderComparativa());
   }
-  if (activeTab === 'mapa') {
-    import('./map.js').then(({ renderMap }) => renderMap());
-  }
+  import('./map.js').then(({ renderMap, updateFilterWidget }) => {
+    updateFilterWidget?.();
+    if (activeTab === 'mapa') renderMap();
+  });
 }
 
 // Actualiza los límites dinámicamente al cambiar otros filtros
@@ -370,6 +526,7 @@ function _updateRangeLimits() {
     const newMin = Math.floor(Math.min(...nums));
     const newMax = Math.ceil(Math.max(...nums));
 
+    if (ref.type === 'tipo-range') continue;
     if (ref.type === 'slider') {
       const noUserFilter = F[`${key}Min`] === null && F[`${key}Max`] === null;
       if (noUserFilter) {
@@ -378,6 +535,9 @@ function _updateRangeLimits() {
         ref.sMax.min = newMin; ref.sMax.max = newMax; ref.sMax.value = newMax;
         ref.updateFill();
       }
+    } else if (ref.type === 'minmax') {
+      if (F[`${key}Min`] === null) { ref.inMin.value = ref.fmtNum(newMin); ref.dMin = newMin; }
+      if (F[`${key}Max`] === null) { ref.inMax.value = ref.fmtNum(newMax); ref.dMax = newMax; }
     } else {
       if (!ref.inMin.value) ref.inMin.placeholder = String(newMin);
       if (!ref.inMax.value) ref.inMax.placeholder = String(newMax);
@@ -391,4 +551,169 @@ export function resetFilters() {
   const s = $('#searchInput');
   if (s) { s.value = ''; state.search = ''; }
   applyFilters();
+}
+
+// ============== Manipulación programática del filtro Edificio ==============
+const _edificioHistory = [];
+
+function _saveEdificioSnapshot() {
+  if (!refs.edificioCbs) return;
+  _edificioHistory.push(refs.edificioCbs.map(cb => cb.checked));
+}
+
+function _syncEdificioFilter() {
+  const cbs  = refs.edificioCbs;
+  const vals = refs.edificioVals ?? [];
+  if (!cbs) return;
+  const checked = cbs.filter(c => c.checked).map(c => c._realVal);
+  F.edificio.clear();
+  if (checked.length < vals.length) checked.forEach(v => F.edificio.add(v));
+  applyFilters();
+}
+
+export function excludeEdificios(names) {
+  const cbs = refs.edificioCbs;
+  if (!cbs) return;
+  _saveEdificioSnapshot();
+  const toExclude = new Set(names.map(String));
+  for (const cb of cbs) {
+    if (toExclude.has(String(cb._realVal))) cb.checked = false;
+  }
+  _syncEdificioFilter();
+}
+
+export function keepOnlyEdificios(names) {
+  const cbs = refs.edificioCbs;
+  if (!cbs) return;
+  _saveEdificioSnapshot();
+  const toKeep = new Set(names.map(String));
+  for (const cb of cbs) {
+    cb.checked = toKeep.has(String(cb._realVal));
+  }
+  _syncEdificioFilter();
+}
+
+export function undoEdificioFilter() {
+  if (!_edificioHistory.length || !refs.edificioCbs) return false;
+  const prev = _edificioHistory.pop();
+  refs.edificioCbs.forEach((cb, i) => { cb.checked = prev[i]; });
+  _syncEdificioFilter();
+  return _edificioHistory.length > 0;
+}
+
+export function hasEdificioHistory() {
+  return _edificioHistory.length > 0;
+}
+
+// ============== Export / Import de filtros ==============
+
+export function getFilterState() {
+  return {
+    multi: {
+      tipologia:    [...F.tipologia],
+      propietario:  [...F.propietario],
+      edificio:     [...F.edificio],
+      estado:       [...F.estado],
+      fechaEntrega: [...F.fechaEntrega],
+    },
+    ranges: {
+      sup:    { min: F.supMin,    max: F.supMax },
+      ticket: { min: F.ticketMin, max: F.ticketMax },
+      ufm2:   { min: F.ufm2Min,  max: F.ufm2Max },
+    },
+    supRanges: Object.fromEntries(
+      Object.entries(F.supRanges).map(([k, v]) => [k, { min: v.min, max: v.max }])
+    ),
+  };
+}
+
+export function applyFilterState(data) {
+  if (!data) return;
+
+  for (const [key, values] of Object.entries(data.multi ?? {})) {
+    if (!(key in F) || !(F[key] instanceof Set)) continue;
+    const cbs = [...document.querySelectorAll(`input[type="checkbox"][id^="f_${key}_"]`)];
+    if (!cbs.length) continue;
+    const valueSet = new Set(values.map(String));
+    F[key].clear();
+    for (const cb of cbs) {
+      cb.checked = valueSet.size === 0 || valueSet.has(cb.value);
+      if (cb.checked && valueSet.size > 0) F[key].add(cb._realVal ?? cb.value);
+    }
+  }
+
+  for (const [key, range] of Object.entries(data.ranges ?? {})) {
+    F[`${key}Min`] = range.min ?? null;
+    F[`${key}Max`] = range.max ?? null;
+    const ref = refs[key];
+    if (!ref) continue;
+    if (ref.type === 'slider') {
+      if (range.min != null) { ref.sMin.value = range.min; }
+      if (range.max != null) { ref.sMax.value = range.max; }
+      ref.updateFill?.();
+    } else if (ref.type === 'minmax') {
+      if (range.min != null) ref.inMin.value = ref.fmtNum(range.min);
+      else ref.inMin.value = ref.fmtNum(ref.dMin);
+      if (range.max != null) ref.inMax.value = ref.fmtNum(range.max);
+      else ref.inMax.value = ref.fmtNum(ref.dMax);
+    }
+  }
+
+  for (const [tipo, range] of Object.entries(data.supRanges ?? {})) {
+    if (!F.supRanges[tipo]) continue;
+    F.supRanges[tipo].min = range.min ?? null;
+    F.supRanges[tipo].max = range.max ?? null;
+    const rows = document.querySelectorAll('.sup-tipo-row');
+    for (const row of rows) {
+      const lbl = row.querySelector('.sup-tipo-label');
+      if (!lbl || lbl.textContent.trim() !== tipo) continue;
+      const [iMin, iMax] = row.querySelectorAll('.sup-tipo-input');
+      if (iMin && range.min != null) iMin.value = range.min;
+      if (iMax && range.max != null) iMax.value = range.max;
+    }
+  }
+
+  applyFilters();
+}
+
+export function getActiveFiltersSummary() {
+  const items = [];
+
+  if (F.tipologia.size > 0)
+    items.push({ label: 'Tipología', value: [...F.tipologia].map(fmtTipo).join(', ') });
+
+  if (Object.keys(F.supRanges).length) {
+    for (const [tipo, range] of Object.entries(F.supRanges)) {
+      if (range.min !== null || range.max !== null) {
+        const lo = range.min ?? range.dMin;
+        const hi = range.max ?? range.dMax;
+        items.push({ label: `m² ${tipo}`, value: `${lo} – ${hi}` });
+      }
+    }
+  } else if (F.supMin !== null || F.supMax !== null) {
+    const ref = refs.sup;
+    const lo  = ref ? ref.lblMin.textContent : String(F.supMin ?? '—');
+    const hi  = ref ? ref.lblMax.textContent : String(F.supMax ?? '—');
+    items.push({ label: 'm² útil', value: `${lo} – ${hi}` });
+  }
+
+  const sliders = [
+    { key: 'ufm2',   label: 'UF/m²',     minKey: 'ufm2Min',   maxKey: 'ufm2Max'   },
+    { key: 'ticket', label: 'Ticket UF', minKey: 'ticketMin', maxKey: 'ticketMax' },
+  ];
+  for (const s of sliders) {
+    if (F[s.minKey] !== null || F[s.maxKey] !== null) {
+      const ref = refs[s.key];
+      let lo, hi;
+      if (ref?.type === 'minmax') {
+        lo = ref.fmtNum(F[s.minKey] ?? ref.dMin);
+        hi = ref.fmtNum(F[s.maxKey] ?? ref.dMax);
+      } else {
+        lo = ref ? ref.lblMin.textContent : String(F[s.minKey] ?? '—');
+        hi = ref ? ref.lblMax.textContent : String(F[s.maxKey] ?? '—');
+      }
+      items.push({ label: s.label, value: `${lo} – ${hi}` });
+    }
+  }
+  return items;
 }
