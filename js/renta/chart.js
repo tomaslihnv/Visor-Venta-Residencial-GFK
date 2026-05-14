@@ -1315,6 +1315,107 @@ export function renderDistrib() {
       },
     },
   });
+  _enableAnnotationLabelDrag(distribChart);
+}
+
+// ── Drag de etiquetas de anotaciones ──────────────────────────────────────
+// Calcula posición de etiqueta desde escalas del chart, sin depender
+// de internals de chartjs-plugin-annotation (su estado es privado).
+
+function _enableAnnotationLabelDrag(chart) {
+  const canvas = chart.canvas;
+  let dragging = null;
+
+  function _anns() {
+    return chart.options?.plugins?.annotation?.annotations ?? {};
+  }
+
+  // Anchor pixel de la etiqueta según tipo de línea con position:'start'
+  function _anchor(ann) {
+    const ca = chart.chartArea;
+    const sx = chart.scales?.x, sy = chart.scales?.y;
+    if (!ca || !sx || !sy) return null;
+    // Línea vertical (xMin == xMax)
+    if (ann.xMin != null && (ann.xMax == null || ann.xMin === ann.xMax)) {
+      return { ax: sx.getPixelForValue(ann.xMin), ay: sy.getPixelForValue(ann.yMin ?? sy.min ?? 0) };
+    }
+    // Línea horizontal (yMin == yMax)
+    if (ann.yMin != null && (ann.yMax == null || ann.yMin === ann.yMax)) {
+      return { ax: sx.getPixelForValue(ann.xMin ?? sx.min ?? 0), ay: sy.getPixelForValue(ann.yMin) };
+    }
+    return null;
+  }
+
+  function _box(key) {
+    const ann = _anns()[key];
+    if (!ann?.label || ann.label.display === false) return null;
+    const a = _anchor(ann);
+    if (!a) return null;
+    const fs   = ann.label.font?.size ?? 11;
+    const text = Array.isArray(ann.label.content)
+      ? ann.label.content.join(' ') : String(ann.label.content ?? '');
+    const ctx2 = canvas.getContext('2d');
+    ctx2.save();
+    ctx2.font = `bold ${fs}px system-ui, sans-serif`;
+    const tw = ctx2.measureText(text).width;
+    ctx2.restore();
+    return {
+      cx: a.ax + (ann.label.xAdjust ?? 0),
+      cy: a.ay + (ann.label.yAdjust ?? 0),
+      w: tw + 16, h: fs * 1.8,
+    };
+  }
+
+  function _hit(mx, my) {
+    for (const key of Object.keys(_anns())) {
+      const b = _box(key);
+      if (!b) continue;
+      if (Math.abs(mx - b.cx) <= b.w / 2 + 10 && Math.abs(my - b.cy) <= b.h / 2 + 10)
+        return key;
+    }
+    return null;
+  }
+
+  canvas.addEventListener('mousedown', e => {
+    const key = _hit(e.offsetX, e.offsetY);
+    if (!key) return;
+    const ann = _anns()[key];
+    if (!ann?.label) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (chart.options.plugins.tooltip) chart.options.plugins.tooltip.enabled = false;
+    dragging = {
+      key,
+      sx: e.offsetX, sy: e.offsetY,
+      ox: ann.label.xAdjust ?? 0,
+      oy: ann.label.yAdjust ?? 0,
+    };
+    canvas.style.cursor = 'grabbing';
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (dragging) {
+      const ann = _anns()[dragging.key];
+      if (!ann?.label) return;
+      ann.label.xAdjust = dragging.ox + (e.offsetX - dragging.sx);
+      ann.label.yAdjust = dragging.oy + (e.offsetY - dragging.sy);
+      chart.update('none');
+      canvas.style.cursor = 'grabbing';
+    } else {
+      const mx = e.offsetX, my = e.offsetY;
+      setTimeout(() => { if (!dragging) canvas.style.cursor = _hit(mx, my) ? 'grab' : ''; }, 0);
+    }
+  });
+
+  function _stop() {
+    if (!dragging) return;
+    dragging = null;
+    canvas.style.cursor = '';
+    if (chart.options.plugins.tooltip) chart.options.plugins.tooltip.enabled = true;
+    chart.update('none');
+  }
+  canvas.addEventListener('mouseup',    _stop);
+  canvas.addEventListener('mouseleave', _stop);
 }
 
 // ── Modo Densidad ─────────────────────────────────────────────────────────
@@ -1481,6 +1582,7 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
       },
     },
   });
+  _enableAnnotationLabelDrag(distribChart);
 }
 
 // ── Modo Log-normal ───────────────────────────────────────────────────────
@@ -1582,7 +1684,7 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
     type: 'line',
     data: {
       datasets: [{
-        label: `Log-normal (${col})`,
+        label: col,
         data: lnData,
         borderColor: '#0ea5e9',
         backgroundColor: 'rgba(14,165,233,0.08)',
@@ -1622,4 +1724,5 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
       },
     },
   });
+  _enableAnnotationLabelDrag(distribChart);
 }
