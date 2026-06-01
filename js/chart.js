@@ -1,6 +1,38 @@
 import { $, fmt } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
+import { getActiveTipoFilter } from './filters.js';
+
+function _fmtTipo(v) {
+  const s = String(v ?? '').trim();
+  return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
+}
+
+// Returns true when S is selected as a filter but 1D is NOT explicitly selected
+function _sOnlyNotExplicit1D() {
+  const f = getActiveTipoFilter();
+  if (!f.has('S')) return false;
+  return ![...f].some(sel => sel !== 'S' && _fmtTipo(sel) === '1D');
+}
+
+// Returns true if Mi Proyecto typology 'nombre' should be included given current filter
+function _mpTipoVisible(nombre, activeTipos) {
+  const userFilter = getActiveTipoFilter();
+  if (userFilter.size === 0) {
+    // No active filter: show if data equiv. is present in filtered rows
+    if (!activeTipos) return true;
+    return activeTipos.has(_fmtTipo(nombre)) || (nombre === 'S' && activeTipos.has('1D'));
+  }
+  // Active filter: match against user's actual checkbox selection
+  if (userFilter.has(nombre)) return true;
+  const fmt = _fmtTipo(nombre);
+  // For non-S types: match any selected raw value that formats to the same tipo
+  // S is never considered an alias for any other tipo (it maps to 1D in data, but '1D' Mp type ≠ 'S' Mp type)
+  for (const sel of userFilter) {
+    if (sel !== 'S' && _fmtTipo(sel) === fmt) return true;
+  }
+  return false;
+}
 
 // ============== KPIs ==============
 export function renderKpis() {
@@ -421,9 +453,7 @@ export function renderProyectos() {
       ? new Set(state.filtered.map(r => fmtTipo(r[tipoCol.name])).filter(Boolean))
       : null;
 
-    const tipos = mp.tipologias.filter(t =>
-      t.nombre && (activeTipos ? activeTipos.has(fmtTipo(t.nombre)) : true)
-    );
+    const tipos = mp.tipologias.filter(t => t.nombre && _mpTipoVisible(t.nombre, activeTipos));
 
     if (metricId === 'ticket') {
       const vals = tipos.filter(t => t.sup != null && t.ufm2 != null).map(t => t.sup * t.ufm2);
@@ -767,9 +797,7 @@ export function renderSupVsPrecio() {
     const mpColor = '#1e293b';
     const mpName  = mp.edificio || mp.propietario || 'Mi Proyecto';
     const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.ufm2 != null);
-    mpFiltered = activeTipos
-      ? mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)))
-      : mpTipos;
+    mpFiltered = mpTipos.filter(t => _mpTipoVisible(t.nombre, activeTipos));
 
     if (mpFiltered.length > 0) {
       mpDatasets.push({
@@ -1520,7 +1548,7 @@ export function renderDistrib() {
     if (tipoColObj) {
       const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
       if (activeTipos.size > 0) {
-        mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
+        mpTipos = mpTipos.filter(t => _mpTipoVisible(t.nombre, activeTipos));
       }
     }
 
