@@ -21,6 +21,8 @@ function resolveCols() {
   cols.proyecto    = findCol(['proyecto', 'edificio', 'nombre', 'building']);
 }
 
+const TIPO_ORDER = ['S', '1D', '2D', '3D', '4D'];
+
 // ============== Estado de filtros ==============
 const F = {
   tipologia:   new Set(),
@@ -63,9 +65,19 @@ export function buildFilters() {
 
 // --- Multi checkbox genérico ---
 function _buildMulti(key, colName, label, container) {
-  const vals = [...new Set(
+  const rawVals = [...new Set(
     state.raw.map(r => r[colName]).filter(v => v !== '' && v != null)
-  )].sort((a, b) => String(a).localeCompare(String(b), 'es', { numeric: true }));
+  )];
+  if (key === 'tipologia' && !rawVals.some(v => String(v) === 'S')) rawVals.push('S');
+  const vals = rawVals.sort((a, b) => {
+    if (key === 'tipologia') {
+      const ia = TIPO_ORDER.indexOf(String(a)), ib = TIPO_ORDER.indexOf(String(b));
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+    }
+    return String(a).localeCompare(String(b), 'es', { numeric: true });
+  });
   if (!vals.length) return;
 
   const group = document.createElement('div');
@@ -198,7 +210,10 @@ export function applyFilters() {
     }
 
     if (F.excludedProyectos.size && cols.proyecto && F.excludedProyectos.has(String(row[cols.proyecto] ?? '').trim())) return false;
-    if (F.tipologia.size && cols.tipologia && !F.tipologia.has(row[cols.tipologia])) return false;
+    if (F.tipologia.size && cols.tipologia) {
+      const rawTipo = row[cols.tipologia];
+      if (!F.tipologia.has(rawTipo) && !(F.tipologia.has('S') && String(rawTipo) === '1D')) return false;
+    }
     if (F.corredor.size  && cols.corredor  && !F.corredor.has(row[cols.corredor]))  return false;
     if (F.tipo.size        && cols.tipo        && !F.tipo.has(row[cols.tipo]))                       return false;
     if (F.comuna.size      && cols.comuna      && !F.comuna.has(row[cols.comuna]))                   return false;

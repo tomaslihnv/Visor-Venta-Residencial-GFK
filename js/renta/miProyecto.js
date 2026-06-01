@@ -73,8 +73,7 @@ function _renderTipos() {
   for (const tipo of mp.tipologias) {
     const card = document.createElement('div');
     card.className = 'mp-tipo-card';
-    // Opciones adaptadas, puedes agregar 'Studio' si lo manejan
-    const typeOptions = ['Studio', '1D', '2D', '3D', '4D'].map(opt =>
+    const typeOptions = ['S', '1D', '2D', '3D', '4D'].map(opt =>
       `<option value="${opt}"${tipo.nombre === opt ? ' selected' : ''}>${opt}</option>`
     ).join('');
     card.innerHTML = `

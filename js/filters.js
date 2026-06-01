@@ -42,6 +42,8 @@ function fmtTipo(v) {
   return s;
 }
 
+const TIPO_ORDER = ['S', '1D', '2D', '3D', '4D'];
+
 // ============== Fecha → Trimestre ==============
 function dateToQuarter(val) {
   if (val === '' || val == null) return null;
@@ -96,9 +98,21 @@ export function buildFilters() {
 
 // --- Multi checkbox ---
 function _buildMulti(key, colName, label, container, fmtFn = fmt, searchable = false) {
-  const vals = [...new Set(
+  const rawVals = [...new Set(
     state.raw.map(r => r[colName]).filter(v => v !== '' && v != null)
-  )].sort((a, b) => String(fmtFn(a)).localeCompare(String(fmtFn(b)), 'es', { numeric: true }));
+  )];
+  if (key === 'tipologia' && !rawVals.some(v => String(fmtFn(v)) === 'S')) rawVals.push('S');
+  const vals = rawVals.sort((a, b) => {
+    if (key === 'tipologia') {
+      const fa = String(fmtFn(a)), fb = String(fmtFn(b));
+      const ia = TIPO_ORDER.indexOf(fa), ib = TIPO_ORDER.indexOf(fb);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return fa.localeCompare(fb, 'es', { numeric: true });
+    }
+    return String(fmtFn(a)).localeCompare(String(fmtFn(b)), 'es', { numeric: true });
+  });
   if (!vals.length) return;
 
   const group = document.createElement('div');
@@ -197,7 +211,13 @@ function _buildSupTipo(key, supCol, tipoCol, label, container) {
     if (!tipoMap[tipo]) tipoMap[tipo] = [];
     tipoMap[tipo].push(v);
   }
-  const tipos = Object.keys(tipoMap).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  const tipos = Object.keys(tipoMap).sort((a, b) => {
+    const ia = TIPO_ORDER.indexOf(a), ib = TIPO_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b, 'es', { numeric: true });
+  });
   if (!tipos.length) return;
 
   F.supRanges = {};
@@ -458,7 +478,10 @@ export function applyFilters() {
     }
     if (F.propietario.size  && cols.propietario  && !F.propietario.has(row[cols.propietario]))   return false;
     if (F.edificio.size     && cols.edificio     && !F.edificio.has(row[cols.edificio]))         return false;
-    if (F.tipologia.size    && cols.tipologia    && !F.tipologia.has(row[cols.tipologia]))       return false;
+    if (F.tipologia.size && cols.tipologia) {
+      const rawTipo = row[cols.tipologia];
+      if (!F.tipologia.has(rawTipo) && !(F.tipologia.has('S') && fmtTipo(rawTipo) === '1D')) return false;
+    }
     if (cols.superficie) {
       if (Object.keys(F.supRanges).length) {
         const tipo = cols.tipologia ? fmtTipo(row[cols.tipologia]) : null;
@@ -603,6 +626,11 @@ export function undoEdificioFilter() {
 
 export function hasEdificioHistory() {
   return _edificioHistory.length > 0;
+}
+
+// Devuelve el Set de valores crudos seleccionados en el filtro de tipología (vacío = sin filtro activo)
+export function getActiveTipoFilter() {
+  return F.tipologia;
 }
 
 export function getActiveFiltersSummary() {
