@@ -94,6 +94,10 @@
           <div id="filtersContainer" class="filters">
             <p class="hint">Cargá un Excel para empezar.</p>
           </div>
+          <div class="filter-io-row">
+            <button id="exportFiltersBtn" class="filter-io-btn" title="Exportar filtros como JSON. También podés arrastrar un .json aquí para cargar filtros.">&#x21E9; Exportar filtros</button>
+            <span id="filterIOFeedback" class="filter-io-feedback" style="display:none"></span>
+          </div>
         </div>
       </div>
     </aside>
@@ -111,11 +115,11 @@
 
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
-          <button class="tab" data-tab="comparativa">Tabla comparativa</button>
-          <button class="tab" data-tab="svp">Sup. vs Arriendo</button>
           <button class="tab" data-tab="proyectos">Proyectos</button>
+          <button class="tab" data-tab="svp">Dispersión</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
-          <button class="tab" data-tab="tabla">Tabla</button>
+          <button class="tab" data-tab="comparativa">Resumen</button>
+          <button class="tab" data-tab="tabla">Datos</button>
         </div>
 
         <!-- TAB: MAPA -->
@@ -134,6 +138,9 @@
                 <button id="mapSelectBtn" class="map-mode-btn" title="Dibuja un polígono para excluir/mantener proyectos. Esc para cancelar.">&#x2B1A; Seleccionar zona</button>
                 <button id="mapUndoBtn" class="map-mode-btn map-undo-btn hidden" title="Deshacer última acción de selección (Ctrl+Z)">&#x21A9; Deshacer</button>
                 <button id="mapClearPolyBtn" class="map-mode-btn map-clearpoly-btn hidden" title="Quitar la zona marcada del mapa">&#x2715; Limpiar zona</button>
+                <button id="mapResumenWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar resumen de stock">&#x2263; Resumen</button>
+                <button id="mapSatelliteBtn" class="map-mode-btn" title="Alternar mapa / satélite">Satélite</button>
+                <button id="mapTableExportBtn" class="primary-btn">Copiar tabla</button>
                 <div class="heat-metric-pills hidden" id="heatMetricPills">
                   <span class="heat-metric-label">Métrica:</span>
                   <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
@@ -159,9 +166,10 @@
           </div>
         </div>
 
-        <!-- TAB: SUP. VS ARRIENDO -->
+        <!-- TAB: DISPERSIÓN -->
         <div class="tab-panel" data-panel="svp">
           <div class="chart-controls">
+            <button id="svpFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
             <div class="ctrl">
               <label>Eje Y</label>
               <select id="svpYAxis"></select>
@@ -185,7 +193,7 @@
             <div class="ctrl distrib-font-ctrl">
               <label>Texto</label>
               <div class="distrib-font-row">
-                <input type="range" id="svpFontSize" min="8" max="22" step="1" value="11">
+                <input type="range" id="svpFontSize" min="8" max="36" step="1" value="11">
                 <span id="svpFontSizeVal">11px</span>
               </div>
             </div>
@@ -218,9 +226,39 @@
                 <option value="disponib">Disponibilidad</option>
               </select>
             </div>
-            <button id="proyExportPngBtn" class="primary-btn">Exportar PNG</button>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="proyFontSize" min="8" max="36" step="1" value="11">
+                <span id="proyFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="proy-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="proy-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="proy-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Eje X</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-xrot-btn active" data-rot="diagonal">Diagonal</button>
+                <button class="proy-xrot-btn" data-rot="vertical">Vertical</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Mediana</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-median-btn active" data-median="show">Mostrar</button>
+                <button class="proy-median-btn" data-median="hide">Ocultar</button>
+              </div>
+            </div>
+            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div class="chart-wrap">
+          <div class="chart-wrap" id="proyWrap">
             <canvas id="proyChart"></canvas>
           </div>
         </div>
@@ -232,6 +270,25 @@
               <label>Valores</label>
               <select id="distribCol"></select>
             </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Vista</label>
+              <div class="distrib-ratio-row">
+                <button class="distrib-mode-btn active" data-mode="acumulada">Acumulada</button>
+                <button class="distrib-mode-btn" data-mode="densidad">Densidad</button>
+                <button class="distrib-mode-btn" data-mode="lognormal">Log-normal</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-bins-ctrl" id="distribBinsCtrl" style="display:none">
+              <label>Bins</label>
+              <div class="distrib-font-row">
+                <input type="range" id="distribBins" min="5" max="80" step="1" value="0">
+                <span id="distribBinsVal">Auto</span>
+              </div>
+            </div>
+            <label class="toggle-check">
+              <input type="checkbox" id="distribNormalToggle" />
+              <span>Dist. normal</span>
+            </label>
             <div class="ctrl distrib-marker-group">
               <label>Marcar percentil</label>
               <div class="marker-add">
@@ -246,6 +303,7 @@
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
+            <button class="distrib-mp-btn active" title="Mostrar/ocultar unidad del proyecto">Mi Proyecto</button>
             <div class="distrib-tags-row">
               <div id="distribPctTags" class="marker-tags"></div>
               <div id="distribPriceTags" class="marker-tags"></div>

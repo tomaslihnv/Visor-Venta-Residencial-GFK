@@ -1,5 +1,5 @@
-import { state } from './data.js'; // Ajusta la ruta si renombraste el archivo a data.js
-import { $, fmt } from './utils.js';
+import { state } from './data.js';
+import { $, fmt, extractDormitorios } from './utils.js';
 import { mp } from './miProyecto.js';
 
 // ============== Cache y estado ==============
@@ -8,6 +8,10 @@ const geoStatus = { total: 0, done: 0, running: false };
 let mapMode    = 'general'; // 'general' | 'precio'
 let heatMetric = 'ufm2';   // 'ufm2' | 'renta'
 let mapInitialized = false;
+let streetLayer = null;
+let satelliteLayer = null;
+let isSatellite = false;
+let lastOrderedPoints = [];
 
 export function resetMapOnLoad() {
   mapInitialized = false;
@@ -289,6 +293,126 @@ function initFilterWidget() {
   });
 }
 
+// ============== Widget de resumen ==============
+let resumenWidgetInited = false;
+
+function _computeResumenRenta() {
+  const tipoCol = state.columns.find(c =>
+    ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k))
+  )?.name;
+  const rentaCol = findRentaCol();
+
+  const byTipo = {};
+  let total = 0, rentaSum = 0, rentaCount = 0;
+  for (const r of state.filtered) {
+    total++;
+    const rawTipo = tipoCol ? r[tipoCol] : null;
+    const t = rawTipo != null ? (extractDormitorios(rawTipo) ?? null) : null;
+    if (t) byTipo[t] = (byTipo[t] || 0) + 1;
+    if (rentaCol) {
+      const v = Number(r[rentaCol]);
+      if (!isNaN(v) && v > 0) { rentaSum += v; rentaCount++; }
+    }
+  }
+  return { total, byTipo, avgRenta: rentaCount ? rentaSum / rentaCount : null };
+}
+
+function updateResumenWidget() {
+  const body = document.getElementById('mapResumenBody');
+  if (!body) return;
+  const widget = document.getElementById('mapResumenWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+
+  const data = _computeResumenRenta();
+  const fmtN = v => Math.round(v).toLocaleString('es-CL');
+  const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+
+  const tipoKeys = Object.keys(data.byTipo).sort((a, b) => {
+    const na = parseInt(a), nb = parseInt(b);
+    return isNaN(na) || isNaN(nb) ? a.localeCompare(b, 'es') : na - nb;
+  });
+
+  const rows = tipoKeys.map(label => {
+    const cnt = data.byTipo[label];
+    const pct = data.total > 0 ? Math.round((cnt / data.total) * 100) : 0;
+    return `<div class="mfw-row">
+      <span class="mfw-label">${label}</span>
+      <span class="mfw-value">${fmtN(cnt)} un. <span style="color:#9ca3af;font-weight:400">(${pct}%)</span></span>
+    </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="mfw-row" style="border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-bottom:4px;">
+      <span class="mfw-label" style="font-weight:700">Total unidades</span>
+      <span class="mfw-value" style="font-weight:700">${fmtN(data.total)} un.</span>
+    </div>
+    ${rows || '<div class="mfw-empty">Sin datos de tipología</div>'}
+    ${data.avgRenta != null ? `<div class="mfw-row" style="border-top:1px solid #e5e7eb;padding-top:6px;margin-top:4px;">
+      <span class="mfw-label">Renta prom.</span>
+      <span class="mfw-value">${fmtU(data.avgRenta)} UF</span>
+    </div>` : ''}
+  `;
+}
+
+function initResumenWidget() {
+  const toggleBtn = document.getElementById('mapResumenWidgetBtn');
+  if (!toggleBtn || resumenWidgetInited) return;
+  resumenWidgetInited = true;
+
+  const widget = document.createElement('div');
+  widget.id = 'mapResumenWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="mapResumenHeader">
+      <span>Resumen unidades</span>
+      <button class="mfw-close" id="mapResumenClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="mapResumenBody"></div>
+  `;
+  leafletMap.getContainer().appendChild(widget);
+  L.DomEvent.disableClickPropagation(widget);
+  L.DomEvent.disableScrollPropagation(widget);
+
+  const header = document.getElementById('mapResumenHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'mapResumenClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || 0;
+    const startT = parseInt(widget.style.top)  || 0;
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('mapResumenClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        const cW = leafletMap.getContainer().offsetWidth;
+        widget.style.left = (cW - 230) + 'px';
+        widget.style.top  = '90px';
+      }
+      updateResumenWidget();
+    }
+  });
+}
+
 // ============== Selección por polígono libre ==============
 function _pointInPolygon(lat, lng, pts) {
   let inside = false;
@@ -507,14 +631,123 @@ function initSelectionMode() {
   });
 }
 
+async function copyMapTable() {
+  if (!lastOrderedPoints.length) return;
+
+  const proyCol  = state.columns.find(c => ['proyecto', 'edificio', 'nombre', 'building'].some(k => norm(c.name).includes(k)))?.name;
+  const tipoCol  = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)))?.name;
+  const rentaCol = findRentaCol();
+  const ufm2ColN = findUfm2Col();
+
+  const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+
+  const rows = lastOrderedPoints.map((pt, i) => {
+    const proy = proyCol ? String(pt.rows[0]?.[proyCol] ?? '—') : '—';
+    const tipo = tipoCol
+      ? [...new Set(pt.rows.map(r => extractDormitorios(r[tipoCol])).filter(Boolean))].sort((a,b)=>parseInt(a)-parseInt(b)).join(', ') || '—'
+      : '—';
+    let renta = null, ufm2 = null;
+    if (rentaCol) {
+      const vals = pt.rows.map(r => Number(r[rentaCol])).filter(v => !isNaN(v) && v > 0);
+      if (vals.length) renta = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    if (ufm2ColN) {
+      const vals = pt.rows.map(r => Number(r[ufm2ColN])).filter(v => !isNaN(v) && v > 0);
+      if (vals.length) ufm2 = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    return { n: i + 1, proy, tipo, renta, ufm2 };
+  });
+
+  const rentaVals = rows.filter(r => r.renta != null).map(r => r.renta);
+  const ufm2Vals  = rows.filter(r => r.ufm2  != null).map(r => r.ufm2);
+  const avgRenta  = rentaVals.length ? rentaVals.reduce((a, b) => a + b, 0) / rentaVals.length : null;
+  const avgUfm2   = ufm2Vals.length  ? ufm2Vals.reduce((a, b) => a + b, 0)  / ufm2Vals.length  : null;
+
+  const TH  = 'background:#1e3a5f;color:#fff;font-weight:700;font-size:8pt;padding:6px 10px;border:1px solid #1e3a5f;white-space:nowrap;font-family:Roboto,Arial,sans-serif;text-align:left;';
+  const THR = TH + 'text-align:right;';
+  const TD  = 'font-size:8pt;padding:6px 10px;border:1px solid #e5e7eb;white-space:nowrap;font-family:Roboto,Arial,sans-serif;color:#0f172a;';
+  const TDR = TD + 'text-align:right;';
+  const TF  = TD + 'font-weight:700;background:#f8fafc;';
+  const TFR = TF + 'text-align:right;';
+
+  const bodyHtml = rows.map(r => `<tr>
+    <td style="${TD}">${r.n}</td>
+    <td style="${TD}">${r.proy}</td>
+    <td style="${TD}">${r.tipo}</td>
+    <td style="${TDR}">${fmtU(r.renta)}</td>
+    <td style="${TDR}">${fmtU(r.ufm2)}</td>
+  </tr>`).join('');
+
+  const footHtml = `<tr>
+    <td style="${TF}" colspan="3">Promedio</td>
+    <td style="${TFR}">${fmtU(avgRenta)}</td>
+    <td style="${TFR}">${fmtU(avgUfm2)}</td>
+  </tr>`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>
+  <table style="border-collapse:collapse;font-family:Roboto,Arial,sans-serif;font-size:8pt;">
+    <thead><tr>
+      <th style="${TH}">N°</th>
+      <th style="${TH}">Proyecto</th>
+      <th style="${TH}">Tipología</th>
+      <th style="${THR}">Renta UF prom.</th>
+      <th style="${THR}">UF/m²</th>
+    </tr></thead>
+    <tbody>${bodyHtml}</tbody>
+    <tfoot>${footHtml}</tfoot>
+  </table></body></html>`;
+
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
+  ]);
+}
+
 function initLeafletMap() {
-  leafletMap = L.map('map');
+  leafletMap = L.map('map', { zoomSnap: 0.5, wheelPxPerZoomLevel: 350 });
   initRankingResize();
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+  streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
     maxZoom: 19,
-  }).addTo(leafletMap);
+    crossOrigin: 'anonymous',
+  });
+  satelliteLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxZoom: 19,
+    crossOrigin: 'anonymous',
+  });
+  streetLayer.addTo(leafletMap);
   markersLayer = L.layerGroup().addTo(leafletMap);
+
+  document.getElementById('mapSatelliteBtn')?.addEventListener('click', () => {
+    isSatellite = !isSatellite;
+    if (isSatellite) {
+      leafletMap.removeLayer(streetLayer);
+      satelliteLayer.addTo(leafletMap);
+      satelliteLayer.bringToBack();
+    } else {
+      leafletMap.removeLayer(satelliteLayer);
+      streetLayer.addTo(leafletMap);
+      streetLayer.bringToBack();
+    }
+    document.getElementById('mapSatelliteBtn').classList.toggle('active', isSatellite);
+  });
+
+  document.getElementById('mapTableExportBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('mapTableExportBtn');
+    btn.textContent = 'Copiando…';
+    btn.disabled = true;
+    try {
+      await copyMapTable();
+      btn.textContent = '¡Copiado!';
+      setTimeout(() => { btn.textContent = 'Copiar tabla'; btn.disabled = false; }, 2000);
+    } catch (err) {
+      console.error(err);
+      btn.textContent = 'Copiar tabla';
+      btn.disabled = false;
+    }
+  });
 
   // Control leyenda (bottom-left)
   legendControl = L.control({ position: 'bottomleft' });
@@ -558,6 +791,7 @@ function initLeafletMap() {
 
   initSelectionMode();
   initFilterWidget();
+  initResumenWidget();
 }
 
 export function renderMap() {
@@ -609,9 +843,18 @@ export function renderMap() {
     }
   }
 
+  const orderedPoints = inPriceMode
+    ? points
+    : [...points].sort((a, b) => {
+        const dLng = a.lng - b.lng;
+        return Math.abs(dLng) > 0.0001 ? dLng : b.lat - a.lat;
+      });
+
+  lastOrderedPoints = inPriceMode ? [] : orderedPoints;
+
   const bounds = [];
-  for (const point of points) {
-    const { lat, lng, rows } = point;
+  for (let i = 0; i < orderedPoints.length; i++) {
+    const { lat, lng, rows } = orderedPoints[i];
     let marker;
 
     if (inPriceMode) {
@@ -628,7 +871,14 @@ export function renderMap() {
         className: 'price-marker',
       });
     } else {
-      marker = L.marker([lat, lng]);
+      const numIcon = L.divIcon({
+        className: '',
+        html: `<div class="num-marker">${i + 1}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16],
+      });
+      marker = L.marker([lat, lng], { icon: numIcon });
     }
 
     marker.bindPopup(buildPopup(rows[0]), { maxWidth: 340 });
@@ -642,7 +892,7 @@ export function renderMap() {
     const nombreProy = mp.proyecto || mp.edificio || 'Mi Proyecto';
     const mpIcon = L.divIcon({
       className: '',
-      html: `<div class="mp-map-marker" title="${String(nombreProy).replace(/"/g, '&quot;')}">★</div>`,
+      html: `<div class="mp-map-marker" title="${String(nombreProy).replace(/"/g, '&quot;')}"><svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="16" fill="#fff" stroke="#96323C" stroke-width="2.5"/><polyline points="8,23 18,13 28,23" fill="none" stroke="#96323C" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`,
       iconSize: [36, 36],
       iconAnchor: [18, 18],
       popupAnchor: [0, -20],
@@ -689,6 +939,7 @@ export function renderMap() {
   setTimeout(() => leafletMap.invalidateSize(), 150);
 
   renderRanking();
+  updateResumenWidget();
 }
 
 // ============== Ranking lateral (Adaptado para Renta) ==============

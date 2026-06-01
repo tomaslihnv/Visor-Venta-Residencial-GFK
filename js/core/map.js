@@ -17,6 +17,11 @@ let   markersLayer = null;
 let   legendControl = null;
 let   countControl  = null;
 let   _mapInitialized = false;
+let   _streetLayer    = null;
+let   _satelliteLayer = null;
+let   _isSatellite    = false;
+let   _lastOrderedPoints = [];
+let   _resumenInited  = false;
 
 // Selección por polígono
 let _selState         = null;
@@ -35,6 +40,7 @@ export function resetMapOnLoad() {
   _mapInitialized = false;
   geoStatus.total = 0; geoStatus.done = 0; geoStatus.running = false;
   _projHistory = [];
+  _lastOrderedPoints = [];
   if (_persistentPoly) { _persistentPoly.remove(); _persistentPoly = null; }
   document.getElementById('mapClearPolyBtn')?.classList.add('hidden');
   document.getElementById('mapUndoBtn')?.classList.add('hidden');
@@ -502,20 +508,233 @@ function _initRankingResize() {
   });
 }
 
+async function _copyMapTable(state, mapConfig) {
+  if (!_lastOrderedPoints.length) return;
+
+  const projCol = state.columns.find(c =>
+    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
+  )?.name;
+  const propCol = state.columns.find(c => ['corredor', 'propietario', 'owner'].some(k => norm(c.name).includes(k)))?.name;
+  const activeHeat = mapConfig.heatOptions?.find(o => o.value === heatMetric) ?? mapConfig.heatOptions?.[0];
+  const heatColName = activeHeat
+    ? state.columns.find(c => activeHeat.candidates.some(k => norm(c.name).includes(norm(k))))?.name
+    : null;
+  const ufm2ColName = mapConfig.heatOptions?.[0]
+    ? state.columns.find(c => mapConfig.heatOptions[0].candidates.some(k => norm(c.name).includes(norm(k))))?.name
+    : null;
+
+  const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+
+  const rows = _lastOrderedPoints.map((pt, i) => {
+    const proj = projCol ? String(pt.rows[0]?.[projCol] ?? '—') : '—';
+    const prop = propCol ? String(pt.rows[0]?.[propCol] ?? '—') : '—';
+    let heat = null;
+    if (heatColName) {
+      const vals = pt.rows.map(r => Number(r[heatColName])).filter(v => !isNaN(v) && v > 0);
+      if (vals.length) heat = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    return { n: i + 1, proj, prop, heat };
+  });
+
+  const heatVals = rows.filter(r => r.heat != null).map(r => r.heat);
+  const avgHeat = heatVals.length ? heatVals.reduce((a, b) => a + b, 0) / heatVals.length : null;
+  const heatLabel = activeHeat?.label ?? 'Métrica';
+
+  const TH  = 'background:#1e3a5f;color:#fff;font-weight:700;font-size:8pt;padding:6px 10px;border:1px solid #1e3a5f;white-space:nowrap;font-family:Roboto,Arial,sans-serif;text-align:left;';
+  const THR = TH + 'text-align:right;';
+  const TD  = 'font-size:8pt;padding:6px 10px;border:1px solid #e5e7eb;white-space:nowrap;font-family:Roboto,Arial,sans-serif;color:#0f172a;';
+  const TDR = TD + 'text-align:right;';
+  const TF  = TD + 'font-weight:700;background:#f8fafc;';
+  const TFR = TF + 'text-align:right;';
+
+  const bodyHtml = rows.map(r => `<tr>
+    <td style="${TD}">${r.n}</td>
+    <td style="${TD}">${r.proj}</td>
+    <td style="${TD}">${r.prop}</td>
+    <td style="${TDR}">${fmtU(r.heat)}</td>
+  </tr>`).join('');
+
+  const footHtml = `<tr>
+    <td style="${TF}" colspan="3">Promedio</td>
+    <td style="${TFR}">${fmtU(avgHeat)}</td>
+  </tr>`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>
+  <table style="border-collapse:collapse;font-family:Roboto,Arial,sans-serif;font-size:8pt;">
+    <thead><tr>
+      <th style="${TH}">N°</th>
+      <th style="${TH}">Proyecto</th>
+      <th style="${TH}">Corredor</th>
+      <th style="${THR}">${heatLabel}</th>
+    </tr></thead>
+    <tbody>${bodyHtml}</tbody>
+    <tfoot>${footHtml}</tfoot>
+  </table></body></html>`;
+
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
+  ]);
+}
+
+function _updateResumenWidget(state, mapConfig) {
+  const body = document.getElementById('mapResumenBody');
+  if (!body) return;
+  const widget = document.getElementById('mapResumenWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+
+  const activeHeat = mapConfig.heatOptions?.find(o => o.value === heatMetric) ?? mapConfig.heatOptions?.[0];
+  const heatColName = activeHeat
+    ? state.columns.find(c => activeHeat.candidates.some(k => norm(c.name).includes(norm(k))))?.name
+    : null;
+
+  const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+  const fmtN = v => Math.round(v).toLocaleString('es-CL');
+
+  const projCol = state.columns.find(c =>
+    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
+  )?.name;
+
+  const byProj = {};
+  let heatSum = 0, heatCount = 0;
+  for (const r of state.filtered) {
+    const proj = projCol ? String(r[projCol] ?? '').trim() : null;
+    if (proj) byProj[proj] = true;
+    if (heatColName) {
+      const v = Number(r[heatColName]);
+      if (!isNaN(v) && v > 0) { heatSum += v; heatCount++; }
+    }
+  }
+
+  const totalProy = Object.keys(byProj).length;
+  const avgHeat = heatCount ? heatSum / heatCount : null;
+
+  body.innerHTML = `
+    <div class="mfw-row" style="border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-bottom:4px;">
+      <span class="mfw-label" style="font-weight:700">Proyectos</span>
+      <span class="mfw-value" style="font-weight:700">${fmtN(totalProy)}</span>
+    </div>
+    <div class="mfw-row">
+      <span class="mfw-label">Unidades</span>
+      <span class="mfw-value">${fmtN(state.filtered.length)}</span>
+    </div>
+    ${avgHeat != null ? `<div class="mfw-row">
+      <span class="mfw-label">${activeHeat?.label ?? 'Métrica'} prom.</span>
+      <span class="mfw-value">${fmtU(avgHeat)}</span>
+    </div>` : ''}
+  `;
+}
+
+function _initResumenWidget(state, mapConfig) {
+  const toggleBtn = document.getElementById('mapResumenWidgetBtn');
+  if (!toggleBtn || _resumenInited) return;
+  _resumenInited = true;
+
+  const widget = document.createElement('div');
+  widget.id = 'mapResumenWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="mapResumenHeader">
+      <span>Resumen</span>
+      <button class="mfw-close" id="mapResumenClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="mapResumenBody"></div>
+  `;
+  leafletMap.getContainer().appendChild(widget);
+  L.DomEvent.disableClickPropagation(widget);
+  L.DomEvent.disableScrollPropagation(widget);
+
+  const header = document.getElementById('mapResumenHeader');
+  header.addEventListener('mousedown', e => {
+    if (e.target.id === 'mapResumenClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || 0;
+    const startT = parseInt(widget.style.top)  || 0;
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('mapResumenClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        const cW = leafletMap.getContainer().offsetWidth;
+        widget.style.left = (cW - 230) + 'px';
+        widget.style.top  = '90px';
+      }
+      _updateResumenWidget(state, mapConfig);
+    }
+  });
+}
+
 function _initLeafletMap(state, mapConfig, mp) {
   _selState     = state;
   _selMapConfig = mapConfig;
   state._projCol = state.columns.find(c =>
     mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
   )?.name ?? null;
-  leafletMap   = L.map('map');
+  leafletMap = L.map('map', { zoomSnap: 0.5, wheelPxPerZoomLevel: 350 });
   _initRankingResize();
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors', maxZoom: 19,
-  }).addTo(leafletMap);
+  _streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+    crossOrigin: 'anonymous',
+  });
+  _satelliteLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxZoom: 19,
+    crossOrigin: 'anonymous',
+  });
+  _streetLayer.addTo(leafletMap);
 
   markersLayer = L.layerGroup().addTo(leafletMap);
+
+  document.getElementById('mapSatelliteBtn')?.addEventListener('click', () => {
+    _isSatellite = !_isSatellite;
+    if (_isSatellite) {
+      leafletMap.removeLayer(_streetLayer);
+      _satelliteLayer.addTo(leafletMap);
+      _satelliteLayer.bringToBack();
+    } else {
+      leafletMap.removeLayer(_satelliteLayer);
+      _streetLayer.addTo(leafletMap);
+      _streetLayer.bringToBack();
+    }
+    document.getElementById('mapSatelliteBtn')?.classList.toggle('active', _isSatellite);
+  });
+
+  document.getElementById('mapTableExportBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('mapTableExportBtn');
+    btn.textContent = 'Copiando…';
+    btn.disabled = true;
+    try {
+      await _copyMapTable(state, mapConfig);
+      btn.textContent = '¡Copiado!';
+      setTimeout(() => { btn.textContent = 'Copiar tabla'; btn.disabled = false; }, 2000);
+    } catch (err) {
+      console.error(err);
+      btn.textContent = 'Copiar tabla';
+      btn.disabled = false;
+    }
+  });
 
   legendControl = L.control({ position: 'bottomleft' });
   legendControl.onAdd = () => {
@@ -559,6 +778,7 @@ function _initLeafletMap(state, mapConfig, mp) {
 
   _initSelectionMode();
   _initFilterWidget();
+  _initResumenWidget(state, mapConfig);
 }
 
 // ── Popup ─────────────────────────────────────────────────────────────────
@@ -696,9 +916,18 @@ export function renderMap(state, mapConfig, mp) {
     if (all.length) { priceMin = Math.min(...all); priceMax = Math.max(...all); }
   }
 
+  const orderedPoints = inPriceMode
+    ? points
+    : [...points].sort((a, b) => {
+        const dLng = a.lng - b.lng;
+        return Math.abs(dLng) > 0.0001 ? dLng : b.lat - a.lat;
+      });
+
+  _lastOrderedPoints = inPriceMode ? [] : orderedPoints;
+
   const bounds = [];
-  for (const point of points) {
-    const { lat, lng, rows } = point;
+  for (let i = 0; i < orderedPoints.length; i++) {
+    const { lat, lng, rows } = orderedPoints[i];
     let marker;
     if (inPriceMode) {
       const prices = rows.map(r => Number(r[heatColName])).filter(v => !isNaN(v) && v > 0);
@@ -709,7 +938,14 @@ export function renderMap(state, mapConfig, mp) {
         weight: 1.5, fillOpacity: 0.96, opacity: 1, className: 'price-marker',
       });
     } else {
-      marker = L.marker([lat, lng]);
+      const numIcon = L.divIcon({
+        className: '',
+        html: `<div class="num-marker">${i + 1}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16],
+      });
+      marker = L.marker([lat, lng], { icon: numIcon });
     }
     marker.bindPopup(_buildPopup(rows[0], mapConfig, state), { maxWidth: 340 });
     marker.addTo(markersLayer);
@@ -722,7 +958,7 @@ export function renderMap(state, mapConfig, mp) {
     const nombre = mp.proyecto || 'Mi Proyecto';
     const mpIcon = L.divIcon({
       className: '',
-      html: `<div class="mp-map-marker" title="${String(nombre).replace(/"/g, '&quot;')}">★</div>`,
+      html: `<div class="mp-map-marker" title="${String(nombre).replace(/"/g, '&quot;')}"><svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="16" fill="#fff" stroke="#96323C" stroke-width="2.5"/><polyline points="8,23 18,13 28,23" fill="none" stroke="#96323C" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`,
       iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20],
     });
     const esc = s => String(s ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -775,4 +1011,5 @@ export function renderMap(state, mapConfig, mp) {
   setTimeout(() => leafletMap?.invalidateSize(), 150);
 
   _renderRanking(state, mapConfig);
+  _updateResumenWidget(state, mapConfig);
 }

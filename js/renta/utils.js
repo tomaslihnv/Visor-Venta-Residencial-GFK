@@ -42,6 +42,17 @@ export function uniqueValues(rows, col) {
   });
 }
 
+// Extrae la cantidad de dormitorios de un valor de tipología.
+// "2D1B" → "2D", "3D+2B" → "3D", "1B" → null, "Studio" → null, 2 → "2D"
+export function extractDormitorios(v) {
+  const s = String(v ?? '').trim().toUpperCase();
+  if (!s) return null;
+  if (/^\d+$/.test(s) && +s >= 1 && +s <= 10) return `${s}D`;
+  const m = s.match(/^(\d+)\s*D/);
+  if (m) return `${m[1]}D`;
+  return null;
+}
+
 // Helper para evitar saturación de llamadas (ej: al escribir en inputs)
 export function debounce(fn, ms) {
   let t;

@@ -633,6 +633,77 @@ export function getActiveTipoFilter() {
   return F.tipologia;
 }
 
+// ============== Export / Import de filtros ==============
+
+export function getFilterState() {
+  return {
+    multi: {
+      tipologia:    [...F.tipologia],
+      propietario:  [...F.propietario],
+      edificio:     [...F.edificio],
+      estado:       [...F.estado],
+      fechaEntrega: [...F.fechaEntrega],
+    },
+    ranges: {
+      sup:    { min: F.supMin,    max: F.supMax },
+      ticket: { min: F.ticketMin, max: F.ticketMax },
+      ufm2:   { min: F.ufm2Min,  max: F.ufm2Max },
+    },
+    supRanges: Object.fromEntries(
+      Object.entries(F.supRanges).map(([k, v]) => [k, { min: v.min, max: v.max }])
+    ),
+  };
+}
+
+export function applyFilterState(data) {
+  if (!data) return;
+
+  for (const [key, values] of Object.entries(data.multi ?? {})) {
+    if (!(key in F) || !(F[key] instanceof Set)) continue;
+    const cbs = [...document.querySelectorAll(`input[type="checkbox"][id^="f_${key}_"]`)];
+    if (!cbs.length) continue;
+    const valueSet = new Set(values.map(String));
+    F[key].clear();
+    for (const cb of cbs) {
+      cb.checked = valueSet.size === 0 || valueSet.has(cb.value);
+      if (cb.checked && valueSet.size > 0) F[key].add(cb._realVal ?? cb.value);
+    }
+  }
+
+  for (const [key, range] of Object.entries(data.ranges ?? {})) {
+    F[`${key}Min`] = range.min ?? null;
+    F[`${key}Max`] = range.max ?? null;
+    const ref = refs[key];
+    if (!ref) continue;
+    if (ref.type === 'slider') {
+      if (range.min != null) { ref.sMin.value = range.min; }
+      if (range.max != null) { ref.sMax.value = range.max; }
+      ref.updateFill?.();
+    } else if (ref.type === 'minmax') {
+      if (range.min != null) ref.inMin.value = ref.fmtNum(range.min);
+      else ref.inMin.value = ref.fmtNum(ref.dMin);
+      if (range.max != null) ref.inMax.value = ref.fmtNum(range.max);
+      else ref.inMax.value = ref.fmtNum(ref.dMax);
+    }
+  }
+
+  for (const [tipo, range] of Object.entries(data.supRanges ?? {})) {
+    if (!F.supRanges[tipo]) continue;
+    F.supRanges[tipo].min = range.min ?? null;
+    F.supRanges[tipo].max = range.max ?? null;
+    const rows = document.querySelectorAll('.sup-tipo-row');
+    for (const row of rows) {
+      const lbl = row.querySelector('.sup-tipo-label');
+      if (!lbl || lbl.textContent.trim() !== tipo) continue;
+      const [iMin, iMax] = row.querySelectorAll('.sup-tipo-input');
+      if (iMin && range.min != null) iMin.value = range.min;
+      if (iMax && range.max != null) iMax.value = range.max;
+    }
+  }
+
+  applyFilters();
+}
+
 export function getActiveFiltersSummary() {
   const items = [];
 

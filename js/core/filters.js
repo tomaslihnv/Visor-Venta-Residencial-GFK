@@ -199,6 +199,62 @@ export function reapplyFilters(state) {
   _applyAndNotify(state);
 }
 
+export function getFilterState(state) {
+  const multi  = {};
+  const slider = {};
+  for (const def of (state._filterDefs ?? [])) {
+    if (def.type === 'multi') {
+      multi[def.key] = [...(state.filterValues[def.key] ?? [])];
+    } else if (def.type === 'slider') {
+      slider[def.key] = {
+        min: state.filterValues[def.key + 'Min'] ?? null,
+        max: state.filterValues[def.key + 'Max'] ?? null,
+      };
+    }
+  }
+  const excludedProyectos = state.excludedProjects?.size > 0
+    ? [...state.excludedProjects]
+    : null;
+  return { multi, slider, excludedProyectos };
+}
+
+export function applyFilterState(data, state) {
+  if (!data) return;
+
+  for (const [key, values] of Object.entries(data.multi ?? {})) {
+    const set = state.filterValues[key];
+    if (!(set instanceof Set)) continue;
+    const cbs = [...document.querySelectorAll(`input[type="checkbox"][id^="f_${key}_"]`)];
+    if (!cbs.length) continue;
+    const valueSet = new Set(values.map(String));
+    set.clear();
+    for (const cb of cbs) {
+      cb.checked = valueSet.size === 0 || valueSet.has(cb.value);
+      if (cb.checked && valueSet.size > 0) set.add(cb.value);
+    }
+  }
+
+  for (const [key, range] of Object.entries(data.slider ?? {})) {
+    const ref = state.filterRefs?.[key];
+    state.filterValues[key + 'Min'] = range.min ?? null;
+    state.filterValues[key + 'Max'] = range.max ?? null;
+    if (!ref || ref.type !== 'slider') continue;
+    const lo = range.min ?? ref.curMin;
+    const hi = range.max ?? ref.curMax;
+    ref.sMin.value = lo; if (ref.iMin) ref.iMin.value = lo;
+    ref.sMax.value = hi; if (ref.iMax) ref.iMax.value = hi;
+    ref.updateFill?.();
+  }
+
+  if (Array.isArray(data.excludedProyectos) && data.excludedProyectos.length > 0) {
+    state.excludedProjects = new Set(data.excludedProyectos.map(String));
+  } else if (data.excludedProyectos === null) {
+    state.excludedProjects = new Set();
+  }
+
+  _applyAndNotify(state);
+}
+
 export function resetFilters(filterDefs, state, container, onChange) {
   if (!state.raw.length) return;
   buildFilters(filterDefs, state, container, onChange);

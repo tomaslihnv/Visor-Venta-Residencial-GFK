@@ -1,6 +1,7 @@
 import { $, $$ } from '../core/utils.js';
 import { resetFilters } from '../core/filters.js';
 import { exportCsv }   from '../core/export.js';
+import { initFilterIO } from '../core/filter-io.js';
 import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './data.js';
 
 // ── Mi Proyecto change → re-render pestaña activa ─────────────────────────
@@ -99,6 +100,16 @@ $('#exportCompBtn')?.addEventListener('click', async () => {
     btn.textContent = '¡Copiado!'; btn.disabled = true;
     setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
   }
+});
+
+// ── Filter IO ─────────────────────────────────────────────────────────────
+import('../core/filters.js').then(({ getFilterState, applyFilterState }) => {
+  initFilterIO({
+    visorId:    'multifamily',
+    getState:   () => getFilterState(state),
+    applyState: (data) => applyFilterState(data, state),
+    panelEl:    document.getElementById('filtrosPanelBody'),
+  });
 });
 
 // ── Exportar CSV ───────────────────────────────────────────────────────────
