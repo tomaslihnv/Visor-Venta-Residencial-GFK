@@ -938,13 +938,17 @@ export function populateDistribSelectors() {
       });
     });
 
-    const binsSlider = document.getElementById('distribBins');
-    const binsVal    = document.getElementById('distribBinsVal');
+    const binsSlider  = document.getElementById('distribBins');
+    const binsVal     = document.getElementById('distribBinsVal');
+    const showBinsCb  = document.getElementById('distribShowBins');
     if (binsSlider) {
       binsSlider.addEventListener('input', () => {
         binsVal.textContent = +binsSlider.value === 0 ? 'Auto' : binsSlider.value;
         renderDistrib();
       });
+    }
+    if (showBinsCb) {
+      showBinsCb.addEventListener('change', () => renderDistrib());
     }
 
     document.querySelectorAll('.ratio-btn').forEach(btn => {
@@ -1512,20 +1516,23 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
     });
   }
 
-  const datasets = [
-    {
+  const showBins = document.getElementById('distribShowBins')?.checked !== false;
+
+  const datasets = [];
+  if (showBins) {
+    datasets.push({
       type: 'bar', label: 'Frecuencia',
       data: bins,
       backgroundColor: 'rgba(56,189,248,0.35)', borderColor: '#38bdf8', borderWidth: 1,
       barPercentage: 1.0, categoryPercentage: 1.0, order: 3,
-    },
-    {
-      type: 'line', label: 'Densidad',
-      data: kdeData,
-      borderColor: '#0ea5e9', backgroundColor: 'transparent',
-      borderWidth: 2, pointRadius: 0, tension: 0.4, fill: false, order: 2,
-    },
-  ];
+    });
+  }
+  datasets.push({
+    type: 'line', label: 'Densidad',
+    data: kdeData,
+    borderColor: '#0ea5e9', backgroundColor: 'transparent',
+    borderWidth: 2, pointRadius: 0, tension: 0.4, fill: false, order: 2,
+  });
 
   if (normalData) {
     datasets.push({
