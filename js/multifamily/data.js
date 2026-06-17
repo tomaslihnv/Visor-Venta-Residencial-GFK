@@ -1,5 +1,5 @@
 import { detectColType } from '../core/utils.js';
-import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './config.js';
+import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './config.js';
 
 // ── Estado global del visor ────────────────────────────────────────────────
 export const state = {
@@ -122,6 +122,7 @@ export function onDataLoaded(rows) {
     import('../core/table.js'),
     import('../core/chart-distrib.js'),
     import('../core/chart-svp.js'),
+    import('../core/chart-cruz.js'),
     import('../core/chart-proyectos.js'),
     import('../core/map.js'),
   ]).then(([
@@ -131,6 +132,7 @@ export function onDataLoaded(rows) {
     { initTableListeners, renderTable },
     { populateDistribSelectors, initDistribListeners },
     { populateSvpSelectors, initSvpListeners },
+    { initCruzListeners },
     { initProyectosListeners },
     { resetMapOnLoad, geocodeData, renderMap },
   ]) => {
@@ -147,6 +149,7 @@ export function onDataLoaded(rows) {
         import('./miProyecto.js').then(({ mp: mpCurrent }) => {
           if (tab === 'distribucion') renderDistrib(_state, mpCurrent);
           if (tab === 'svp')          renderSvp(_state, mpCurrent);
+          if (tab === 'cruz')         renderCruz(_state, mpCurrent);
           if (tab === 'proyectos')    renderProyectos(_state, mpCurrent);
           if (tab === 'comparativa')  import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_state, COMPARATIVA, mpCurrent));
           if (tab === 'mapa')         renderMap(_state, MAP, mpCurrent);
@@ -158,11 +161,12 @@ export function onDataLoaded(rows) {
       window._mf = {
         renderDistrib:  (_s, _mp) => import('../core/chart-distrib.js').then(({ renderDistrib })  => renderDistrib(_s, DISTRIB_COLS, _mp)),
         renderSvp:      (_s, _mp) => import('../core/chart-svp.js').then(({ renderSvp })          => renderSvp(_s, SVP, _mp)),
+        renderCruz:     (_s, _mp) => import('../core/chart-cruz.js').then(({ renderCruz })        => renderCruz(_s, CRUZ, _mp)),
         renderProyectos:(_s, _mp) => import('../core/chart-proyectos.js').then(({ renderProyectos }) => renderProyectos(_s, PROYECTOS_METRICS, _mp, { projectCandidates: MAP.projectCandidates })),
         renderMap:      (_s, _mp) => renderMap(_s, MAP, _mp),
         renderComparativa: (_s, _mp) => import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_s, COMPARATIVA, _mp)),
         state, onChange,
-        FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME,
+        FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME,
       };
 
       buildFilters(FILTERS, state, container, onChange);
@@ -172,6 +176,7 @@ export function onDataLoaded(rows) {
       initDistribListeners(state, DISTRIB_COLS, mp);
       populateSvpSelectors(state, SVP);
       initSvpListeners(state, SVP, mp);
+      initCruzListeners(state, CRUZ, mp);
       initProyectosListeners(state, PROYECTOS_METRICS, mp, {
         projectCandidates: MAP.projectCandidates,
         getMpValue: (metricId, mp) => {
@@ -198,4 +203,4 @@ export function onDataLoaded(rows) {
   });
 }
 
-export { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME };
+export { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME };

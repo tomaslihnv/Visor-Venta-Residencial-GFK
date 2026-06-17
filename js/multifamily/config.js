@@ -19,6 +19,8 @@ export const COLUMN_MAP = {
   'Arriendo UF':           'Arriendo UF',
   'Arriendo UF/m²':        'UF/m²',
   'Estado':                'Estado',
+  'Ocupación':             'Ocupación (%)',
+  'Reporta':               'Reporta',
   'Latitud':               '__lat',
   'Longitud':              '__lng',
 };
@@ -35,6 +37,7 @@ export const FILTERS = [
   { key: 'ufm2',          candidates: ['uf/m', 'uf / m'],     label: 'UF/m²',          type: 'slider', step: 0.01 },
   { key: 'stock',         candidates: ['stock'],               label: 'Stock',          type: 'slider', step: 1 },
   { key: 'sup',           candidates: ['util (m', 'útil (m', 'm² util'], label: 'm² útil', type: 'slider', step: 1 },
+  { key: 'reporta',       candidates: ['reporta'],             label: 'Reporta',        type: 'multi' },
 ];
 
 // ── KPIs ───────────────────────────────────────────────────────────────────
@@ -101,6 +104,21 @@ export const SVP = {
   // No group column for multifamily (building-level, no tipología)
   groupCandidates: [],
   projCandidates:  ['proyecto', 'edificio', 'nombre'],
+};
+
+// ── Gráfico de Cruz (Sup. vs UF/m², color/forma/tamaño/reporte) ─────────────
+export const CRUZ = {
+  xCandidates:       ['util (m', 'útil (m', 'm² util'],
+  xLabel:            'Útil (m²)',
+  yCandidates:       ['uf/m', 'uf / m'],
+  yLabel:            'UF/m²',
+  colorCandidates:   ['administrador'],
+  colorLabel:        'Operador',
+  shapeCandidates:   ['programa'],
+  shapeLabel:        'Tipología',
+  sizeCandidates:    ['ocupacion'],
+  reportaCandidates: ['reporta'],
+  projCandidates:    ['proyecto', 'edificio', 'nombre'],
 };
 
 // ── Distribución ───────────────────────────────────────────────────────────

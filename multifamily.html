@@ -117,6 +117,7 @@
           <button class="tab active" data-tab="mapa">Mapa</button>
           <button class="tab" data-tab="proyectos">Proyectos</button>
           <button class="tab" data-tab="svp">Dispersión</button>
+          <button class="tab" data-tab="cruz">Cruz</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="comparativa">Resumen</button>
           <button class="tab" data-tab="tabla">Datos</button>
@@ -210,6 +211,35 @@
           </div>
           <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>
+          </div>
+        </div>
+
+        <!-- TAB: CRUZ -->
+        <div class="tab-panel" data-panel="cruz">
+          <div class="chart-controls">
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="cruzFontSize" min="8" max="36" step="1" value="11">
+                <span id="cruzFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="cruz-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="cruz-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="cruz-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="cruz-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <button id="cruzExportPngBtn" class="primary-btn">Copiar imagen</button>
+          </div>
+          <div class="cruz-body">
+            <div class="chart-wrap" id="cruzWrap">
+              <canvas id="cruzChart"></canvas>
+            </div>
+            <div id="cruzShapeLegend" class="cruz-shape-legend"></div>
           </div>
         </div>
 

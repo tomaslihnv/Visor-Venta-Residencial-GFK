@@ -119,6 +119,18 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   padding: 16px; position: relative;
 }
 
+/* ========== Cruz — leyenda de formas ========== */
+.cruz-body { display: flex; gap: 12px; flex: 1; }
+.cruz-body .chart-wrap { flex: 1; min-width: 0; }
+.cruz-shape-legend {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  font-size: 12px; color: #374151; padding: 16px 12px;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+  width: 150px; flex-shrink: 0; align-self: flex-start;
+}
+.cruz-legend-title { font-weight: 600; color: #6b7280; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+.cruz-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
 /* ========== Distribución — marcadores ========== */
 .distrib-marker-group { min-width: 180px; }
 .marker-add { display: flex; gap: 6px; align-items: center; }
