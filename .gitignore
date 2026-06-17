@@ -1,0 +1,16 @@
+Inputs de inciti/
+*.xlsx
+*.xls
+*.csv
+__pycache__/
+*.py[cod]
+.env
+venv/
+.venv/
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
