@@ -130,10 +130,10 @@ export function onDataLoaded(rows) {
     { buildFilters, applyFilters },
     { renderKpis },
     { initTableListeners, renderTable },
-    { populateDistribSelectors, initDistribListeners },
-    { populateSvpSelectors, initSvpListeners },
-    { initCruzListeners },
-    { initProyectosListeners },
+    { populateDistribSelectors, initDistribListeners, renderDistrib },
+    { populateSvpSelectors, initSvpListeners, renderSvp },
+    { initCruzListeners, renderCruz },
+    { initProyectosListeners, renderProyectos },
     { resetMapOnLoad, geocodeData, renderMap },
   ]) => {
     import('./miProyecto.js').then(({ mp }) => {
@@ -147,10 +147,10 @@ export function onDataLoaded(rows) {
 
         const tab = document.querySelector('.tab.active')?.dataset.tab;
         import('./miProyecto.js').then(({ mp: mpCurrent }) => {
-          if (tab === 'distribucion') renderDistrib(_state, mpCurrent);
-          if (tab === 'svp')          renderSvp(_state, mpCurrent);
-          if (tab === 'cruz')         renderCruz(_state, mpCurrent);
-          if (tab === 'proyectos')    renderProyectos(_state, mpCurrent);
+          if (tab === 'distribucion') renderDistrib(_state, DISTRIB_COLS, mpCurrent);
+          if (tab === 'svp')          renderSvp(_state, SVP, mpCurrent);
+          if (tab === 'cruz')         renderCruz(_state, CRUZ, mpCurrent);
+          if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, mpCurrent, { projectCandidates: MAP.projectCandidates });
           if (tab === 'comparativa')  import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_state, COMPARATIVA, mpCurrent));
           if (tab === 'mapa')         renderMap(_state, MAP, mpCurrent);
         });

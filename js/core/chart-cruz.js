@@ -7,12 +7,14 @@ import { copyChartPng } from './export.js';
 //   shapeCandidates, shapeLabel,   — tipología (forma)
 //   sizeCandidates,                — ocupación % (tamaño)
 //   reportaCandidates,             — binario reporta/no reporta (borde punteado)
+//   stockCandidates, dispoCandidates, — para agrupar tipologías por proyecto
 //   projCandidates,
 // }
 
 const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#a855f7'];
 const SHAPES  = ['circle', 'triangle', 'rect', 'rectRot', 'star', 'cross'];
-const MIN_R = 4, MAX_R = 13;
+const POINT_R = 8;
+const MIN_ALPHA = 0.15, MAX_ALPHA = 1;
 
 let _cruzReady = false;
 
@@ -35,6 +37,8 @@ export function initCruzListeners(state, cruzConfig, mp) {
       btn.classList.add('active');
     });
   });
+
+  document.getElementById('cruzGroupToggle')?.addEventListener('change', () => renderCruz(state, cruzConfig, mp));
 
   document.getElementById('cruzExportPngBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('cruzExportPngBtn');
@@ -72,14 +76,59 @@ function _median(arr) {
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
-function _renderShapeLegend(shapeMap, shapeLabel) {
+// Agrupa filas por (proyecto + tipología): promedia m² y UF/m², suma stock
+// y disponibilidad, y recalcula la ocupación a partir de esas sumas.
+function _aggregateByTipologia(entries) {
+  const groups = {};
+  for (const e of entries) {
+    const key = `${e.label}__${e.tipo}`;
+    if (!groups[key]) {
+      groups[key] = {
+        label: e.label, tipo: e.tipo, opKey: e.opKey,
+        xs: [], ys: [], stockSum: 0, dispSum: 0, hasStock: false, anyNoReporta: false, count: 0,
+      };
+    }
+    const g = groups[key];
+    g.xs.push(e.x); g.ys.push(e.y); g.count++;
+    if (e.stock != null) { g.stockSum += e.stock; g.hasStock = true; }
+    if (e.disp != null) g.dispSum += e.disp;
+    if (e.reporta === false) g.anyNoReporta = true;
+  }
+  return Object.values(groups).map(g => {
+    const x = g.xs.reduce((a, b) => a + b, 0) / g.xs.length;
+    const y = g.ys.reduce((a, b) => a + b, 0) / g.ys.length;
+    const occ = g.hasStock && g.stockSum > 0
+      ? Math.max(0, Math.min(100, (g.stockSum - g.dispSum) / g.stockSum * 100))
+      : null;
+    return {
+      x, y, label: g.label, tipo: g.tipo, opKey: g.opKey, occ,
+      reporta: !g.anyNoReporta, stock: g.hasStock ? g.stockSum : null,
+      disp: g.hasStock ? g.dispSum : null, count: g.count,
+    };
+  });
+}
+
+function _renderShapeLegend(shapeMap, shapeLabel, hasReportaCol, hasSizeCol) {
   const cont = document.getElementById('cruzShapeLegend');
   if (!cont) return;
   const entries = Object.entries(shapeMap);
   if (!entries.length) { cont.innerHTML = ''; return; }
   const glyphs = { circle: '●', triangle: '▲', rect: '■', rectRot: '◆', star: '★', cross: '✚' };
-  cont.innerHTML = `<span class="cruz-legend-title">${shapeLabel}:</span>` +
+  let html = `<span class="cruz-legend-title">${shapeLabel}</span>` +
     entries.map(([k, shape]) => `<span class="cruz-legend-item">${glyphs[shape] ?? '●'} ${k}</span>`).join('');
+  if (hasSizeCol) {
+    html += `
+      <span class="cruz-legend-title cruz-legend-sep">Ocupación</span>
+      <span class="cruz-legend-item"><span class="cruz-legend-dot" style="opacity:${MIN_ALPHA}"></span> Vacío</span>
+      <span class="cruz-legend-item"><span class="cruz-legend-dot" style="opacity:${MAX_ALPHA}"></span> Lleno</span>`;
+  }
+  if (hasReportaCol) {
+    html += `
+      <span class="cruz-legend-title cruz-legend-sep">Reporte</span>
+      <span class="cruz-legend-item"><span class="cruz-legend-ring cruz-legend-ring-solid"></span> Reporta</span>
+      <span class="cruz-legend-item"><span class="cruz-legend-ring cruz-legend-ring-dashed"></span> No reporta</span>`;
+  }
+  cont.innerHTML = html;
 }
 
 export function renderCruz(state, cruzConfig, mp) {
@@ -101,6 +150,10 @@ export function renderCruz(state, cruzConfig, mp) {
     cruzConfig.reportaCandidates.some(k => norm(c.name).includes(norm(k))));
   const projCol = state.columns.find(c =>
     (cruzConfig.projCandidates ?? ['proyecto', 'edificio', 'nombre']).some(k => norm(c.name).includes(norm(k))));
+  const stockCol = state.columns.find(c =>
+    (cruzConfig.stockCandidates ?? ['stock']).some(k => norm(c.name).includes(norm(k))));
+  const dispoCol = state.columns.find(c =>
+    (cruzConfig.dispoCandidates ?? ['disponibilidad']).some(k => norm(c.name).includes(norm(k))));
 
   if (!xCol || !yCol) return;
 
@@ -122,41 +175,56 @@ export function renderCruz(state, cruzConfig, mp) {
     if (!(key in colorMap)) colorMap[key] = palette[colorIdx++ % palette.length];
     return colorMap[key];
   };
-  const getRadius = occ => {
-    if (occ == null || isNaN(occ)) return (MIN_R + MAX_R) / 2;
+  const getAlpha = occ => {
+    if (occ == null || isNaN(occ)) return (MIN_ALPHA + MAX_ALPHA) / 2;
     const pct = Math.max(0, Math.min(100, occ));
-    return MIN_R + (MAX_R - MIN_R) * Math.sqrt(pct / 100);
+    return MIN_ALPHA + (MAX_ALPHA - MIN_ALPHA) * (pct / 100);
   };
+  const withAlpha = (hex, alpha) => hex + Math.round(alpha * 255).toString(16).padStart(2, '0');
 
-  const groups = {};
-  const xs = [], ys = [];
-
+  const entries = [];
   for (const r of state.filtered) {
     const xv = Number(r[xCol.name]), yv = Number(r[yCol.name]);
     if (isNaN(xv) || isNaN(yv) || xv <= 0 || yv <= 0) continue;
-    xs.push(xv); ys.push(yv);
 
     const opKey   = colorCol ? String(r[colorCol.name] ?? '—') : '—';
     const tipoKey = shapeCol ? String(r[shapeCol.name] ?? '—') : '—';
     const occ     = sizeCol ? _parsePct(r[sizeCol.name]) : null;
     const reporta = reportaCol ? _parseBool(r[reportaCol.name]) : null;
     const proj    = projCol ? String(r[projCol.name] ?? '—') : '—';
+    const stock   = stockCol ? Number(r[stockCol.name]) : null;
+    const disp    = dispoCol ? Number(r[dispoCol.name]) : null;
 
-    if (!groups[opKey]) groups[opKey] = { color: getColor(opKey), data: [] };
-    groups[opKey].data.push({
-      x: xv, y: yv, label: proj, tipo: tipoKey, occ, reporta,
-      pointStyle: getShape(tipoKey),
-      r: getRadius(occ),
+    entries.push({
+      x: xv, y: yv, label: proj, tipo: tipoKey, opKey, occ, reporta,
+      stock: stock != null && !isNaN(stock) ? stock : null,
+      disp: disp != null && !isNaN(disp) ? disp : null,
     });
   }
 
-  if (!xs.length) return;
+  if (!entries.length) return;
+
+  const grouped = document.getElementById('cruzGroupToggle')?.checked ?? false;
+  const points  = grouped ? _aggregateByTipologia(entries) : entries;
+
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
   const medianX = _median(xs), medianY = _median(ys);
+
+  const groups = {};
+  for (const p of points) {
+    if (!groups[p.opKey]) groups[p.opKey] = { color: getColor(p.opKey), data: [] };
+    groups[p.opKey].data.push({
+      x: p.x, y: p.y, label: p.label, tipo: p.tipo, occ: p.occ, reporta: p.reporta, count: p.count,
+      pointStyle: getShape(p.tipo),
+      r: POINT_R,
+      fill: withAlpha(groups[p.opKey].color, getAlpha(p.occ)),
+    });
+  }
 
   const datasets = Object.entries(groups).map(([op, g]) => ({
     label: op,
     data: g.data,
-    backgroundColor: g.color + 'CC',
+    backgroundColor: g.data.map(p => p.fill),
     borderColor: g.color,
     borderWidth: 1.5,
     pointStyle: g.data.map(p => p.pointStyle),
@@ -241,6 +309,7 @@ export function renderCruz(state, cruzConfig, mp) {
               parts.push(`${yFmt(d.y)} ${cruzConfig.yLabel}`);
               if (d.occ != null) parts.push(`Ocupación: ${d.occ.toFixed(0)}%`);
               if (d.reporta != null) parts.push(d.reporta ? 'Reporta' : 'No reporta');
+              if (d.count > 1) parts.push(`${d.count} unidades`);
               return parts.join(' · ');
             },
           },
@@ -262,5 +331,5 @@ export function renderCruz(state, cruzConfig, mp) {
     },
   });
 
-  _renderShapeLegend(shapeMap, cruzConfig.shapeLabel ?? 'Tipología');
+  _renderShapeLegend(shapeMap, cruzConfig.shapeLabel ?? 'Tipología', !!reportaCol, !!sizeCol);
 }

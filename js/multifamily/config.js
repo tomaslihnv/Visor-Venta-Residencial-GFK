@@ -118,6 +118,8 @@ export const CRUZ = {
   shapeLabel:        'Tipología',
   sizeCandidates:    ['ocupacion'],
   reportaCandidates: ['reporta'],
+  stockCandidates:   ['stock'],
+  dispoCandidates:   ['disponibilidad'],
   projCandidates:    ['proyecto', 'edificio', 'nombre'],
 };
 
