@@ -157,11 +157,11 @@ export const MAP = {
     { label: 'Programa',      keys: ['programa'] },
     { label: 'Estado',        keys: ['estado'] },
     { label: 'Período',       keys: ['período', 'periodo'] },
-    { label: 'Stock',         keys: ['stock'] },
-    { label: 'Disponib.',     keys: ['disponibilidad'] },
+    { label: 'Stock',         keys: ['stock'], agg: 'sum' },
+    { label: 'Disponib.',     keys: ['disponibilidad'], agg: 'sum' },
     { label: 'Vacancia (%)',  keys: ['vacancia'] },
     { label: 'Arriendo UF',   keys: ['arriendo uf', 'arriendo'] },
-    { label: 'UF/m²',         keys: ['uf/m', 'uf / m'] },
+    { label: 'UF/m²',         keys: ['uf/m', 'uf / m'], agg: 'avg' },
   ],
 };
 

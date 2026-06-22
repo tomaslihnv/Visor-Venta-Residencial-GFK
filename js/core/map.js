@@ -8,6 +8,15 @@ import { reapplyFilters } from './filters.js';
 //   rankingMetrics?: [{ key, label, candidates }]  — columns shown in ranking (default: heatOptions[0])
 // }
 
+// Nominatim limita a 1 solicitud/segundo sin API key — bajar este valor
+// puede hacer que bloqueen la IP. No tocar sin revisar su política de uso.
+const GEOCODE_DELAY_MS    = 1100;
+const SNAP_PX             = 12;   // distancia en px para "cerrar" el polígono cerca del primer vértice
+const FIT_BOUNDS_PADDING  = 40;
+const INVALIDATE_SIZE_MS  = 150;  // delay tras renderMap para que Leaflet recalcule el tamaño del contenedor
+const WIDGET_DEFAULT_WIDTH = 230; // ancho asumido de los widgets flotantes (filtros/resumen) al posicionarlos por primera vez
+const MAX_PROJ_HISTORY    = 20;   // tope de snapshots para "Deshacer" selección de zona
+
 const geocodeCache = new Map();
 const geoStatus    = { total: 0, done: 0, running: false };
 let   mapMode      = 'general';
@@ -21,7 +30,6 @@ let   _streetLayer    = null;
 let   _satelliteLayer = null;
 let   _isSatellite    = false;
 let   _lastOrderedPoints = [];
-let   _resumenInited  = false;
 
 // Selección por polígono
 let _selState         = null;
@@ -57,11 +65,25 @@ function _findAddressCol(state) {
   return state.columns.find(c => kw.some(k => norm(c.name).includes(k)));
 }
 
+// Columna de proyecto/edificio según mapConfig.projectCandidates.
+function _resolveProjectCol(state, mapConfig) {
+  return state.columns.find(c =>
+    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
+  )?.name ?? null;
+}
+
+// Columna de la métrica de calor activa (o la primera si no hay ninguna seleccionada).
+function _resolveHeatColumn(state, mapConfig, metricValue = heatMetric) {
+  const activeHeat = mapConfig.heatOptions?.find(o => o.value === metricValue) ?? mapConfig.heatOptions?.[0];
+  const colName = activeHeat
+    ? state.columns.find(c => activeHeat.candidates.some(k => norm(c.name).includes(norm(k))))?.name ?? null
+    : null;
+  return { activeHeat, colName };
+}
+
 function _collectPoints(state, mapConfig) {
   const buildings = new Map();
-  const projCol   = state.columns.find(c =>
-    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
-  )?.name;
+  const projCol   = _resolveProjectCol(state, mapConfig);
 
   if (_hasDirectCoords(state)) {
     for (const r of state.filtered) {
@@ -138,7 +160,7 @@ export async function geocodeData(state, mapConfig, onDone) {
     geocodeCache.set(pending[i], await _fetchGeocode(pending[i]));
     geoStatus.done = i + 1;
     _refreshStatus(state);
-    if (i < pending.length - 1) await _sleep(1100);
+    if (i < pending.length - 1) await _sleep(GEOCODE_DELAY_MS);
   }
   geoStatus.running = false;
   _refreshStatus(state);
@@ -167,7 +189,7 @@ function _priceToColor(value, min, max) {
 // ── Filter widget ─────────────────────────────────────────────────────────
 
 export function updateFilterWidget(state, filterDefs) {
-  const body = document.getElementById('mfwBody');
+  const body = document.getElementById('mapFilterWidgetBody');
   if (!body) return;
   const widget = document.getElementById('mapFilterWidget');
   if (!widget || widget.classList.contains('hidden')) return;
@@ -192,27 +214,29 @@ export function updateFilterWidget(state, filterDefs) {
     : '<div class="mfw-empty">Sin filtros aplicados</div>';
 }
 
-function _initFilterWidget() {
-  const toggleBtn = document.getElementById('mapFilterWidgetBtn');
+// Crea un widget flotante y arrastrable dentro del mapa (usado por Filtros
+// y Resumen). `onShow` se llama cada vez que el widget pasa a visible.
+function _createDraggableWidget({ id, title, top, onShow }) {
+  const toggleBtn = document.getElementById(`${id}Btn`);
   if (!toggleBtn) return;
 
   const widget = document.createElement('div');
-  widget.id = 'mapFilterWidget';
+  widget.id = id;
   widget.className = 'map-filter-widget hidden';
   widget.innerHTML = `
-    <div class="mfw-header" id="mfwHeader">
-      <span>Filtros activos</span>
-      <button class="mfw-close" id="mfwClose" title="Cerrar">&#xD7;</button>
+    <div class="mfw-header" id="${id}Header">
+      <span>${title}</span>
+      <button class="mfw-close" id="${id}Close" title="Cerrar">&#xD7;</button>
     </div>
-    <div class="mfw-body" id="mfwBody"></div>
+    <div class="mfw-body" id="${id}Body"></div>
   `;
   leafletMap.getContainer().appendChild(widget);
   L.DomEvent.disableClickPropagation(widget);
   L.DomEvent.disableScrollPropagation(widget);
 
-  const header = document.getElementById('mfwHeader');
+  const header = document.getElementById(`${id}Header`);
   header.addEventListener('mousedown', e => {
-    if (e.target.id === 'mfwClose') return;
+    if (e.target.id === `${id}Close`) return;
     const startX = e.clientX, startY = e.clientY;
     const startL = parseInt(widget.style.left) || 0;
     const startT = parseInt(widget.style.top)  || 0;
@@ -231,7 +255,7 @@ function _initFilterWidget() {
     e.preventDefault();
   });
 
-  document.getElementById('mfwClose').addEventListener('click', () => {
+  document.getElementById(`${id}Close`).addEventListener('click', () => {
     widget.classList.add('hidden');
     toggleBtn.classList.remove('active');
   });
@@ -242,11 +266,18 @@ function _initFilterWidget() {
     if (!nowHidden) {
       if (!widget.style.left) {
         const cW = leafletMap.getContainer().offsetWidth;
-        widget.style.left = (cW - 230) + 'px';
-        widget.style.top  = '48px';
+        widget.style.left = (cW - WIDGET_DEFAULT_WIDTH) + 'px';
+        widget.style.top  = top;
       }
-      updateFilterWidget(_selState, _selState?._filterDefs);
+      onShow();
     }
+  });
+}
+
+function _initFilterWidget() {
+  _createDraggableWidget({
+    id: 'mapFilterWidget', title: 'Filtros activos', top: '48px',
+    onShow: () => updateFilterWidget(_selState, _selState?._filterDefs),
   });
 }
 
@@ -299,6 +330,7 @@ function _updateUndoBtn() {
 
 function _saveProjSnapshot() {
   _projHistory.push(new Set(_selState?.excludedProjects ?? new Set()));
+  if (_projHistory.length > MAX_PROJ_HISTORY) _projHistory.shift();
 }
 
 function _applyProjExclusion() {
@@ -322,9 +354,7 @@ function _closePolygon() {
   _lastPolyPoints = [..._selPoints];
   _selPoints = [];
 
-  const projCol = _selState?.columns.find(c =>
-    _selMapConfig?.projectCandidates.some(k => norm(c.name).includes(norm(k)))
-  )?.name;
+  const projCol = _selMapConfig ? _resolveProjectCol(_selState, _selMapConfig) : null;
 
   const inside = _collectPoints(_selState, _selMapConfig).filter(p =>
     _pointInPolygon(p.lat, p.lng, _lastPolyPoints)
@@ -347,6 +377,12 @@ function _showSelPanel(names, bounds) {
   const left = Math.min(ne.x + 10, cW - panelW - 8);
   const top  = Math.max(Math.min(ne.y, cH - 160), 8);
 
+  const PREVIEW_MAX = 6;
+  const previewNames = names.slice(0, PREVIEW_MAX);
+  const previewMore  = names.length - previewNames.length;
+  const previewHtml = `<ul class="map-sel-preview">${previewNames.map(n => `<li>${n}</li>`).join('')}</ul>` +
+    (previewMore > 0 ? `<div class="map-sel-more">+${previewMore} más</div>` : '');
+
   _selPanel = document.createElement('div');
   _selPanel.className = 'map-sel-panel';
   _selPanel.style.left = left + 'px';
@@ -354,6 +390,7 @@ function _showSelPanel(names, bounds) {
   L.DomEvent.disableClickPropagation(_selPanel);
   _selPanel.innerHTML = `
     <div class="map-sel-count">${names.length} proyecto${names.length !== 1 ? 's' : ''} seleccionado${names.length !== 1 ? 's' : ''}</div>
+    ${previewHtml}
     <button class="sel-btn sel-btn-keep"  id="selBtnMantener">Mantener solo estos</button>
     <button class="sel-btn sel-btn-excl"  id="selBtnExcluir">Excluir estos</button>
     <label class="sel-check-row">
@@ -369,9 +406,7 @@ function _showSelPanel(names, bounds) {
     _saveProjSnapshot();
     if (!_selState.excludedProjects) _selState.excludedProjects = new Set();
     const keepSet = new Set(names.map(String));
-    const projCol = _selState.columns.find(c =>
-      _selMapConfig?.projectCandidates.some(k => norm(c.name).includes(norm(k)))
-    )?.name;
+    const projCol = _selMapConfig ? _resolveProjectCol(_selState, _selMapConfig) : null;
     const allProjs = [...new Set(
       _selState.raw.map(r => projCol ? String(r[projCol] ?? '').trim() : '').filter(Boolean)
     )];
@@ -440,7 +475,7 @@ function _initSelectionMode() {
     if (_selPoints.length >= 3) {
       const firstPx = leafletMap.latLngToContainerPoint(_selPoints[0]);
       const clickPx = leafletMap.latLngToContainerPoint(e.latlng);
-      if (Math.hypot(firstPx.x - clickPx.x, firstPx.y - clickPx.y) < 12) {
+      if (Math.hypot(firstPx.x - clickPx.x, firstPx.y - clickPx.y) < SNAP_PX) {
         _closePolygon();
         return;
       }
@@ -469,7 +504,7 @@ function _initSelectionMode() {
     if (_selPoints.length >= 3 && _firstVertexMarker) {
       const firstPx = leafletMap.latLngToContainerPoint(_selPoints[0]);
       const movePx  = leafletMap.latLngToContainerPoint(e.latlng);
-      const near    = Math.hypot(firstPx.x - movePx.x, firstPx.y - movePx.y) < 12;
+      const near    = Math.hypot(firstPx.x - movePx.x, firstPx.y - movePx.y) < SNAP_PX;
       _firstVertexMarker.setStyle({ fillColor: near ? '#2563eb' : '#fff', radius: near ? 9 : 6 });
       leafletMap.getContainer().style.cursor = near ? 'pointer' : 'crosshair';
     }
@@ -511,17 +546,9 @@ function _initRankingResize() {
 async function _copyMapTable(state, mapConfig) {
   if (!_lastOrderedPoints.length) return;
 
-  const projCol = state.columns.find(c =>
-    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
-  )?.name;
+  const projCol = _resolveProjectCol(state, mapConfig);
   const propCol = state.columns.find(c => ['corredor', 'propietario', 'owner'].some(k => norm(c.name).includes(k)))?.name;
-  const activeHeat = mapConfig.heatOptions?.find(o => o.value === heatMetric) ?? mapConfig.heatOptions?.[0];
-  const heatColName = activeHeat
-    ? state.columns.find(c => activeHeat.candidates.some(k => norm(c.name).includes(norm(k))))?.name
-    : null;
-  const ufm2ColName = mapConfig.heatOptions?.[0]
-    ? state.columns.find(c => mapConfig.heatOptions[0].candidates.some(k => norm(c.name).includes(norm(k))))?.name
-    : null;
+  const { activeHeat, colName: heatColName } = _resolveHeatColumn(state, mapConfig);
 
   const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
 
@@ -577,22 +604,16 @@ async function _copyMapTable(state, mapConfig) {
 }
 
 function _updateResumenWidget(state, mapConfig) {
-  const body = document.getElementById('mapResumenBody');
+  const body = document.getElementById('mapResumenWidgetBody');
   if (!body) return;
   const widget = document.getElementById('mapResumenWidget');
   if (!widget || widget.classList.contains('hidden')) return;
 
-  const activeHeat = mapConfig.heatOptions?.find(o => o.value === heatMetric) ?? mapConfig.heatOptions?.[0];
-  const heatColName = activeHeat
-    ? state.columns.find(c => activeHeat.candidates.some(k => norm(c.name).includes(norm(k))))?.name
-    : null;
-
+  const { activeHeat, colName: heatColName } = _resolveHeatColumn(state, mapConfig);
   const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
   const fmtN = v => Math.round(v).toLocaleString('es-CL');
 
-  const projCol = state.columns.find(c =>
-    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
-  )?.name;
+  const projCol = _resolveProjectCol(state, mapConfig);
 
   const byProj = {};
   let heatSum = 0, heatCount = 0;
@@ -625,70 +646,21 @@ function _updateResumenWidget(state, mapConfig) {
 }
 
 function _initResumenWidget(state, mapConfig) {
-  const toggleBtn = document.getElementById('mapResumenWidgetBtn');
-  if (!toggleBtn || _resumenInited) return;
-  _resumenInited = true;
-
-  const widget = document.createElement('div');
-  widget.id = 'mapResumenWidget';
-  widget.className = 'map-filter-widget hidden';
-  widget.innerHTML = `
-    <div class="mfw-header" id="mapResumenHeader">
-      <span>Resumen</span>
-      <button class="mfw-close" id="mapResumenClose">&#xD7;</button>
-    </div>
-    <div class="mfw-body" id="mapResumenBody"></div>
-  `;
-  leafletMap.getContainer().appendChild(widget);
-  L.DomEvent.disableClickPropagation(widget);
-  L.DomEvent.disableScrollPropagation(widget);
-
-  const header = document.getElementById('mapResumenHeader');
-  header.addEventListener('mousedown', e => {
-    if (e.target.id === 'mapResumenClose') return;
-    const startX = e.clientX, startY = e.clientY;
-    const startL = parseInt(widget.style.left) || 0;
-    const startT = parseInt(widget.style.top)  || 0;
-    document.body.style.userSelect = 'none';
-    const onMove = e => {
-      widget.style.left = (startL + e.clientX - startX) + 'px';
-      widget.style.top  = (startT + e.clientY - startY) + 'px';
-    };
-    const onUp = () => {
-      document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup',   onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup',   onUp);
-    e.preventDefault();
-  });
-
-  document.getElementById('mapResumenClose').addEventListener('click', () => {
-    widget.classList.add('hidden');
-    toggleBtn.classList.remove('active');
-  });
-
-  toggleBtn.addEventListener('click', () => {
-    const nowHidden = widget.classList.toggle('hidden');
-    toggleBtn.classList.toggle('active', !nowHidden);
-    if (!nowHidden) {
-      if (!widget.style.left) {
-        const cW = leafletMap.getContainer().offsetWidth;
-        widget.style.left = (cW - 230) + 'px';
-        widget.style.top  = '90px';
-      }
-      _updateResumenWidget(state, mapConfig);
-    }
+  _createDraggableWidget({
+    id: 'mapResumenWidget', title: 'Resumen', top: '90px',
+    onShow: () => _updateResumenWidget(state, mapConfig),
   });
 }
 
+// `leafletMap` es un singleton a nivel de módulo: este init solo corre una
+// vez por carga de página (guard `if (!leafletMap)` en renderMap). Todos los
+// listeners de aquí en adelante (incluyendo los `document.addEventListener`
+// de _initSelectionMode) asumen que esta función nunca se vuelve a llamar
+// sin antes recargar el módulo — no agregar un segundo punto de entrada.
 function _initLeafletMap(state, mapConfig, mp) {
   _selState     = state;
   _selMapConfig = mapConfig;
-  state._projCol = state.columns.find(c =>
-    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
-  )?.name ?? null;
+  state._projCol = _resolveProjectCol(state, mapConfig);
   leafletMap = L.map('map', { zoomSnap: 0.5, wheelPxPerZoomLevel: 350 });
   _initRankingResize();
 
@@ -787,22 +759,48 @@ function _findPopupCol(keys, state) {
   return state.columns.find(c => keys.some(k => norm(c.name).includes(norm(k))))?.name ?? null;
 }
 
-function _buildPopup(row, mapConfig, state) {
+// Un edificio puede tener varias filas (una por tipología). Para cada campo
+// del popup se agregan sus valores en vez de mostrar arbitrariamente los de
+// la primera fila — eso hacía que Programa/Stock/UF-m² del popup siempre
+// reflejaran la tipología que aparece primero en el Excel (típicamente la
+// más chica), sin relación con el resto de las unidades del edificio.
+// field.agg: 'sum' | 'avg' (default si todos los valores son numéricos y
+// distintos: rango "min – max"; si son iguales o no numéricos: lista única).
+function _aggregateFieldValues(rows, colName, agg) {
+  const vals = rows.map(r => r[colName]).filter(v => v !== '' && v != null);
+  if (!vals.length) return null;
+  const uniq = [...new Set(vals.map(String))];
+  if (uniq.length === 1) return { kind: 'single', value: vals[0] };
+
+  const nums = vals.map(Number);
+  const allNumeric = nums.every(n => !isNaN(n));
+  if (allNumeric && agg === 'sum') return { kind: 'single', value: nums.reduce((a, b) => a + b, 0) };
+  if (allNumeric && agg === 'avg') return { kind: 'single', value: nums.reduce((a, b) => a + b, 0) / nums.length };
+  if (allNumeric) return { kind: 'range', min: Math.min(...nums), max: Math.max(...nums) };
+  return { kind: 'list', values: uniq };
+}
+
+function _buildPopup(rows, mapConfig, state) {
   const esc = s => String(s ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const rowsHtml = mapConfig.popupFields.map(field => {
     const colName = _findPopupCol(field.keys, state);
     if (!colName) return '';
-    const raw = row[colName];
-    if (raw === '' || raw == null) return '';
+    const agg = _aggregateFieldValues(rows, colName, field.agg);
+    if (!agg) return '';
+
     let val;
-    if (field.format) {
-      val = field.format(raw);
-    } else if (typeof raw === 'number' || !isNaN(Number(raw))) {
-      val = fmt(raw);
-    } else if (String(raw).startsWith('http')) {
-      val = `<a href="${esc(raw)}" target="_blank" rel="noopener">Ver</a>`;
+    if (agg.kind === 'range') {
+      val = `${fmt(agg.min)} – ${fmt(agg.max)}`;
+    } else if (agg.kind === 'list') {
+      val = esc(agg.values.join(', '));
+    } else if (field.format) {
+      val = field.format(agg.value);
+    } else if (typeof agg.value === 'number' || !isNaN(Number(agg.value))) {
+      val = fmt(agg.value);
+    } else if (String(agg.value).startsWith('http')) {
+      val = `<a href="${esc(agg.value)}" target="_blank" rel="noopener">Ver</a>`;
     } else {
-      val = esc(String(raw));
+      val = esc(String(agg.value));
     }
     return `<tr><td class="pp-key">${field.label}</td><td class="pp-val">${val}</td></tr>`;
   }).join('');
@@ -815,15 +813,10 @@ function _renderRanking(state, mapConfig) {
   const el = document.getElementById('mapRanking');
   if (!el) return;
 
-  const projCol = state.columns.find(c =>
-    mapConfig.projectCandidates.some(k => norm(c.name).includes(norm(k)))
-  )?.name;
+  const projCol = _resolveProjectCol(state, mapConfig);
   if (!projCol) { el.innerHTML = ''; return; }
 
-  const activeHeat = mapConfig.heatOptions?.find(o => o.value === heatMetric) ?? mapConfig.heatOptions?.[0];
-  const heatColName = activeHeat
-    ? state.columns.find(c => activeHeat.candidates.some(k => norm(c.name).includes(norm(k))))?.name
-    : null;
+  const { activeHeat } = _resolveHeatColumn(state, mapConfig);
 
   const byProj = {};
   for (const r of state.filtered) {
@@ -900,10 +893,7 @@ export function renderMap(state, mapConfig, mp) {
   placeholder?.classList.add('hidden');
   wrapper?.classList.remove('hidden');
 
-  const activeHeat  = mapConfig.heatOptions?.find(o => o.value === heatMetric) ?? mapConfig.heatOptions?.[0];
-  const heatColName = activeHeat
-    ? state.columns.find(c => activeHeat.candidates.some(k => norm(c.name).includes(norm(k))))?.name
-    : null;
+  const { activeHeat, colName: heatColName } = _resolveHeatColumn(state, mapConfig);
   const inPriceMode = mapMode === 'precio' && heatColName;
   wrapper?.classList.toggle('dark-mode', !!inPriceMode);
 
@@ -947,7 +937,7 @@ export function renderMap(state, mapConfig, mp) {
       });
       marker = L.marker([lat, lng], { icon: numIcon });
     }
-    marker.bindPopup(_buildPopup(rows[0], mapConfig, state), { maxWidth: 340 });
+    marker.bindPopup(_buildPopup(rows, mapConfig, state), { maxWidth: 340 });
     marker.addTo(markersLayer);
     bounds.push([lat, lng]);
   }
@@ -1005,10 +995,10 @@ export function renderMap(state, mapConfig, mp) {
   if (countEl) countEl.textContent = `Mostrando ${points.length} proyecto${points.length !== 1 ? 's' : ''}`;
 
   if (!_mapInitialized) {
-    leafletMap.fitBounds(bounds, { padding: [40, 40] });
+    leafletMap.fitBounds(bounds, { padding: [FIT_BOUNDS_PADDING, FIT_BOUNDS_PADDING] });
     _mapInitialized = true;
   }
-  setTimeout(() => leafletMap?.invalidateSize(), 150);
+  setTimeout(() => leafletMap?.invalidateSize(), INVALIDATE_SIZE_MS);
 
   _renderRanking(state, mapConfig);
   _updateResumenWidget(state, mapConfig);

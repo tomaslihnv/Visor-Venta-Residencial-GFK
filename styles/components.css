@@ -393,9 +393,10 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .map-placeholder h3 { margin-bottom: 10px; color: #334155; }
 
-/* Botones de selección y deshacer */
-.map-select-btn { margin-left: 4px; border-left: 1px solid #e5e7eb !important; padding-left: 12px !important; }
-.map-wrapper.dark-mode .map-select-btn { border-left-color: rgba(148,163,184,0.3) !important; }
+/* Separador visual entre grupos de botones de la toolbar (alias .map-select-btn
+   se mantiene por compatibilidad con Venta/Renta, que no usan core/) */
+.map-select-btn, .map-toolbar-toggle { margin-left: 4px; border-left: 1px solid #e5e7eb !important; padding-left: 12px !important; }
+.map-wrapper.dark-mode .map-select-btn, .map-wrapper.dark-mode .map-toolbar-toggle { border-left-color: rgba(148,163,184,0.3) !important; }
 .map-undo-btn { color: #92400e !important; border-color: #fcd34d !important; background: #fffbeb !important; }
 .map-undo-btn:hover { background: #fef3c7 !important; }
 .map-wrapper.dark-mode .map-undo-btn { background: rgba(120,80,0,0.25) !important; color: #fcd34d !important; border-color: rgba(252,211,77,0.4) !important; }
@@ -471,6 +472,13 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   border-bottom: 1px solid #f1f5f9;
   margin-bottom: 2px;
 }
+.map-sel-preview {
+  list-style: none; margin: 0 0 4px; padding: 0;
+  max-height: 110px; overflow-y: auto;
+  font-size: 11.5px; color: #475569;
+}
+.map-sel-preview li { padding: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-sel-more { font-size: 11px; color: #94a3b8; margin: -2px 0 4px; }
 .sel-btn {
   width: 100%;
   padding: 7px 10px;
