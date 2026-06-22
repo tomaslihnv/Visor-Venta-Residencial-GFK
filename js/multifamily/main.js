@@ -1,6 +1,6 @@
 import { $, $$ } from '../core/utils.js';
 import { resetFilters } from '../core/filters.js';
-import { exportCsv }   from '../core/export.js';
+import { exportCsv, exportJson } from '../core/export.js';
 import { initFilterIO } from '../core/filter-io.js';
 import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './data.js';
 
@@ -34,6 +34,14 @@ document.addEventListener('mpchange', async () => {
 $('#filtrosPanelHeader')?.addEventListener('click', () => {
   const body    = $('#filtrosPanelBody');
   const chevron = $('#filtrosChevron');
+  body?.classList.toggle('mp-collapsed');
+  if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
+});
+
+// ── Datasets guardados collapse ────────────────────────────────────────────
+$('#savedDatasetsPanelHeader')?.addEventListener('click', () => {
+  const body    = $('#savedDatasetsPanelBody');
+  const chevron = $('#savedDatasetsChevron');
   body?.classList.toggle('mp-collapsed');
   if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
 });
@@ -122,4 +130,14 @@ import('../core/filters.js').then(({ getFilterState, applyFilterState }) => {
 // ── Exportar CSV ───────────────────────────────────────────────────────────
 $('#exportCsvBtn')?.addEventListener('click', () => {
   exportCsv(state, CSV_FILENAME);
+});
+
+// ── Guardar JSON (para data/multifamily/) ──────────────────────────────────
+$('#saveJsonBtn')?.addEventListener('click', () => {
+  if (!state.raw.length) { alert('Cargá un Excel primero.'); return; }
+  const name = prompt('Nombre del archivo (sin extensión):', CSV_FILENAME);
+  if (!name) return;
+  const safeName = name.trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
+  if (!safeName) return;
+  exportJson(state, safeName);
 });

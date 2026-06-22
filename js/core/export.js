@@ -17,6 +17,18 @@ export function exportCsv(state, filename) {
   URL.revokeObjectURL(url);
 }
 
+// Exporta state.raw (datos ya normalizados, sin filtrar) como JSON para
+// guardarlo en data/<visor>/ y poder recargarlo sin volver a procesar el Excel.
+export function exportJson(state, filename) {
+  if (!state.raw.length) return;
+  const blob = new Blob([JSON.stringify(state.raw)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${filename}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function copyChartPng(chart, wrapEl, ratioSelector) {
   if (!chart || !wrapEl) return false;
   const scale = 4, pad = 32;

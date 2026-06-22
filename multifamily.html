@@ -25,6 +25,7 @@
         <span>Cargar Excel</span>
       </label>
       <span id="fileName" class="file-name"></span>
+      <button id="saveJsonBtn" class="ghost-btn" title="Descargar los datos cargados como JSON para guardarlos en data/multifamily/">Guardar JSON</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
   </header>
@@ -98,6 +99,17 @@
             <button id="exportFiltersBtn" class="filter-io-btn" title="Exportar filtros como JSON. También podés arrastrar un .json aquí para cargar filtros.">&#x21E9; Exportar filtros</button>
             <span id="filterIOFeedback" class="filter-io-feedback" style="display:none"></span>
           </div>
+        </div>
+      </div>
+
+      <!-- DATASETS GUARDADOS -->
+      <div class="mp-panel" id="savedDatasetsPanel">
+        <div class="mp-panel-header" id="savedDatasetsPanelHeader">
+          <span class="mp-panel-title">Datasets guardados</span>
+          <span class="mp-chevron" id="savedDatasetsChevron">▾</span>
+        </div>
+        <div id="savedDatasetsPanelBody" class="mp-panel-body">
+          <div id="savedDatasetsList" class="saved-datasets-sidebar-list"></div>
         </div>
       </div>
     </aside>

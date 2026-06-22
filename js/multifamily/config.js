@@ -5,6 +5,15 @@
 // SVP, DISTRIB_COLS, MAP y COMPARATIVA.
 // ============================================================
 
+// Datasets pre-cargados (data/multifamily/*.json) seleccionables desde el
+// dropzone, sin tener que arrastrar el Excel cada vez. Para agregar uno:
+// 1. Cargar el Excel normalmente y usar el botón "Guardar JSON".
+// 2. Mover el archivo descargado a data/multifamily/.
+// 3. Agregar una entrada acá con su label y el path del archivo.
+export const SAVED_DATASETS = [
+  { label: 'Multifamily', file: 'data/multifamily/multifamily.json' },
+];
+
 export const COLUMN_MAP = {
   'Proyecto':              'Proyecto',
   'Propietario':           'Propietario',

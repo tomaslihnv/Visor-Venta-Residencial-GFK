@@ -1,5 +1,5 @@
 import { detectColType } from '../core/utils.js';
-import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './config.js';
+import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, SAVED_DATASETS } from './config.js';
 
 // ── Estado global del visor ────────────────────────────────────────────────
 export const state = {
@@ -98,6 +98,44 @@ function loadFile(file) {
   };
   reader.readAsArrayBuffer(file);
 }
+
+// ── Datasets guardados (JSON pre-cargados) ─────────────────────────────────
+function loadSavedDataset(entry) {
+  const fileNameEl = document.getElementById('fileName');
+  fetch(entry.file)
+    .then(r => {
+      if (!r.ok) throw new Error(`No se encontró ${entry.file}`);
+      return r.json();
+    })
+    .then(rows => {
+      if (fileNameEl) fileNameEl.textContent = entry.label;
+      onDataLoaded(rows);
+    })
+    .catch(err => {
+      console.error(err);
+      alert('Error cargando dataset guardado: ' + err.message);
+    });
+}
+
+function _renderSavedDatasetsList() {
+  const cont = document.getElementById('savedDatasetsList');
+  if (!cont) return;
+  if (!SAVED_DATASETS.length) {
+    cont.innerHTML = '<p class="hint">Sin datasets guardados todavía.</p>';
+    return;
+  }
+  cont.innerHTML = SAVED_DATASETS
+    .map((entry, i) => `<button type="button" class="saved-dataset-btn" data-idx="${i}">${entry.label}</button>`)
+    .join('');
+  cont.querySelectorAll('.saved-dataset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadSavedDataset(SAVED_DATASETS[+btn.dataset.idx]);
+    });
+  });
+}
+_renderSavedDatasetsList();
 
 // ── onDataLoaded ───────────────────────────────────────────────────────────
 export function onDataLoaded(rows) {
