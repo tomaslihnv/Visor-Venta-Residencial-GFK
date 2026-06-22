@@ -38,6 +38,7 @@ export const FILTERS = [
   { key: 'stock',         candidates: ['stock'],               label: 'Stock',          type: 'slider', step: 1 },
   { key: 'sup',           candidates: ['util (m', 'útil (m', 'm² util'], label: 'm² útil', type: 'slider', step: 1 },
   { key: 'reporta',       candidates: ['reporta'],             label: 'Reporta',        type: 'multi' },
+  { key: 'ocupacion',     candidates: ['ocupacion'],           label: 'Ocupación (%)', type: 'slider', step: 1 },
 ];
 
 // ── KPIs ───────────────────────────────────────────────────────────────────

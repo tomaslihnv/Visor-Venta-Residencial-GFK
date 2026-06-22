@@ -4,17 +4,16 @@ import { copyChartPng } from './export.js';
 // cruzConfig: {
 //   xCandidates, xLabel, yCandidates, yLabel,
 //   colorCandidates, colorLabel,   — operador (color)
-//   shapeCandidates, shapeLabel,   — tipología (forma)
-//   sizeCandidates,                — ocupación % (tamaño)
+//   shapeCandidates,               — tipología (solo filtro/tooltip, sin encoding visual)
 //   reportaCandidates,             — binario reporta/no reporta (borde punteado)
 //   stockCandidates, dispoCandidates, — para agrupar tipologías por proyecto
 //   projCandidates,
 // }
+// Los filtros (comuna, ocupación, tipología, reporte) se resuelven con los
+// filtros existentes de la barra lateral — este módulo no agrega selectores propios.
 
 const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#a855f7'];
-const SHAPES  = ['circle', 'triangle', 'rect', 'rectRot', 'star', 'cross'];
 const POINT_R = 8;
-const MIN_ALPHA = 0.15, MAX_ALPHA = 1;
 
 let _cruzReady = false;
 
@@ -49,6 +48,93 @@ export function initCruzListeners(state, cruzConfig, mp) {
       setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2000);
     }
   });
+
+  _initCruzFilterWidget(state);
+}
+
+function _initCruzFilterWidget(state) {
+  const toggleBtn = document.getElementById('cruzFilterWidgetBtn');
+  const container = document.getElementById('cruzWrap');
+  if (!toggleBtn || !container) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'cruzFilterWidget';
+  widget.className = 'map-filter-widget hidden';
+  widget.innerHTML = `
+    <div class="mfw-header" id="cruzFwHeader">
+      <span>Filtros activos</span>
+      <button class="mfw-close" id="cruzFwClose">&#xD7;</button>
+    </div>
+    <div class="mfw-body" id="cruzFwBody"></div>
+  `;
+  container.appendChild(widget);
+
+  document.getElementById('cruzFwHeader').addEventListener('mousedown', e => {
+    if (e.target.id === 'cruzFwClose') return;
+    const startX = e.clientX, startY = e.clientY;
+    const startL = parseInt(widget.style.left) || (container.offsetWidth - 240);
+    const startT = parseInt(widget.style.top)  || 10;
+    widget.style.left = startL + 'px'; widget.style.top = startT + 'px';
+    document.body.style.userSelect = 'none';
+    const onMove = e => {
+      widget.style.left = (startL + e.clientX - startX) + 'px';
+      widget.style.top  = (startT + e.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  });
+
+  document.getElementById('cruzFwClose').addEventListener('click', () => {
+    widget.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const nowHidden = widget.classList.toggle('hidden');
+    toggleBtn.classList.toggle('active', !nowHidden);
+    if (!nowHidden) {
+      if (!widget.style.left) {
+        widget.style.left = (container.offsetWidth - 240) + 'px';
+        widget.style.top  = '10px';
+      }
+      _updateCruzFilterWidget(state);
+    }
+  });
+}
+
+export function updateCruzFilterWidget(state) { _updateCruzFilterWidget(state); }
+
+function _updateCruzFilterWidget(state) {
+  const body = document.getElementById('cruzFwBody');
+  if (!body) return;
+  const widget = document.getElementById('cruzFilterWidget');
+  if (!widget || widget.classList.contains('hidden')) return;
+  const defs = state?._filterDefs ?? [];
+  const items = [];
+  for (const def of defs) {
+    if (def.type === 'multi') {
+      const set = state?.filterValues?.[def.key];
+      if (set?.size > 0) items.push({ label: def.label, value: [...set].join(', ') });
+    } else if (def.type === 'slider') {
+      const min = state?.filterValues?.[def.key + 'Min'];
+      const max = state?.filterValues?.[def.key + 'Max'];
+      if (min !== null || max !== null) {
+        const ref = state?.filterRefs?.[def.key];
+        const lo = min !== null ? (ref?.iMin?.value ?? min) : '—';
+        const hi = max !== null ? (ref?.iMax?.value ?? max) : '—';
+        items.push({ label: def.label, value: `${lo} – ${hi}` });
+      }
+    }
+  }
+  body.innerHTML = items.length
+    ? items.map(it => `<div class="mfw-row"><span class="mfw-label">${it.label}</span><span class="mfw-value">${it.value}</span></div>`).join('')
+    : '<div class="mfw-empty">Sin filtros aplicados</div>';
 }
 
 function _parseBool(v) {
@@ -61,66 +147,40 @@ function _parseBool(v) {
   return null;
 }
 
-function _parsePct(v) {
-  if (v == null || v === '') return null;
-  let s = String(v).trim();
-  if (s.endsWith('%')) s = s.slice(0, -1);
-  const n = Number(s);
-  if (isNaN(n)) return null;
-  return n <= 1 ? n * 100 : n;
-}
-
 function _median(arr) {
   const s = [...arr].sort((a, b) => a - b);
   const n = s.length;
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
-// Agrupa filas por (proyecto + tipología): promedia m² y UF/m², suma stock
-// y disponibilidad, y recalcula la ocupación a partir de esas sumas.
+// Agrupa filas por (proyecto + tipología): promedia m² y UF/m².
 function _aggregateByTipologia(entries) {
   const groups = {};
   for (const e of entries) {
     const key = `${e.label}__${e.tipo}`;
     if (!groups[key]) {
-      groups[key] = {
-        label: e.label, tipo: e.tipo, opKey: e.opKey,
-        xs: [], ys: [], stockSum: 0, dispSum: 0, hasStock: false, anyNoReporta: false, count: 0,
-      };
+      groups[key] = { label: e.label, tipo: e.tipo, opKey: e.opKey, xs: [], ys: [], anyNoReporta: false, count: 0 };
     }
     const g = groups[key];
     g.xs.push(e.x); g.ys.push(e.y); g.count++;
-    if (e.stock != null) { g.stockSum += e.stock; g.hasStock = true; }
-    if (e.disp != null) g.dispSum += e.disp;
     if (e.reporta === false) g.anyNoReporta = true;
   }
-  return Object.values(groups).map(g => {
-    const x = g.xs.reduce((a, b) => a + b, 0) / g.xs.length;
-    const y = g.ys.reduce((a, b) => a + b, 0) / g.ys.length;
-    const occ = g.hasStock && g.stockSum > 0
-      ? Math.max(0, Math.min(100, (g.stockSum - g.dispSum) / g.stockSum * 100))
-      : null;
-    return {
-      x, y, label: g.label, tipo: g.tipo, opKey: g.opKey, occ,
-      reporta: !g.anyNoReporta, stock: g.hasStock ? g.stockSum : null,
-      disp: g.hasStock ? g.dispSum : null, count: g.count,
-    };
-  });
+  return Object.values(groups).map(g => ({
+    x: g.xs.reduce((a, b) => a + b, 0) / g.xs.length,
+    y: g.ys.reduce((a, b) => a + b, 0) / g.ys.length,
+    label: g.label, tipo: g.tipo, opKey: g.opKey,
+    reporta: !g.anyNoReporta, count: g.count,
+  }));
 }
 
-function _renderShapeLegend(shapeMap, shapeLabel, hasReportaCol, hasSizeCol) {
+function _renderLegend(colorMap, colorLabel, hasReportaCol) {
   const cont = document.getElementById('cruzShapeLegend');
   if (!cont) return;
-  const entries = Object.entries(shapeMap);
-  if (!entries.length) { cont.innerHTML = ''; return; }
-  const glyphs = { circle: '●', triangle: '▲', rect: '■', rectRot: '◆', star: '★', cross: '✚' };
-  let html = `<span class="cruz-legend-title">${shapeLabel}</span>` +
-    entries.map(([k, shape]) => `<span class="cruz-legend-item">${glyphs[shape] ?? '●'} ${k}</span>`).join('');
-  if (hasSizeCol) {
-    html += `
-      <span class="cruz-legend-title cruz-legend-sep">Ocupación</span>
-      <span class="cruz-legend-item"><span class="cruz-legend-dot" style="opacity:${MIN_ALPHA}"></span> Vacío</span>
-      <span class="cruz-legend-item"><span class="cruz-legend-dot" style="opacity:${MAX_ALPHA}"></span> Lleno</span>`;
+  const entries = Object.entries(colorMap);
+  let html = '';
+  if (entries.length) {
+    html += `<span class="cruz-legend-title">${colorLabel}</span>` +
+      entries.map(([k, color]) => `<span class="cruz-legend-item"><span class="cruz-legend-swatch" style="background:${color}"></span>${k}</span>`).join('');
   }
   if (hasReportaCol) {
     html += `
@@ -144,16 +204,10 @@ export function renderCruz(state, cruzConfig, mp) {
     cruzConfig.colorCandidates.some(k => norm(c.name).includes(norm(k))));
   const shapeCol = state.columns.find(c =>
     cruzConfig.shapeCandidates.some(k => norm(c.name).includes(norm(k))));
-  const sizeCol = state.columns.find(c =>
-    cruzConfig.sizeCandidates.some(k => norm(c.name).includes(norm(k))));
   const reportaCol = state.columns.find(c =>
     cruzConfig.reportaCandidates.some(k => norm(c.name).includes(norm(k))));
   const projCol = state.columns.find(c =>
     (cruzConfig.projCandidates ?? ['proyecto', 'edificio', 'nombre']).some(k => norm(c.name).includes(norm(k))));
-  const stockCol = state.columns.find(c =>
-    (cruzConfig.stockCandidates ?? ['stock']).some(k => norm(c.name).includes(norm(k))));
-  const dispoCol = state.columns.find(c =>
-    (cruzConfig.dispoCandidates ?? ['disponibilidad']).some(k => norm(c.name).includes(norm(k))));
 
   if (!xCol || !yCol) return;
 
@@ -161,26 +215,13 @@ export function renderCruz(state, cruzConfig, mp) {
   const ctx = document.getElementById('cruzChart')?.getContext('2d');
   if (!ctx) return;
 
-  const shapeMap = {};
   const colorMap = {};
-  let shapeIdx = 0, colorIdx = 0;
-
-  const getShape = v => {
-    const key = String(v ?? '—');
-    if (!(key in shapeMap)) shapeMap[key] = SHAPES[shapeIdx++ % SHAPES.length];
-    return shapeMap[key];
-  };
+  let colorIdx = 0;
   const getColor = v => {
     const key = String(v ?? '—');
     if (!(key in colorMap)) colorMap[key] = palette[colorIdx++ % palette.length];
     return colorMap[key];
   };
-  const getAlpha = occ => {
-    if (occ == null || isNaN(occ)) return (MIN_ALPHA + MAX_ALPHA) / 2;
-    const pct = Math.max(0, Math.min(100, occ));
-    return MIN_ALPHA + (MAX_ALPHA - MIN_ALPHA) * (pct / 100);
-  };
-  const withAlpha = (hex, alpha) => hex + Math.round(alpha * 255).toString(16).padStart(2, '0');
 
   const entries = [];
   for (const r of state.filtered) {
@@ -189,17 +230,10 @@ export function renderCruz(state, cruzConfig, mp) {
 
     const opKey   = colorCol ? String(r[colorCol.name] ?? '—') : '—';
     const tipoKey = shapeCol ? String(r[shapeCol.name] ?? '—') : '—';
-    const occ     = sizeCol ? _parsePct(r[sizeCol.name]) : null;
     const reporta = reportaCol ? _parseBool(r[reportaCol.name]) : null;
     const proj    = projCol ? String(r[projCol.name] ?? '—') : '—';
-    const stock   = stockCol ? Number(r[stockCol.name]) : null;
-    const disp    = dispoCol ? Number(r[dispoCol.name]) : null;
 
-    entries.push({
-      x: xv, y: yv, label: proj, tipo: tipoKey, opKey, occ, reporta,
-      stock: stock != null && !isNaN(stock) ? stock : null,
-      disp: disp != null && !isNaN(disp) ? disp : null,
-    });
+    entries.push({ x: xv, y: yv, label: proj, tipo: tipoKey, opKey, reporta });
   }
 
   if (!entries.length) return;
@@ -214,22 +248,18 @@ export function renderCruz(state, cruzConfig, mp) {
   for (const p of points) {
     if (!groups[p.opKey]) groups[p.opKey] = { color: getColor(p.opKey), data: [] };
     groups[p.opKey].data.push({
-      x: p.x, y: p.y, label: p.label, tipo: p.tipo, occ: p.occ, reporta: p.reporta, count: p.count,
-      pointStyle: getShape(p.tipo),
-      r: POINT_R,
-      fill: withAlpha(groups[p.opKey].color, getAlpha(p.occ)),
+      x: p.x, y: p.y, label: p.label, tipo: p.tipo, reporta: p.reporta, count: p.count,
     });
   }
 
   const datasets = Object.entries(groups).map(([op, g]) => ({
     label: op,
     data: g.data,
-    backgroundColor: g.data.map(p => p.fill),
+    backgroundColor: g.color + 'CC',
     borderColor: g.color,
     borderWidth: 1.5,
-    pointStyle: g.data.map(p => p.pointStyle),
-    pointRadius: g.data.map(p => p.r),
-    pointHoverRadius: g.data.map(p => p.r + 2),
+    pointRadius: POINT_R,
+    pointHoverRadius: POINT_R + 2,
   }));
 
   const ANN_COLOR = '#6b7280';
@@ -264,6 +294,7 @@ export function renderCruz(state, cruzConfig, mp) {
     },
   };
 
+  // Anillo punteado superpuesto para las unidades que no reportan.
   const reportRingPlugin = {
     id: 'cruzReportRing',
     afterDatasetsDraw(chart) {
@@ -275,13 +306,12 @@ export function renderCruz(state, cruzConfig, mp) {
           const el = meta.data[i];
           if (!el) return;
           const { x, y } = el.getProps(['x', 'y'], true);
-          const r = (pt.r ?? 6) + 3;
           c.save();
           c.setLineDash([4, 3]);
           c.lineWidth = 1.5;
           c.strokeStyle = ds.borderColor ?? '#374151';
           c.beginPath();
-          c.arc(x, y, r, 0, Math.PI * 2);
+          c.arc(x, y, POINT_R + 3, 0, Math.PI * 2);
           c.stroke();
           c.restore();
         });
@@ -307,7 +337,6 @@ export function renderCruz(state, cruzConfig, mp) {
               if (d.tipo) parts.push(d.tipo);
               parts.push(`${xFmt(d.x)} ${cruzConfig.xLabel}`);
               parts.push(`${yFmt(d.y)} ${cruzConfig.yLabel}`);
-              if (d.occ != null) parts.push(`Ocupación: ${d.occ.toFixed(0)}%`);
               if (d.reporta != null) parts.push(d.reporta ? 'Reporta' : 'No reporta');
               if (d.count > 1) parts.push(`${d.count} unidades`);
               return parts.join(' · ');
@@ -331,5 +360,6 @@ export function renderCruz(state, cruzConfig, mp) {
     },
   });
 
-  _renderShapeLegend(shapeMap, cruzConfig.shapeLabel ?? 'Tipología', !!reportaCol, !!sizeCol);
+  _renderLegend(colorMap, cruzConfig.colorLabel ?? 'Operador', !!reportaCol);
+  _updateCruzFilterWidget(state);
 }

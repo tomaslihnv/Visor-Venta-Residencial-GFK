@@ -136,9 +136,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   border: 1.5px solid #6b7280; box-sizing: border-box;
 }
 .cruz-legend-ring-dashed { border-style: dashed; }
-.cruz-legend-dot {
-  display: inline-block; width: 11px; height: 11px; border-radius: 50%;
-  background: #374151;
+.cruz-legend-swatch {
+  display: inline-block; width: 11px; height: 11px; border-radius: 3px;
 }
 
 /* ========== Distribución — marcadores ========== */
