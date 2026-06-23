@@ -312,14 +312,6 @@ function _enableAnnotationLabelDrag(chart) {
   canvas.addEventListener('mouseleave', _stop);
 }
 
-function _computeQuantileCurve(rows, col) {
-  const vals = rows.map(r => Number(r[col])).filter(v => !isNaN(v) && v > 0);
-  if (vals.length < 2) return [];
-  vals.sort((a, b) => a - b);
-  const n = vals.length;
-  return vals.map((v, i) => ({ x: (i / (n - 1)) * 100, y: v }));
-}
-
 function _lerpAtX(data, x) {
   if (!data.length) return null;
   if (x <= data[0].x) return data[0].y;
@@ -414,20 +406,18 @@ export function renderDistrib(state, distribCols, mp) {
 // ── Modo Acumulada (CDF) ──────────────────────────────────────────────────
 
 function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
-  const refData   = _computeQuantileCurve(
-    [{ [col]: null }].concat(sortedVals.map(v => ({ [col]: v }))).slice(1), col
-  );
-  // Recalculate properly
   const n = sortedVals.length;
-  const refDataClean = Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return { x: pct, y: sortedVals[idx] };
-  });
 
+  // Cuantil con interpolación lineal entre estadísticos de orden (evita el
+  // efecto "escalera" de redondear al dato más cercano con pocas muestras).
   const valAtPct = pct => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return sortedVals[Math.max(0, idx)];
+    const h = (pct / 100) * (n - 1);
+    const lo = Math.floor(h), hi = Math.ceil(h);
+    if (lo === hi) return sortedVals[lo];
+    return sortedVals[lo] + (h - lo) * (sortedVals[hi] - sortedVals[lo]);
   };
+
+  const refDataClean = Array.from({ length: 101 }, (_, pct) => ({ x: pct, y: valAtPct(pct) }));
 
   const normalFit = showNormal ? _computeNormalFit(sortedVals, refDataClean) : null;
 
@@ -435,7 +425,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
     label: col,
     data: refDataClean,
     borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.10)',
-    pointRadius: 0, borderWidth: 2, tension: 0.4, fill: true,
+    pointRadius: 0, borderWidth: 2, cubicInterpolationMode: 'monotone', fill: true,
   }];
 
   if (normalFit) {
@@ -443,7 +433,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
       label: `Normal (μ=${_fmtVal(normalFit.mu)}, σ=${_fmtVal(normalFit.sigma)})`,
       data: normalFit.curve,
       borderColor: '#f97316', backgroundColor: 'transparent',
-      pointRadius: 0, borderWidth: 2, borderDash: [6, 3], tension: 0.3, fill: false,
+      pointRadius: 0, borderWidth: 2, borderDash: [6, 3], cubicInterpolationMode: 'monotone', fill: false,
     });
   }
 

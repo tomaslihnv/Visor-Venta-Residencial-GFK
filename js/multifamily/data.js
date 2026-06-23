@@ -1,5 +1,6 @@
 import { detectColType } from '../core/utils.js';
 import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, SAVED_DATASETS } from './config.js';
+import { attachStarMetrics } from './estrellas.js';
 
 // ── Estado global del visor ────────────────────────────────────────────────
 export const state = {
@@ -90,7 +91,7 @@ function loadFile(file) {
       const ws  = wb.Sheets[sheetName];
       const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
       if (!raw.length) { alert(`La hoja "${sheetName}" está vacía.`); return; }
-      onDataLoaded(_normalizeRows(raw));
+      attachStarMetrics(_normalizeRows(raw)).then(onDataLoaded);
     } catch (err) {
       console.error(err);
       alert('Error leyendo el archivo: ' + err.message);
@@ -107,6 +108,7 @@ function loadSavedDataset(entry) {
       if (!r.ok) throw new Error(`No se encontró ${entry.file}`);
       return r.json();
     })
+    .then(rows => attachStarMetrics(rows))
     .then(rows => {
       if (fileNameEl) fileNameEl.textContent = entry.label;
       onDataLoaded(rows);

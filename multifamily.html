@@ -123,6 +123,7 @@
       </div>
 
       <div id="dashboard" class="dashboard hidden">
+        <div id="starDataWarning" class="filter-io-fb-warn star-data-warning hidden"></div>
         <div class="kpis" id="kpis"></div>
 
         <div class="tabs">
@@ -184,6 +185,10 @@
           <div class="chart-controls">
             <button id="svpFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
             <div class="ctrl">
+              <label>Eje X</label>
+              <select id="svpXAxis"></select>
+            </div>
+            <div class="ctrl">
               <label>Eje Y</label>
               <select id="svpYAxis"></select>
             </div>
@@ -196,7 +201,7 @@
               <span>Línea de promedio</span>
             </label>
             <div class="ctrl distrib-marker-group">
-              <label>Marcar m² útil</label>
+              <label id="svpMarkLabel">Marcar Útil (m²)</label>
               <div class="marker-add">
                 <input type="number" id="svpM2Input" min="1" step="1" placeholder="ej: 50">
                 <button id="svpAddM2" class="marker-btn pct-btn">+</button>
