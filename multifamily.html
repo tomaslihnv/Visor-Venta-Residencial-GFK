@@ -25,6 +25,7 @@
         <span>Cargar Excel</span>
       </label>
       <span id="fileName" class="file-name"></span>
+      <button id="saveJsonBtn" class="ghost-btn" title="Descargar los datos cargados como JSON para guardarlos en data/multifamily/">Guardar JSON</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
   </header>
@@ -100,6 +101,17 @@
           </div>
         </div>
       </div>
+
+      <!-- DATASETS GUARDADOS -->
+      <div class="mp-panel" id="savedDatasetsPanel">
+        <div class="mp-panel-header" id="savedDatasetsPanelHeader">
+          <span class="mp-panel-title">Datasets guardados</span>
+          <span class="mp-chevron" id="savedDatasetsChevron">▾</span>
+        </div>
+        <div id="savedDatasetsPanelBody" class="mp-panel-body">
+          <div id="savedDatasetsList" class="saved-datasets-sidebar-list"></div>
+        </div>
+      </div>
     </aside>
 
     <section class="content">
@@ -111,12 +123,14 @@
       </div>
 
       <div id="dashboard" class="dashboard hidden">
+        <div id="starDataWarning" class="filter-io-fb-warn star-data-warning hidden"></div>
         <div class="kpis" id="kpis"></div>
 
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
           <button class="tab" data-tab="proyectos">Proyectos</button>
           <button class="tab" data-tab="svp">Dispersión</button>
+          <button class="tab" data-tab="cruz">Cruz</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="comparativa">Resumen</button>
           <button class="tab" data-tab="tabla">Datos</button>
@@ -134,12 +148,12 @@
               <div class="map-toolbar">
                 <button class="map-mode-btn active" data-mode="general">General</button>
                 <button class="map-mode-btn" data-mode="precio">De calor</button>
-                <button id="mapFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar resumen de filtros activos">&#x2263; Filtros</button>
-                <button id="mapSelectBtn" class="map-mode-btn" title="Dibuja un polígono para excluir/mantener proyectos. Esc para cancelar.">&#x2B1A; Seleccionar zona</button>
-                <button id="mapUndoBtn" class="map-mode-btn map-undo-btn hidden" title="Deshacer última acción de selección (Ctrl+Z)">&#x21A9; Deshacer</button>
-                <button id="mapClearPolyBtn" class="map-mode-btn map-clearpoly-btn hidden" title="Quitar la zona marcada del mapa">&#x2715; Limpiar zona</button>
-                <button id="mapResumenWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar resumen de stock">&#x2263; Resumen</button>
-                <button id="mapSatelliteBtn" class="map-mode-btn" title="Alternar mapa / satélite">Satélite</button>
+                <button id="mapFilterWidgetBtn" class="map-mode-btn map-toolbar-toggle" title="Mostrar/ocultar panel de filtros activos">&#x2263; Filtros</button>
+                <button id="mapResumenWidgetBtn" class="map-mode-btn" title="Mostrar/ocultar panel de resumen de stock">&#x2263; Resumen</button>
+                <button id="mapSelectBtn" class="map-mode-btn map-toolbar-toggle" title="Dibuja un polígono para excluir/mantener proyectos. Esc para cancelar.">&#x2B1A; Seleccionar zona</button>
+                <button id="mapUndoBtn" class="map-mode-btn map-undo-btn hidden" title="Deshacer la última exclusión/inclusión de proyectos por zona (Ctrl+Z)">&#x21A9; Deshacer</button>
+                <button id="mapClearPolyBtn" class="map-mode-btn map-clearpoly-btn hidden" title="Solo borra el dibujo del polígono — no afecta los proyectos ya incluidos/excluidos">&#x2715; Limpiar dibujo</button>
+                <button id="mapSatelliteBtn" class="map-mode-btn map-toolbar-toggle" title="Alternar mapa / satélite">Satélite</button>
                 <button id="mapTableExportBtn" class="primary-btn">Copiar tabla</button>
                 <div class="heat-metric-pills hidden" id="heatMetricPills">
                   <span class="heat-metric-label">Métrica:</span>
@@ -171,6 +185,10 @@
           <div class="chart-controls">
             <button id="svpFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
             <div class="ctrl">
+              <label>Eje X</label>
+              <select id="svpXAxis"></select>
+            </div>
+            <div class="ctrl">
               <label>Eje Y</label>
               <select id="svpYAxis"></select>
             </div>
@@ -183,7 +201,7 @@
               <span>Línea de promedio</span>
             </label>
             <div class="ctrl distrib-marker-group">
-              <label>Marcar m² útil</label>
+              <label id="svpMarkLabel">Marcar Útil (m²)</label>
               <div class="marker-add">
                 <input type="number" id="svpM2Input" min="1" step="1" placeholder="ej: 50">
                 <button id="svpAddM2" class="marker-btn pct-btn">+</button>
@@ -210,6 +228,40 @@
           </div>
           <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>
+          </div>
+        </div>
+
+        <!-- TAB: CRUZ -->
+        <div class="tab-panel" data-panel="cruz">
+          <div class="chart-controls">
+            <button id="cruzFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
+            <label class="toggle-check">
+              <input type="checkbox" id="cruzGroupToggle" />
+              <span>Agrupar tipologías por proyecto</span>
+            </label>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="cruzFontSize" min="8" max="36" step="1" value="11">
+                <span id="cruzFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="cruz-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="cruz-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="cruz-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="cruz-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <button id="cruzExportPngBtn" class="primary-btn">Copiar imagen</button>
+          </div>
+          <div class="cruz-body">
+            <div class="chart-wrap" id="cruzWrap">
+              <canvas id="cruzChart"></canvas>
+            </div>
+            <div id="cruzShapeLegend" class="cruz-shape-legend"></div>
           </div>
         </div>
 

@@ -5,6 +5,15 @@
 // SVP, DISTRIB_COLS, MAP y COMPARATIVA.
 // ============================================================
 
+// Datasets pre-cargados (data/multifamily/*.json) seleccionables desde el
+// dropzone, sin tener que arrastrar el Excel cada vez. Para agregar uno:
+// 1. Cargar el Excel normalmente y usar el botón "Guardar JSON".
+// 2. Mover el archivo descargado a data/multifamily/.
+// 3. Agregar una entrada acá con su label y el path del archivo.
+export const SAVED_DATASETS = [
+  { label: 'Multifamily', file: 'data/multifamily/multifamily.json' },
+];
+
 export const COLUMN_MAP = {
   'Proyecto':              'Proyecto',
   'Propietario':           'Propietario',
@@ -19,6 +28,8 @@ export const COLUMN_MAP = {
   'Arriendo UF':           'Arriendo UF',
   'Arriendo UF/m²':        'UF/m²',
   'Estado':                'Estado',
+  'Ocupación':             'Ocupación (%)',
+  'Reporta':               'Reporta',
   'Latitud':               '__lat',
   'Longitud':              '__lng',
 };
@@ -35,6 +46,9 @@ export const FILTERS = [
   { key: 'ufm2',          candidates: ['uf/m', 'uf / m'],     label: 'UF/m²',          type: 'slider', step: 0.01 },
   { key: 'stock',         candidates: ['stock'],               label: 'Stock',          type: 'slider', step: 1 },
   { key: 'sup',           candidates: ['util (m', 'útil (m', 'm² util'], label: 'm² útil', type: 'slider', step: 1 },
+  { key: 'reporta',       candidates: ['reporta'],             label: 'Reporta',        type: 'multi' },
+  { key: 'ocupacion',     candidates: ['ocupacion'],           label: 'Ocupación (%)', type: 'slider', step: 1 },
+  { key: 'rating',        candidates: ['rating'],              label: 'Rating Google',  type: 'slider', step: 0.1 },
 ];
 
 // ── KPIs ───────────────────────────────────────────────────────────────────
@@ -45,6 +59,7 @@ export const KPIS = [
   { label: 'Vacancia prom.',    col: 'Vacancia (%)', agg: 'avg',         fmt: 'pct', sub: '%' },
   { label: 'Arriendo UF prom.', col: 'Arriendo UF',  agg: 'avg',        fmt: 'uf1', sub: 'UF/mes' },
   { label: 'UF/m² prom.',       col: 'UF/m²',        agg: 'avg',        fmt: 'uf2' },
+  { label: 'Rating Google prom.', col: 'Rating',     agg: 'avg',        fmt: 'uf2' },
 ];
 
 // ── Gráfico Proyectos ──────────────────────────────────────────────────────
@@ -73,8 +88,56 @@ export const PROYECTOS_METRICS = [
 
 // ── Sup. vs Arriendo (SVP) ─────────────────────────────────────────────────
 export const SVP = {
-  xCandidates:    ['util (m', 'útil (m', 'm² util'],
-  xLabel:         'Útil (m²)',
+  xOptions: [
+    {
+      value:       'util',
+      label:       'Útil (m²)',
+      candidates:  ['util (m', 'útil (m', 'm² util'],
+      formatValue: v => `${v.toLocaleString('es-CL')} m²`,
+    },
+    {
+      value:       'arriendo',
+      label:       'Arriendo UF',
+      candidates:  ['arriendo uf', 'arriendo'],
+      formatValue: v => `${v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} UF`,
+    },
+    {
+      value:       'ufm2',
+      label:       'UF/m²',
+      candidates:  ['uf/m', 'uf / m'],
+      formatValue: v => `${v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} UF/m²`,
+    },
+    {
+      value:       'vacancia',
+      label:       'Vacancia (%)',
+      candidates:  ['vacancia'],
+      formatValue: v => `${v.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%`,
+    },
+    {
+      value:       'ocupacion',
+      label:       'Ocupación (%)',
+      candidates:  ['ocupacion'],
+      formatValue: v => `${v.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%`,
+    },
+    {
+      value:       'stock',
+      label:       'Stock',
+      candidates:  ['stock'],
+      formatValue: v => v.toLocaleString('es-CL'),
+    },
+    {
+      value:       'disponib',
+      label:       'Disponibilidad',
+      candidates:  ['disponibilidad'],
+      formatValue: v => v.toLocaleString('es-CL'),
+    },
+    {
+      value:       'rating',
+      label:       'Rating Google',
+      candidates:  ['rating'],
+      formatValue: v => `${v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ★`,
+    },
+  ],
   yOptions: [
     {
       value:       'arriendo',
@@ -97,10 +160,65 @@ export const SVP = {
       formatValue: v => `${v.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%`,
       formatAvg:   v => `Prom.: ${v.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%`,
     },
+    {
+      value:       'ocupacion',
+      label:       'Ocupación (%)',
+      candidates:  ['ocupacion'],
+      formatValue: v => `${v.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%`,
+      formatAvg:   v => `Prom.: ${v.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%`,
+    },
+    {
+      value:       'stock',
+      label:       'Stock',
+      candidates:  ['stock'],
+      formatValue: v => v.toLocaleString('es-CL'),
+      formatAvg:   v => `Prom.: ${v.toLocaleString('es-CL')}`,
+    },
+    {
+      value:       'disponib',
+      label:       'Disponibilidad',
+      candidates:  ['disponibilidad'],
+      formatValue: v => v.toLocaleString('es-CL'),
+      formatAvg:   v => `Prom.: ${v.toLocaleString('es-CL')}`,
+    },
+    {
+      value:       'rating',
+      label:       'Rating Google',
+      candidates:  ['rating'],
+      formatValue: v => `${v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ★`,
+      formatAvg:   v => `Prom.: ${v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ★`,
+    },
   ],
   // No group column for multifamily (building-level, no tipología)
   groupCandidates: [],
   projCandidates:  ['proyecto', 'edificio', 'nombre'],
+  // Cuadrito de resumen dentro del gráfico
+  summaryFields: [
+    { label: 'Proyectos',         candidates: ['proyecto', 'edificio', 'nombre'], agg: 'countUnique' },
+    { label: 'Stock',             candidates: ['stock'],          agg: 'sum',
+      fmt: v => v.toLocaleString('es-CL') },
+    { label: 'UF/m² prom.',       candidates: ['uf/m', 'uf / m'], agg: 'avg',
+      fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
+    { label: 'Arriendo UF prom.', candidates: ['arriendo uf', 'arriendo'], agg: 'avg',
+      fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
+  ],
+};
+
+// ── Gráfico de Cruz (Sup. vs UF/m², color/forma/tamaño/reporte) ─────────────
+export const CRUZ = {
+  xCandidates:       ['util (m', 'útil (m', 'm² util'],
+  xLabel:            'Útil (m²)',
+  yCandidates:       ['uf/m', 'uf / m'],
+  yLabel:            'UF/m²',
+  colorCandidates:   ['administrador'],
+  colorLabel:        'Operador',
+  shapeCandidates:   ['programa'],
+  shapeLabel:        'Tipología',
+  sizeCandidates:    ['ocupacion'],
+  reportaCandidates: ['reporta'],
+  stockCandidates:   ['stock'],
+  dispoCandidates:   ['disponibilidad'],
+  projCandidates:    ['proyecto', 'edificio', 'nombre'],
 };
 
 // ── Distribución ───────────────────────────────────────────────────────────
@@ -127,11 +245,11 @@ export const MAP = {
     { label: 'Programa',      keys: ['programa'] },
     { label: 'Estado',        keys: ['estado'] },
     { label: 'Período',       keys: ['período', 'periodo'] },
-    { label: 'Stock',         keys: ['stock'] },
-    { label: 'Disponib.',     keys: ['disponibilidad'] },
+    { label: 'Stock',         keys: ['stock'], agg: 'sum' },
+    { label: 'Disponib.',     keys: ['disponibilidad'], agg: 'sum' },
     { label: 'Vacancia (%)',  keys: ['vacancia'] },
     { label: 'Arriendo UF',   keys: ['arriendo uf', 'arriendo'] },
-    { label: 'UF/m²',         keys: ['uf/m', 'uf / m'] },
+    { label: 'UF/m²',         keys: ['uf/m', 'uf / m'], agg: 'avg' },
   ],
 };
 
@@ -150,6 +268,8 @@ export const COMPARATIVA = {
     { label: 'Vacancia %',  candidates: ['vacancia'],      fmt: 'pct' },
     { label: 'Arriendo UF', candidates: ['arriendo uf', 'arriendo'], fmt: 'uf1' },
     { label: 'UF/m²',       candidates: ['uf/m', 'uf / m'], fmt: 'uf2' },
+    { label: 'Rating',      candidates: ['rating'],         fmt: 'uf2' },
+    { label: 'Reseñas',     candidates: ['resenas total', 'reseñas total'], fmt: 'int' },
   ],
 };
 

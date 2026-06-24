@@ -1,8 +1,8 @@
 import { $, $$ } from '../core/utils.js';
 import { resetFilters } from '../core/filters.js';
-import { exportCsv }   from '../core/export.js';
+import { exportCsv, exportJson } from '../core/export.js';
 import { initFilterIO } from '../core/filter-io.js';
-import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './data.js';
+import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './data.js';
 
 // ── Mi Proyecto change → re-render pestaña activa ─────────────────────────
 document.addEventListener('mpchange', async () => {
@@ -21,6 +21,9 @@ document.addEventListener('mpchange', async () => {
   } else if (tab === 'svp') {
     const { renderSvp } = await import('../core/chart-svp.js');
     renderSvp(state, SVP, mp);
+  } else if (tab === 'cruz') {
+    const { renderCruz } = await import('../core/chart-cruz.js');
+    renderCruz(state, CRUZ, mp);
   } else if (tab === 'proyectos') {
     const { renderProyectos } = await import('../core/chart-proyectos.js');
     renderProyectos(state, PROYECTOS_METRICS, mp, { projectCandidates: MAP.projectCandidates });
@@ -31,6 +34,14 @@ document.addEventListener('mpchange', async () => {
 $('#filtrosPanelHeader')?.addEventListener('click', () => {
   const body    = $('#filtrosPanelBody');
   const chevron = $('#filtrosChevron');
+  body?.classList.toggle('mp-collapsed');
+  if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
+});
+
+// ── Datasets guardados collapse ────────────────────────────────────────────
+$('#savedDatasetsPanelHeader')?.addEventListener('click', () => {
+  const body    = $('#savedDatasetsPanelBody');
+  const chevron = $('#savedDatasetsChevron');
   body?.classList.toggle('mp-collapsed');
   if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
 });
@@ -50,6 +61,7 @@ $('#resetBtn')?.addEventListener('click', async () => {
     const mpCurrent = (await import('./miProyecto.js')).mp;
     if (tab === 'distribucion') (await import('../core/chart-distrib.js')).renderDistrib(_state, DISTRIB_COLS, mpCurrent);
     if (tab === 'svp')          (await import('../core/chart-svp.js')).renderSvp(_state, SVP, mpCurrent);
+    if (tab === 'cruz')         (await import('../core/chart-cruz.js')).renderCruz(_state, CRUZ, mpCurrent);
     if (tab === 'proyectos')    (await import('../core/chart-proyectos.js')).renderProyectos(_state, PROYECTOS_METRICS, mpCurrent, { projectCandidates: MAP.projectCandidates });
     if (tab === 'comparativa')  (await import('../core/comparativa.js')).renderComparativa(_state, COMPARATIVA, mpCurrent);
     if (tab === 'mapa')         (await import('../core/map.js')).renderMap(_state, MAP, mpCurrent);
@@ -83,6 +95,9 @@ $$('.tab').forEach(tab => {
       case 'svp':
         (await import('../core/chart-svp.js')).renderSvp(state, SVP, mp);
         break;
+      case 'cruz':
+        (await import('../core/chart-cruz.js')).renderCruz(state, CRUZ, mp);
+        break;
       case 'proyectos':
         (await import('../core/chart-proyectos.js')).renderProyectos(state, PROYECTOS_METRICS, mp, { projectCandidates: MAP.projectCandidates });
         break;
@@ -115,4 +130,14 @@ import('../core/filters.js').then(({ getFilterState, applyFilterState }) => {
 // ── Exportar CSV ───────────────────────────────────────────────────────────
 $('#exportCsvBtn')?.addEventListener('click', () => {
   exportCsv(state, CSV_FILENAME);
+});
+
+// ── Guardar JSON (para data/multifamily/) ──────────────────────────────────
+$('#saveJsonBtn')?.addEventListener('click', () => {
+  if (!state.raw.length) { alert('Cargá un Excel primero.'); return; }
+  const name = prompt('Nombre del archivo (sin extensión):', CSV_FILENAME);
+  if (!name) return;
+  const safeName = name.trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
+  if (!safeName) return;
+  exportJson(state, safeName);
 });
