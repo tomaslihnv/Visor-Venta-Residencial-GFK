@@ -1,6 +1,7 @@
 import { detectColType } from '../core/utils.js';
 import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, SAVED_DATASETS } from './config.js';
 import { attachStarMetrics } from './estrellas.js';
+import { fetchMultifamily } from './api.js';
 
 // ── Estado global del visor ────────────────────────────────────────────────
 export const state = {
@@ -139,6 +140,35 @@ function _renderSavedDatasetsList() {
 }
 _renderSavedDatasetsList();
 
+// ── Botón "Cargar desde API Inciti" ───────────────────────────────────────
+document.getElementById('loadApiBtn')?.addEventListener('click', async () => {
+  const btn      = document.getElementById('loadApiBtn');
+  const statusEl = document.getElementById('apiStatus');
+  btn.disabled = true;
+  statusEl.style.display = '';
+
+  const onProgress = msg => { statusEl.textContent = msg; };
+
+  try {
+    const rows = await fetchMultifamily({ onProgress });
+    onProgress(`Procesando ${rows.length} registros…`);
+    const normalized = _normalizeRows(rows);
+    if (!normalized.length) throw new Error('No se encontraron filas válidas tras normalizar. Revisa COLUMN_MAP_API en api.js.');
+    const withStars = await attachStarMetrics(normalized);
+    const fileNameEl = document.getElementById('fileName');
+    if (fileNameEl) fileNameEl.textContent = 'Inciti API';
+    onProgress('');
+    statusEl.style.display = 'none';
+    onDataLoaded(withStars);
+  } catch (err) {
+    console.error('[Inciti API]', err);
+    statusEl.textContent = '⚠ ' + err.message;
+    statusEl.style.color = '#dc2626';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ── onDataLoaded ───────────────────────────────────────────────────────────
 export function onDataLoaded(rows) {
   state.raw      = rows;
@@ -166,7 +196,7 @@ export function onDataLoaded(rows) {
     import('../core/chart-proyectos.js'),
     import('../core/map.js'),
   ]).then(([
-    { initMpPanel },
+    {},
     { buildFilters, applyFilters },
     { renderKpis },
     { initTableListeners, renderTable },
@@ -177,9 +207,31 @@ export function onDataLoaded(rows) {
     { resetMapOnLoad, geocodeData, renderMap },
   ]) => {
     import('./miProyecto.js').then(({ mp }) => {
-      initMpPanel();
-
       const container = document.getElementById('filtersContainer');
+
+      // Valor de "Mi Proyecto" para el gráfico de Proyectos, según la métrica
+      // elegida. Usado en los 3 lugares que pueden re-renderizar ese gráfico
+      // (filtros, mpchange, render inicial) para que Mi Proyecto no desaparezca
+      // al cambiar un filtro o togglear un checkbox de "Incluir en".
+      const getProyMpValue = (metricId, mp) => {
+        // Si hay Programas filtrados en el sidebar, promediar solo las
+        // tipologías de Mi Proyecto que coincidan (igual que los comparables).
+        const programaFilter = state.filterValues?.programa;
+        const tipos = (programaFilter?.size > 0)
+          ? (mp.tipologias ?? []).filter(t => programaFilter.has(t.nombre))
+          : (mp.tipologias ?? []);
+        const avgTipo = field => {
+          const vals = tipos.map(t => t[field]).filter(v => v != null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+        };
+        if (metricId === 'util')     return avgTipo('sup');
+        if (metricId === 'arriendo') return avgTipo('renta');
+        if (metricId === 'ufm2')     return avgTipo('ufm2');
+        if (metricId === 'stock')    return mp.stock ?? null;
+        if (metricId === 'vacancia') return mp.vacancia ?? null;
+        return null;
+      };
+      const proyOptions = { projectCandidates: MAP.projectCandidates, getMpValue: getProyMpValue };
 
       const onChange = _state => {
         renderKpis(_state.filtered, _state.raw.length, KPIS);
@@ -190,7 +242,7 @@ export function onDataLoaded(rows) {
           if (tab === 'distribucion') renderDistrib(_state, DISTRIB_COLS, mpCurrent);
           if (tab === 'svp')          renderSvp(_state, SVP, mpCurrent);
           if (tab === 'cruz')         renderCruz(_state, CRUZ, mpCurrent);
-          if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, mpCurrent, { projectCandidates: MAP.projectCandidates });
+          if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, mpCurrent, proyOptions);
           if (tab === 'comparativa')  import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_state, COMPARATIVA, mpCurrent));
           if (tab === 'mapa')         renderMap(_state, MAP, mpCurrent);
         });
@@ -202,7 +254,7 @@ export function onDataLoaded(rows) {
         renderDistrib:  (_s, _mp) => import('../core/chart-distrib.js').then(({ renderDistrib })  => renderDistrib(_s, DISTRIB_COLS, _mp)),
         renderSvp:      (_s, _mp) => import('../core/chart-svp.js').then(({ renderSvp })          => renderSvp(_s, SVP, _mp)),
         renderCruz:     (_s, _mp) => import('../core/chart-cruz.js').then(({ renderCruz })        => renderCruz(_s, CRUZ, _mp)),
-        renderProyectos:(_s, _mp) => import('../core/chart-proyectos.js').then(({ renderProyectos }) => renderProyectos(_s, PROYECTOS_METRICS, _mp, { projectCandidates: MAP.projectCandidates })),
+        renderProyectos:(_s, _mp) => import('../core/chart-proyectos.js').then(({ renderProyectos }) => renderProyectos(_s, PROYECTOS_METRICS, _mp, proyOptions)),
         renderMap:      (_s, _mp) => renderMap(_s, MAP, _mp),
         renderComparativa: (_s, _mp) => import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_s, COMPARATIVA, _mp)),
         state, onChange,
@@ -217,16 +269,7 @@ export function onDataLoaded(rows) {
       populateSvpSelectors(state, SVP);
       initSvpListeners(state, SVP, mp);
       initCruzListeners(state, CRUZ, mp);
-      initProyectosListeners(state, PROYECTOS_METRICS, mp, {
-        projectCandidates: MAP.projectCandidates,
-        getMpValue: (metricId, mp) => {
-          if (metricId === 'arriendo') return mp.arriendo ?? null;
-          if (metricId === 'ufm2')     return mp.ufm2 ?? null;
-          if (metricId === 'stock')    return mp.stock ?? null;
-          if (metricId === 'vacancia') return mp.vacancia ?? null;
-          return null;
-        },
-      });
+      initProyectosListeners(state, PROYECTOS_METRICS, mp, proyOptions);
       initTableListeners(state, onChange);
 
       resetMapOnLoad();

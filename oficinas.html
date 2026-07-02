@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visor Multifamily</title>
+  <title>Visor Oficinas</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
 </head>
@@ -11,14 +11,14 @@
   <nav class="app-nav">
     <a href="index.html"       class="nav-link">Venta</a>
     <a href="renta.html"       class="nav-link">Renta</a>
-    <a href="multifamily.html" class="nav-link active">Multifamily</a>
-    <a href="oficinas.html"    class="nav-link">Oficinas</a>
+    <a href="multifamily.html" class="nav-link">Multifamily</a>
+    <a href="oficinas.html"    class="nav-link active">Oficinas</a>
   </nav>
 
   <header class="topbar">
     <div class="brand">
       <span class="logo-dot"></span>
-      <h1>Visor Multifamily</h1>
+      <h1>Visor Oficinas</h1>
     </div>
     <div class="topbar-actions">
       <label class="file-btn">
@@ -26,7 +26,6 @@
         <span>Cargar Excel</span>
       </label>
       <span id="fileName" class="file-name"></span>
-      <button id="saveJsonBtn" class="ghost-btn" title="Descargar los datos cargados como JSON para guardarlos en data/multifamily/">Guardar JSON</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
   </header>
@@ -35,7 +34,7 @@
     <aside class="sidebar" id="sidebar">
 
       <!-- MI PROYECTO -->
-      <div id="miProyectoSection" class="mp-panel mp-panel-top hidden">
+      <div id="miProyectoSection" class="mp-panel mp-panel-top">
         <div class="mp-panel-header" id="mpPanelHeader">
           <span class="mp-panel-title">Mi Proyecto</span>
           <span class="mp-chevron" id="mpChevron">▾</span>
@@ -43,46 +42,35 @@
         <div id="mpPanelBody" class="mp-panel-body">
           <div class="mp-field">
             <label class="mp-label">Proyecto</label>
-            <input type="text" id="mpEdificio" class="mp-input" placeholder="Ej: Torre Norte" />
+            <input type="text" id="mpNombre" class="mp-input" placeholder="Ej: Oficina Isidora" />
           </div>
           <div class="mp-field">
             <label class="mp-label">Dirección</label>
             <input type="text" id="mpDireccion" class="mp-input" placeholder="Calle 123, Comuna, Chile" />
             <span class="mp-geo-status" id="mpGeoStatus"></span>
           </div>
-
-          <!-- Métricas del edificio -->
           <div class="mp-field">
-            <label class="mp-label">Métricas del edificio</label>
+            <label class="mp-label">Métricas</label>
             <div class="mp-tipo-metrics">
               <label class="mp-metric-row">
-                <span>Stock</span>
-                <input type="number" id="mpStock" class="mp-metric-input mp-input" min="0" step="1" placeholder="—" />
+                <span>Útil m²</span>
+                <input type="number" id="mpUtil" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
               </label>
               <label class="mp-metric-row">
-                <span>Vacancia (%)</span>
-                <input type="number" id="mpVacancia" class="mp-metric-input mp-input" min="0" max="100" step="0.1" placeholder="—" />
+                <span>UF/m²</span>
+                <input type="number" id="mpUfm2" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
+              </label>
+              <label class="mp-metric-row">
+                <span>Precio UF</span>
+                <input type="number" id="mpPrecio" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
               </label>
             </div>
           </div>
-
-          <!-- Unidades / tipologías -->
-          <div class="mp-field">
-            <div class="mp-tipos-header">
-              <label class="mp-label">Unidades por tipología</label>
-              <button id="mpAddTipo" class="mp-add-btn" type="button">+ Agregar</button>
-            </div>
-            <div id="mpTiposContainer" class="mp-tipos-container"></div>
-          </div>
-
           <div class="mp-includes">
             <span class="mp-label">Incluir en:</span>
-            <label class="mp-check-row"><input type="checkbox" id="mpInComp" /><span>Tabla comparativa</span></label>
             <label class="mp-check-row"><input type="checkbox" id="mpInMapa" /><span>Mapa</span></label>
+            <label class="mp-check-row"><input type="checkbox" id="mpInSvp" /><span>Dispersión</span></label>
             <label class="mp-check-row"><input type="checkbox" id="mpInDistrib" /><span>Distribución</span></label>
-            <label class="mp-check-row"><input type="checkbox" id="mpInSvp" /><span>Sup. vs Arriendo</span></label>
-            <label class="mp-check-row"><input type="checkbox" id="mpInCruz" /><span>Cruz</span></label>
-            <label class="mp-check-row"><input type="checkbox" id="mpInProy" /><span>Proyectos</span></label>
           </div>
         </div>
       </div>
@@ -104,40 +92,23 @@
           </div>
         </div>
       </div>
-
-      <!-- DATASETS GUARDADOS -->
-      <div class="mp-panel" id="savedDatasetsPanel">
-        <div class="mp-panel-header" id="savedDatasetsPanelHeader">
-          <span class="mp-panel-title">Datasets guardados</span>
-          <span class="mp-chevron" id="savedDatasetsChevron">▾</span>
-        </div>
-        <div id="savedDatasetsPanelBody" class="mp-panel-body">
-          <div id="savedDatasetsList" class="saved-datasets-sidebar-list"></div>
-        </div>
-      </div>
     </aside>
 
     <section class="content">
       <div id="dropzone" class="dropzone">
         <div class="dropzone-inner">
           <h2>Arrastrá tu Excel acá</h2>
-          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>, o cargá directo desde la API de Inciti.</p>
-          <button type="button" id="loadApiBtn" class="primary-btn" style="margin-top:12px">
-            Cargar desde API Inciti
-          </button>
-          <p id="apiStatus" style="font-size:0.85em;margin-top:8px;color:#6b7280;display:none"></p>
+          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>. El archivo debe tener columnas de Latitud/Longitud (listado de ofertas de arriendo/venta de oficinas).</p>
         </div>
       </div>
 
       <div id="dashboard" class="dashboard hidden">
-        <div id="starDataWarning" class="filter-io-fb-warn star-data-warning hidden"></div>
         <div class="kpis" id="kpis"></div>
 
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
-          <button class="tab" data-tab="proyectos">Proyectos</button>
+          <button class="tab" data-tab="proyectos">Por corredor</button>
           <button class="tab" data-tab="svp">Dispersión</button>
-          <button class="tab" data-tab="cruz">Cruz</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="comparativa">Resumen</button>
           <button class="tab" data-tab="tabla">Datos</button>
@@ -165,8 +136,7 @@
                 <div class="heat-metric-pills hidden" id="heatMetricPills">
                   <span class="heat-metric-label">Métrica:</span>
                   <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
-                  <button class="heat-metric-btn" data-metric="arriendo">Arriendo UF</button>
-                  <button class="heat-metric-btn" data-metric="vacancia">Vacancia %</button>
+                  <button class="heat-metric-btn" data-metric="precio">Precio UF</button>
                 </div>
               </div>
               <div id="map" class="map"></div>
@@ -176,14 +146,52 @@
           </div>
         </div>
 
-        <!-- TAB: COMPARATIVA -->
-        <div class="tab-panel" data-panel="comparativa">
-          <div class="panel-toolbar">
-            <div></div>
-            <button id="exportCompBtn" class="primary-btn">Copiar tabla</button>
+        <!-- TAB: POR CORREDOR -->
+        <div class="tab-panel" data-panel="proyectos">
+          <div class="chart-controls">
+            <div class="ctrl">
+              <label>Métrica</label>
+              <select id="proyMetrica">
+                <option value="precio">Precio UF prom.</option>
+                <option value="ufm2">UF/m² prom.</option>
+                <option value="util">Útil (m²) prom.</option>
+                <option value="count">Ofertas</option>
+              </select>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Etiquetas eje X</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-xrot-btn active" data-rot="diagonal">Diagonal</button>
+                <button class="proy-xrot-btn" data-rot="vertical">Vertical</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Mediana</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-median-btn active" data-median="show">Mostrar</button>
+                <button class="proy-median-btn" data-median="hide">Ocultar</button>
+              </div>
+            </div>
+            <div class="ctrl distrib-font-ctrl">
+              <label>Texto</label>
+              <div class="distrib-font-row">
+                <input type="range" id="proyFontSize" min="8" max="36" step="1" value="11">
+                <span id="proyFontSizeVal">11px</span>
+              </div>
+            </div>
+            <div class="ctrl distrib-ratio-ctrl">
+              <label>Proporción</label>
+              <div class="distrib-ratio-row">
+                <button class="proy-ratio-btn active" data-ratio="auto">Auto</button>
+                <button class="proy-ratio-btn" data-ratio="1.78">16:9</button>
+                <button class="proy-ratio-btn" data-ratio="1.33">4:3</button>
+                <button class="proy-ratio-btn" data-ratio="1">1:1</button>
+              </div>
+            </div>
+            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
-          <div id="comparativaContent" class="comp-container">
-            <p class="hint">Cargá un Excel para ver la tabla comparativa.</p>
+          <div class="chart-wrap" id="proyWrap">
+            <canvas id="proyChart"></canvas>
           </div>
         </div>
 
@@ -199,6 +207,12 @@
               <label>Eje Y</label>
               <select id="svpYAxis"></select>
             </div>
+            <div class="ctrl">
+              <label>Agrupar por</label>
+              <select id="svpTipoFilter">
+                <option value="">Todos</option>
+              </select>
+            </div>
             <label class="toggle-check">
               <input type="checkbox" id="svpTrendToggle" checked />
               <span>Línea de tendencia</span>
@@ -208,7 +222,7 @@
               <span>Línea de promedio</span>
             </label>
             <div class="ctrl distrib-marker-group">
-              <label id="svpMarkLabel">Marcar Útil (m²)</label>
+              <label id="svpMarkLabel">Marcar valor</label>
               <div class="marker-add">
                 <input type="number" id="svpM2Input" min="1" step="1" placeholder="ej: 50">
                 <button id="svpAddM2" class="marker-btn pct-btn">+</button>
@@ -235,93 +249,6 @@
           </div>
           <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>
-          </div>
-        </div>
-
-        <!-- TAB: CRUZ -->
-        <div class="tab-panel" data-panel="cruz">
-          <div class="chart-controls">
-            <button id="cruzFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
-            <label class="toggle-check">
-              <input type="checkbox" id="cruzGroupToggle" />
-              <span>Agrupar tipologías por proyecto</span>
-            </label>
-            <div class="ctrl distrib-font-ctrl">
-              <label>Texto</label>
-              <div class="distrib-font-row">
-                <input type="range" id="cruzFontSize" min="8" max="36" step="1" value="11">
-                <span id="cruzFontSizeVal">11px</span>
-              </div>
-            </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Proporción</label>
-              <div class="distrib-ratio-row">
-                <button class="cruz-ratio-btn active" data-ratio="auto">Auto</button>
-                <button class="cruz-ratio-btn" data-ratio="1.78">16:9</button>
-                <button class="cruz-ratio-btn" data-ratio="1.33">4:3</button>
-                <button class="cruz-ratio-btn" data-ratio="1">1:1</button>
-              </div>
-            </div>
-            <button id="cruzExportPngBtn" class="primary-btn">Copiar imagen</button>
-          </div>
-          <div class="cruz-body">
-            <div class="chart-wrap" id="cruzWrap">
-              <canvas id="cruzChart"></canvas>
-            </div>
-            <div id="cruzShapeLegend" class="cruz-shape-legend"></div>
-          </div>
-        </div>
-
-        <!-- TAB: PROYECTOS -->
-        <div class="tab-panel" data-panel="proyectos">
-          <div class="chart-controls">
-            <div class="ctrl">
-              <label>Métrica</label>
-              <select id="proyMetrica">
-                <option value="util">Útil (m²)</option>
-                <option value="arriendo">Arriendo UF prom.</option>
-                <option value="ufm2">UF/m²</option>
-                <option value="vacancia">Vacancia (%)</option>
-                <option value="ocupacion">Ocupación (%)</option>
-                <option value="stock">Stock</option>
-                <option value="disponib">Disponibilidad</option>
-                <option value="rating">Rating Google</option>
-              </select>
-            </div>
-            <div class="ctrl distrib-font-ctrl">
-              <label>Texto</label>
-              <div class="distrib-font-row">
-                <input type="range" id="proyFontSize" min="8" max="36" step="1" value="11">
-                <span id="proyFontSizeVal">11px</span>
-              </div>
-            </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Proporción</label>
-              <div class="distrib-ratio-row">
-                <button class="proy-ratio-btn active" data-ratio="auto">Auto</button>
-                <button class="proy-ratio-btn" data-ratio="1.78">16:9</button>
-                <button class="proy-ratio-btn" data-ratio="1.33">4:3</button>
-                <button class="proy-ratio-btn" data-ratio="1">1:1</button>
-              </div>
-            </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Eje X</label>
-              <div class="distrib-ratio-row">
-                <button class="proy-xrot-btn active" data-rot="diagonal">Diagonal</button>
-                <button class="proy-xrot-btn" data-rot="vertical">Vertical</button>
-              </div>
-            </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Mediana</label>
-              <div class="distrib-ratio-row">
-                <button class="proy-median-btn active" data-median="show">Mostrar</button>
-                <button class="proy-median-btn" data-median="hide">Ocultar</button>
-              </div>
-            </div>
-            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
-          </div>
-          <div class="chart-wrap" id="proyWrap">
-            <canvas id="proyChart"></canvas>
           </div>
         </div>
 
@@ -366,7 +293,6 @@
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
-            <button class="distrib-mp-btn active" title="Mostrar/ocultar unidad del proyecto">Mi Proyecto</button>
             <div class="distrib-tags-row">
               <div id="distribPctTags" class="marker-tags"></div>
               <div id="distribPriceTags" class="marker-tags"></div>
@@ -394,7 +320,18 @@
           </div>
         </div>
 
-        <!-- TAB: TABLA -->
+        <!-- TAB: RESUMEN (Comparativa) -->
+        <div class="tab-panel" data-panel="comparativa">
+          <div class="panel-toolbar">
+            <div></div>
+            <button id="exportCompBtn" class="primary-btn">Copiar tabla</button>
+          </div>
+          <div id="comparativaContent" class="comp-container">
+            <p class="hint">Cargá un Excel para ver la tabla comparativa.</p>
+          </div>
+        </div>
+
+        <!-- TAB: DATOS -->
         <div class="tab-panel" data-panel="tabla">
           <div class="panel-toolbar">
             <input type="text" id="searchInput" placeholder="Buscar en la tabla..." />
@@ -427,11 +364,11 @@
 
   <!-- Libs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
 
-  <script type="module" src="js/multifamily/main.js"></script>
+  <script type="module" src="js/oficinas/main.js"></script>
 </body>
 </html>

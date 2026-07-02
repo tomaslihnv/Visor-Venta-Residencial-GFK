@@ -953,9 +953,16 @@ export function renderMap(state, mapConfig, mp) {
     });
     const esc = s => String(s ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let popHtml = `<table class="map-popup"><tr><td class="pp-key">Proyecto</td><td class="pp-val"><strong>${esc(nombre)}</strong></td></tr>`;
+    const buildingParts = [
+      mp.stock    != null ? `Stock: ${mp.stock}`        : null,
+      mp.vacancia != null ? `Vacancia: ${mp.vacancia}%` : null,
+    ].filter(Boolean);
+    if (buildingParts.length) popHtml += `<tr><td colspan="2" class="pp-val">${buildingParts.join(' · ')}</td></tr>`;
     if (mp.tipologias?.length > 0) {
+      const programaFilter = state.filterValues?.programa;
       for (const t of mp.tipologias) {
         if (!t.nombre) continue;
+        if (programaFilter?.size > 0 && !programaFilter.has(t.nombre)) continue;
         const parts = [
           t.sup    != null ? `${t.sup} m² útil`  : null,
           t.ufm2   != null ? `${t.ufm2} UF/m²`   : null,
@@ -963,14 +970,6 @@ export function renderMap(state, mapConfig, mp) {
         ].filter(Boolean);
         popHtml += `<tr><td class="pp-key">${esc(t.nombre)}</td><td class="pp-val">${parts.join(' · ') || '—'}</td></tr>`;
       }
-    } else {
-      const parts = [
-        mp.arriendo != null ? `${mp.arriendo} UF arriendo` : null,
-        mp.ufm2     != null ? `${mp.ufm2} UF/m²`          : null,
-        mp.stock    != null ? `Stock: ${mp.stock}`         : null,
-        mp.vacancia != null ? `Vacancia: ${mp.vacancia}%`  : null,
-      ].filter(Boolean);
-      if (parts.length) popHtml += `<tr><td colspan="2" class="pp-val">${parts.join(' · ')}</td></tr>`;
     }
     popHtml += `</table>`;
     L.marker([lat, lng], { icon: mpIcon, zIndexOffset: 1000 })

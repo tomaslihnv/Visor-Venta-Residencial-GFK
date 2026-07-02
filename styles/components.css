@@ -716,6 +716,10 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .mp-metric-row span { font-size: 11px; color: #6b7280; min-width: 58px; }
 .mp-metric-input { width: 80px; text-align: right; font-size: 12px; padding: 3px 6px; }
+.mp-metric-computed {
+  width: 80px; text-align: right; font-size: 12px; padding: 3px 6px;
+  color: #1e3a5f; font-weight: 600;
+}
 
 /* Include toggles */
 .mp-includes {

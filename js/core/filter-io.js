@@ -129,9 +129,28 @@ function _showFeedback(el, msg, type) {
   el._fbTimer = setTimeout(() => { el.style.display = 'none'; }, 4000);
 }
 
+// ── Global drag prevention ─────────────────────────────────────────────────
+// Without this, dragging a JSON file outside the filter panel causes the
+// browser to navigate to the file URL, resetting the entire visor.
+
+let _globalDragReady = false;
+function _ensureGlobalDragPrevention() {
+  if (_globalDragReady) return;
+  _globalDragReady = true;
+  document.addEventListener('dragover', e => {
+    if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+  });
+  document.addEventListener('drop', e => {
+    // Prevent browser navigation when a file is dropped outside a handled target.
+    // Specific targets (Excel dropzone, filter panel) handle their own files.
+    e.preventDefault();
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 
 export function initFilterIO({ visorId, getState, applyState, panelEl }) {
+  _ensureGlobalDragPrevention();
   const btn      = document.getElementById('exportFiltersBtn');
   const feedback = document.getElementById('filterIOFeedback');
 

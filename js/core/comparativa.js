@@ -19,6 +19,15 @@ function _fmtCell(v, fmtKey) {
   return fn(v);
 }
 
+// Promedio de un campo de mp.tipologias (edificios sin grupo en la tabla, ej.
+// multifamily), respetando el filtro de Programa activo en el sidebar.
+function _avgTipo(mp, field, programaFilter) {
+  let tipos = mp.tipologias ?? [];
+  if (programaFilter?.size > 0) tipos = tipos.filter(t => programaFilter.has(t.nombre));
+  const vals = tipos.map(t => t[field]).filter(v => v != null);
+  return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+}
+
 function _norm(s) { return String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, ''); }
 
 function _findCol(candidates, columns) {
@@ -29,6 +38,18 @@ function _avg(arr) {
   const valid = arr.filter(v => v != null && !isNaN(v) && v > 0);
   return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
 }
+
+// agg: 'avg' (default) | 'sum' | 'count'
+function _aggArr(arr, agg) {
+  if (agg === 'sum') {
+    const valid = arr.filter(v => v != null && !isNaN(v));
+    return valid.length ? valid.reduce((a, b) => a + b, 0) : null;
+  }
+  return _avg(arr);
+}
+
+// Count rows in a group — uses raw row count, not filtered by _num
+function _countRows(rows) { return rows.length; }
 
 function _num(v) {
   if (v === '' || v == null) return null;
@@ -109,7 +130,9 @@ export function renderComparativa(state, compConfig, mp) {
         const gRows = p.rows.filter(r => r[groupByCol] === g);
         byGroup[g] = {};
         for (const mc of metricCols) {
-          byGroup[g][mc.col] = _avg(gRows.map(r => _num(r[mc.col])));
+          byGroup[g][mc.col] = mc.agg === 'count'
+            ? _countRows(gRows)
+            : _aggArr(gRows.map(r => _num(r[mc.col])), mc.agg);
         }
         byGroup[g]._count = gRows.length;
       }
@@ -117,7 +140,9 @@ export function renderComparativa(state, compConfig, mp) {
     } else {
       const overall = {};
       for (const mc of metricCols) {
-        overall[mc.col] = _avg(p.rows.map(r => _num(r[mc.col])));
+        overall[mc.col] = mc.agg === 'count'
+          ? _countRows(p.rows)
+          : _aggArr(p.rows.map(r => _num(r[mc.col])), mc.agg);
       }
       overall._count = p.rows.length;
       return { ...p, byGroup: null, overall };
@@ -240,8 +265,8 @@ export function renderComparativa(state, compConfig, mp) {
       metricCols.forEach((mc, mi) => {
         const mcNorm = _norm(mc.col);
         let val = null;
-        if (mcNorm.includes('arriendo') || mcNorm.includes('renta')) val = mp.arriendo ?? null;
-        else if (mcNorm.includes('uf/m'))   val = mp.ufm2     ?? null;
+        if (mcNorm.includes('arriendo') || mcNorm.includes('renta')) val = _avgTipo(mp, 'renta', state.filterValues?.programa);
+        else if (mcNorm.includes('uf/m'))   val = _avgTipo(mp, 'ufm2', state.filterValues?.programa);
         else if (mcNorm.includes('stock'))  val = mp.stock    ?? null;
         else if (mcNorm.includes('vacanc')) val = mp.vacancia ?? null;
         html += _cell(_fmtCell(val, mc.fmt), mi === 0 ? 'comp-num comp-sep' : 'comp-num');
@@ -271,8 +296,8 @@ export function renderComparativa(state, compConfig, mp) {
       metricCols.forEach((mc, mi) => {
         const mcNorm = _norm(mc.col);
         let val = null;
-        if (mcNorm.includes('arriendo') || mcNorm.includes('renta')) val = mp.arriendo ?? null;
-        else if (mcNorm.includes('uf/m'))   val = mp.ufm2     ?? null;
+        if (mcNorm.includes('arriendo') || mcNorm.includes('renta')) val = _avgTipo(mp, 'renta', state.filterValues?.programa);
+        else if (mcNorm.includes('uf/m'))   val = _avgTipo(mp, 'ufm2', state.filterValues?.programa);
         else if (mcNorm.includes('stock'))  val = mp.stock    ?? null;
         else if (mcNorm.includes('vacanc')) val = mp.vacancia ?? null;
         html += _vsCell(mi === 0 ? 'comp-num comp-sep' : 'comp-num', val, mktAvg[mc.col]);

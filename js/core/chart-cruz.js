@@ -262,14 +262,37 @@ export function renderCruz(state, cruzConfig, mp) {
     pointHoverRadius: POINT_R + 2,
   }));
 
+  // Mi Proyecto: una unidad por tipología con sup/ufm2 cargados, respetando
+  // el filtro de Programa activo en el sidebar (si hay alguno).
+  const programaFilter = state.filterValues?.programa;
+  const mpPoints = (mp?.inCruz && mp.tipologias?.length > 0)
+    ? mp.tipologias
+        .filter(t => t.nombre && t.sup != null && t.ufm2 != null)
+        .filter(t => !(programaFilter?.size > 0) || programaFilter.has(t.nombre))
+        .map(t => ({ x: t.sup, y: t.ufm2, label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}`, tipo: t.nombre }))
+    : [];
+  if (mpPoints.length) {
+    datasets.unshift({
+      label: mp.proyecto || 'Mi Proyecto',
+      data: mpPoints,
+      backgroundColor: '#1e293b',
+      borderColor: '#1e293b',
+      borderWidth: 2,
+      pointStyle: 'rectRot',
+      pointRadius: POINT_R + 1,
+      pointHoverRadius: POINT_R + 3,
+    });
+  }
+
   const ANN_COLOR = '#6b7280';
   const xFmt = v => v.toLocaleString('es-CL', { maximumFractionDigits: 0 });
   const yFmt = v => v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // Centrar la mediana en el medio del gráfico: el rango de cada eje se
   // expande simétricamente alrededor de la mediana según el punto más lejano.
-  const xHalfSpan = Math.max(...xs.map(v => Math.abs(v - medianX))) * 1.08 || 1;
-  const yHalfSpan = Math.max(...ys.map(v => Math.abs(v - medianY))) * 1.08 || 1;
+  const mpXs = mpPoints.map(p => p.x), mpYs = mpPoints.map(p => p.y);
+  const xHalfSpan = Math.max(...xs.map(v => Math.abs(v - medianX)), ...mpXs.map(v => Math.abs(v - medianX))) * 1.08 || 1;
+  const yHalfSpan = Math.max(...ys.map(v => Math.abs(v - medianY)), ...mpYs.map(v => Math.abs(v - medianY))) * 1.08 || 1;
   const xAxisMin = medianX - xHalfSpan, xAxisMax = medianX + xHalfSpan;
   const yAxisMin = medianY - yHalfSpan, yAxisMax = medianY + yHalfSpan;
 

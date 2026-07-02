@@ -3,6 +3,10 @@ import { resetFilters } from '../core/filters.js';
 import { exportCsv, exportJson } from '../core/export.js';
 import { initFilterIO } from '../core/filter-io.js';
 import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './data.js';
+import { initMpPanel } from './miProyecto.js';
+
+// Mostrar Mi Proyecto siempre, sin esperar a que carguen datos
+initMpPanel();
 
 // ── Mi Proyecto change → re-render pestaña activa ─────────────────────────
 document.addEventListener('mpchange', async () => {
@@ -25,8 +29,7 @@ document.addEventListener('mpchange', async () => {
     const { renderCruz } = await import('../core/chart-cruz.js');
     renderCruz(state, CRUZ, mp);
   } else if (tab === 'proyectos') {
-    const { renderProyectos } = await import('../core/chart-proyectos.js');
-    renderProyectos(state, PROYECTOS_METRICS, mp, { projectCandidates: MAP.projectCandidates });
+    await window._mf.renderProyectos(state, mp);
   }
 });
 
