@@ -1,10 +1,9 @@
-import { $ } from './utils.js';
+import { $, norm, fmtTipo } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 import { getMapOrder } from './map.js';
 
 function findCol(candidates) {
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   return state.columns.find(c => candidates.some(k => norm(c.name).includes(norm(k))))?.name ?? null;
 }
 
@@ -28,13 +27,6 @@ function fmtDec(v, dec = 1) {
 function fmtInt(v) {
   if (v === null || v === undefined) return '—';
   return Math.round(v).toLocaleString('es-CL');
-}
-
-function fmtTipo(v) {
-  if (typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= 10) return `${v}D`;
-  const s = String(v).trim();
-  if (/^\d+$/.test(s) && +s > 0 && +s <= 10) return `${s}D`;
-  return s;
 }
 
 function esc(s) {
