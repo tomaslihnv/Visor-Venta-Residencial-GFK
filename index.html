@@ -266,6 +266,13 @@
               <div class="distrib-ratio-row">
                 <button class="distrib-mode-btn active" data-mode="acum">Acumulada</button>
                 <button class="distrib-mode-btn" data-mode="dens">Log-normal</button>
+                <button class="distrib-mode-btn" data-mode="hist">Histograma</button>
+              </div>
+            </div>
+            <div class="ctrl axis-range-ctrl" id="histBinsCtrl" style="display:none">
+              <label>Barras</label>
+              <div class="axis-range-row">
+                <input type="number" id="histBins" class="axis-range-input" min="2" max="100" step="1" placeholder="auto" style="width:72px">
               </div>
             </div>
             <div class="ctrl">
