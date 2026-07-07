@@ -2,6 +2,7 @@ import { $ } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 import { getMapOrder } from './map.js';
+import { getActiveTipoFilter } from './filters.js';
 
 function findCol(candidates) {
   const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
@@ -59,9 +60,31 @@ function vsCell(cls, mpVal, promVal) {
   return `<td class="${cls}">—</td>`;
 }
 
+// True cuando S está seleccionado y 1D NO está explícitamente seleccionado
+function _sOnlyNotExplicit1D() {
+  const f = getActiveTipoFilter();
+  if (!f.has('S')) return false;
+  return ![...f].some(sel => {
+    if (sel === 'S') return false;
+    const s = String(sel).trim();
+    return s === '1D' || ((/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase()) === '1D';
+  });
+}
+
+// Etiqueta de columna para el header: usa 'S' cuando S es el filtro activo sobre datos 1D
+function tipoDisplayName(dataTipo) {
+  if (fmtTipo(dataTipo).toUpperCase() === '1D' && _sOnlyNotExplicit1D()) return 'S';
+  return fmtTipo(dataTipo);
+}
+
 // Busca la tipología de mp que coincide con un tipo del mercado
+// Cuando el filtro activo es S (y no 1D explícito), prefiere la tipología S de mp
 function findMpTipo(dataTipo) {
   const fmtD = fmtTipo(dataTipo).toUpperCase();
+  if (fmtD === '1D' && _sOnlyNotExplicit1D()) {
+    const sTipo = mp.tipologias.find(t => t.nombre === 'S');
+    if (sTipo) return sTipo;
+  }
   return mp.tipologias.find(t =>
     fmtTipo(t.nombre).toUpperCase() === fmtD ||
     String(t.nombre).toUpperCase() === String(dataTipo).toUpperCase()
@@ -296,7 +319,7 @@ export function renderComparativa() {
   html += `<thead><tr class="comp-head-top">`;
   html += `<th colspan="${generalColsTotal}" class="comp-th-section"></th>`;
   for (const tipo of metricGroups) {
-    html += `<th colspan="3" class="comp-th-tipo">${tipo === '_overall' ? 'Indicadores' : fmtTipo(tipo)}</th>`;
+    html += `<th colspan="3" class="comp-th-tipo">${tipo === '_overall' ? 'Indicadores' : tipoDisplayName(tipo)}</th>`;
   }
   html += `</tr>`;
 

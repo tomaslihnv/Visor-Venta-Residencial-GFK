@@ -1230,7 +1230,7 @@ export function renderDistrib() {
     let mpTipos = mp.tipologias.filter(t => t.nombre);
     if (tipoColObj) {
       const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
-      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
+      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)) || (t.nombre === 'S' && activeTipos.has('1D')));
     }
 
     const mpColor = '#96323C';
