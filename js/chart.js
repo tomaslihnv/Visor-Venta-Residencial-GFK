@@ -19,6 +19,17 @@ export function renderKpis() {
     const nums = rows.map(r => Number(r[col])).filter(v => !isNaN(v));
     return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
   };
+  const dispCol = state.columns.find(c => c.name === 'Disponibles')?.name;
+  const wavg = (col) => {
+    if (!dispCol) return avg(col);
+    let sw = 0, swv = 0;
+    for (const r of rows) {
+      const v = Number(r[col]);
+      const w = Number(r[dispCol]) || 0;
+      if (!isNaN(v) && w > 0) { swv += v * w; sw += w; }
+    }
+    return sw > 0 ? swv / sw : avg(col);
+  };
 
   const kpis = [
     { label: 'Registros', value: rows.length.toLocaleString('es-CL'), sub: `de ${state.raw.length.toLocaleString('es-CL')}` },
@@ -32,16 +43,16 @@ export function renderKpis() {
     kpis.push({ label: 'Disponibles', value: fmt(sum('Disponibles')), sub: 'unidades' });
   }
   if (state.columns.find(c => c.name === 'UF/m²')) {
-    const v = avg('UF/m²');
+    const v = wavg('UF/m²');
     kpis.push({
-      label: 'UF/<span class="keep-case">m²</span> promedio',
+      label: 'UF/<span class="keep-case">m²</span> prom. pond.',
       value: v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
     });
   }
   if (state.columns.find(c => c.name === 'Ticket UF')) {
-    const v = avg('Ticket UF');
+    const v = wavg('Ticket UF');
     kpis.push({
-      label: 'Ticket UF promedio',
+      label: 'Ticket UF prom. pond.',
       value: Math.round(v).toLocaleString('es-CL'),
     });
   }
@@ -402,22 +413,30 @@ export function renderProyectos() {
   if (proyChart) { proyChart.destroy(); proyChart = null; }
   const ctx = $('#proyChart').getContext('2d');
 
+  const unidCol = state.columns.find(c => normStr(c.name).includes('disponib'))?.name;
+
   const byEdif = {};
   for (const r of state.filtered) {
     const edif = String(r[edifCol] ?? '').trim();
     if (!edif) continue;
     const val = Number(r[metricCol]);
     if (isNaN(val)) continue;
+    const w = (unidCol && metric.agg !== 'sum') ? (Number(r[unidCol]) || 1) : 1;
     if (!byEdif[edif]) byEdif[edif] = [];
-    byEdif[edif].push(val);
+    byEdif[edif].push([val, w]);
   }
 
   const aggFn = metric.agg === 'sum'
-    ? arr => arr.reduce((a, b) => a + b, 0)
-    : arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+    ? arr => arr.reduce((a, [v]) => a + v, 0)
+    : arr => {
+        const totalW = arr.reduce((s, [, w]) => s + w, 0);
+        return totalW > 0
+          ? arr.reduce((s, [v, w]) => s + v * w, 0) / totalW
+          : arr.reduce((s, [v]) => s + v, 0) / arr.length;
+      };
 
   let entries = Object.entries(byEdif)
-    .map(([edif, vals]) => [edif, aggFn(vals)]);
+    .map(([edif, items]) => [edif, aggFn(items)]);
 
   // Mi Proyecto — respeta el filtro de tipología activo
   let mpName = null;
@@ -558,7 +577,7 @@ export function renderProyectos() {
         y: {
           title: { display: false },
           ticks: { callback: v => metric.fmt(v), font: { size: fs } },
-          beginAtZero: false,
+          beginAtZero: true,
           grid: { display: false },
           ...(_parseAxisVal($('#proyYMin')?.value) !== null ? { min: _parseAxisVal($('#proyYMin').value) } : {}),
           ...(_parseAxisVal($('#proyYMax')?.value) !== null ? { max: _parseAxisVal($('#proyYMax').value) } : {}),
@@ -1229,13 +1248,16 @@ export function populateDistribSelectors() {
     $('#distribYMin')?.addEventListener('input', renderDistrib);
     $('#distribYMax')?.addEventListener('input', renderDistrib);
 
+    const _histBinsCtrl = document.getElementById('histBinsCtrl');
     document.querySelectorAll('.distrib-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.distrib-mode-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        if (_histBinsCtrl) _histBinsCtrl.style.display = btn.dataset.mode === 'hist' ? '' : 'none';
         renderDistrib();
       });
     });
+    $('#histBins')?.addEventListener('input', renderDistrib);
 
     document.querySelectorAll('.ratio-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1435,7 +1457,110 @@ export function renderDistrib() {
     return sortedVals[Math.max(0, idx)];
   };
 
-  const isDens  = document.querySelector('.distrib-mode-btn.active')?.dataset.mode === 'dens';
+  const _distribMode = document.querySelector('.distrib-mode-btn.active')?.dataset.mode ?? 'acum';
+  const isDens  = _distribMode === 'dens';
+  const isHist  = _distribMode === 'hist';
+
+  // ── Modo histograma ──
+  if (isHist) {
+    const xMinV = _parseAxisVal($('#distribXMin')?.value);
+    const xMaxV = _parseAxisVal($('#distribXMax')?.value);
+    const histVals = sortedVals.filter(v =>
+      (xMinV === null || v >= xMinV) && (xMaxV === null || v <= xMaxV)
+    );
+    if (histVals.length < 2) return;
+
+    const n = histVals.length;
+    const x0 = histVals[0];
+    const x1 = histVals[n - 1];
+    const binsInput = _parseAxisVal($('#histBins')?.value);
+    const nBins = binsInput != null
+      ? Math.min(Math.max(Math.round(binsInput), 2), 100)
+      : Math.min(Math.max(Math.ceil(Math.sqrt(n)), 5), 40);
+    const binW = (x1 - x0) / nBins || 1;
+
+    const counts = new Array(nBins).fill(0);
+    for (const v of histVals) {
+      counts[Math.min(Math.floor((v - x0) / binW), nBins - 1)]++;
+    }
+
+    const labels = Array.from({ length: nBins }, (_, i) =>
+      (x0 + i * binW).toLocaleString('es-CL', { maximumFractionDigits: 0 })
+    );
+
+    const yMinV = _parseAxisVal($('#distribYMin')?.value);
+    const yMaxV = _parseAxisVal($('#distribYMax')?.value);
+
+    const distribSettingsPlugin = {
+      id: 'distribSettings',
+      afterDraw(chart) {
+        const { ctx: c2, chartArea: { right, top } } = chart;
+        const ratioVal = document.querySelector('.ratio-btn.active')?.dataset.ratio ?? 'auto';
+        const ratioMap = { auto: 'Auto', '1.78': '16:9', '1.33': '4:3', '1': '1:1' };
+        c2.save();
+        c2.font = '10px system-ui, sans-serif';
+        c2.fillStyle = '#c8c8c8';
+        c2.textAlign = 'right';
+        c2.textBaseline = 'top';
+        c2.fillText(`${ratioMap[ratioVal] ?? ratioVal} · ${fs}px`, right - 2, top + 4);
+        c2.restore();
+      },
+    };
+
+    distribChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: col,
+          data: counts,
+          backgroundColor: 'rgba(59,130,246,0.55)',
+          borderColor: 'rgba(59,130,246,0.85)',
+          borderWidth: 1,
+          borderRadius: 2,
+          barPercentage: 1.0,
+          categoryPercentage: 1.0,
+        }],
+      },
+      plugins: [distribSettingsPlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: items => {
+                const i = items[0].dataIndex;
+                const lo = x0 + i * binW;
+                const hi = lo + binW;
+                return `${lo.toLocaleString('es-CL', { maximumFractionDigits: 0 })} – ${hi.toLocaleString('es-CL', { maximumFractionDigits: 0 })} ${distribUnit}`;
+              },
+              label: item => ` ${item.raw} unidades`,
+            },
+          },
+          annotation: { annotations: {} },
+        },
+        scales: {
+          x: {
+            title: { display: true, text: col, font: { size: fs } },
+            ticks: { font: { size: fs }, maxRotation: 45 },
+            grid: { display: false },
+          },
+          y: {
+            title: { display: true, text: 'Frecuencia (unidades)', font: { size: fs } },
+            beginAtZero: true,
+            ticks: { font: { size: fs } },
+            ...(yMinV !== null ? { min: yMinV } : {}),
+            ...(yMaxV !== null ? { max: yMaxV } : {}),
+          },
+        },
+      },
+    });
+    return;
+  }
+
   const refData = computeQuantileCurve(state.filtered, col);
   const kdeData = isDens ? computeLogNormal(sortedVals) : [];
 

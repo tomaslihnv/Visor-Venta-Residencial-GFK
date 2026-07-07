@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m ' *)",
+      "Bash(grep -iE '\\\\.\\(xlsx|xls|csv\\)$')",
+      "Bash(node --check js/core/chart-cruz.js)",
+      "Bash(node --check js/multifamily/data.js)",
+      "Bash(node --check js/multifamily/main.js)",
+      "Bash(node --check js/multifamily/config.js)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(xargs -I{} grep -Hm1 '^description:' {})"
+    ]
+  }
+}
