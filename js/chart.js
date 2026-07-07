@@ -457,15 +457,24 @@ export function renderProyectos() {
       t.nombre && (activeTipos ? activeTipos.has(fmtTipo(t.nombre)) : true)
     );
 
+    const _wavg = items => {
+      const valid = items.filter(([, w]) => w > 0);
+      if (!valid.length) return items.length ? items.reduce((a, [v]) => a + v, 0) / items.length : null;
+      const sw = valid.reduce((a, [, w]) => a + w, 0);
+      return valid.reduce((a, [v, w]) => a + v * w, 0) / sw;
+    };
     if (metricId === 'ticket') {
-      const vals = tipos.filter(t => t.sup != null && t.ufm2 != null).map(t => t.sup * t.ufm2);
-      if (vals.length) mpVal = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const items = tipos.filter(t => t.sup != null && t.ufm2 != null)
+        .map(t => [t.sup * t.ufm2, Number(t.cuantity) || 0]);
+      mpVal = _wavg(items);
     } else if (metricId === 'ufm2') {
-      const vals = tipos.filter(t => t.ufm2 != null).map(t => t.ufm2);
-      if (vals.length) mpVal = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const items = tipos.filter(t => t.ufm2 != null)
+        .map(t => [t.ufm2, Number(t.cuantity) || 0]);
+      mpVal = _wavg(items);
     } else if (metricId === 'util') {
-      const vals = tipos.filter(t => t.sup != null).map(t => t.sup);
-      if (vals.length) mpVal = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const items = tipos.filter(t => t.sup != null)
+        .map(t => [t.sup, Number(t.cuantity) || 0]);
+      mpVal = _wavg(items);
     }
     if (mpVal !== null) {
       mpName = mp.edificio || mp.propietario || 'Mi Proyecto';

@@ -733,14 +733,14 @@ export function renderSupVsRenta() {
       type: 'line',
       scaleID: 'y',
       value: avgY,
-      borderColor: '#dc2626',
+      borderColor: '#ef4444',
       borderWidth: 1.5,
       borderDash: [8, 4],
       label: {
         content: avgLabel,
         display: true,
         position: 'start',
-        color: '#dc2626',
+        color: '#ef4444',
         backgroundColor: 'rgba(255,255,255,0.92)',
         font: { size: fs, weight: 'bold' },
         padding: { x: 6, y: 3 },
@@ -1155,8 +1155,8 @@ export function renderDistrib() {
   const datasets = [{
     label: col,
     data: refData,
-    borderColor: '#0ea5e9',
-    backgroundColor: 'rgba(14,165,233,0.10)',
+    borderColor: '#3b82f6',
+    backgroundColor: 'rgba(59,130,246,0.08)',
     pointRadius: 0,
     borderWidth: 2,
     tension: 0.4,
@@ -1233,7 +1233,7 @@ export function renderDistrib() {
       if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
     }
 
-    const mpColor = '#96323C';
+    const mpColor = '#ef4444';
     const mpAnnLabel = (content) => ({
       content, display: true, position: 'start',
       color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
@@ -1531,13 +1531,13 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
     {
       type: 'bar', label: 'Frecuencia',
       data: bins,
-      backgroundColor: 'rgba(56,189,248,0.35)', borderColor: '#38bdf8', borderWidth: 1,
+      backgroundColor: 'rgba(59,130,246,0.55)', borderColor: 'rgba(59,130,246,0.85)', borderWidth: 1,
       barPercentage: 1.0, categoryPercentage: 1.0, order: 3,
     },
     {
       type: 'line', label: 'Densidad',
       data: kdeData,
-      borderColor: '#0ea5e9', backgroundColor: 'transparent',
+      borderColor: '#3b82f6', backgroundColor: 'transparent',
       borderWidth: 2, pointRadius: 0, tension: 0.4, fill: false, order: 2,
     },
   ];
@@ -1706,8 +1706,8 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
       datasets: [{
         label: col,
         data: lnData,
-        borderColor: '#0ea5e9',
-        backgroundColor: 'rgba(14,165,233,0.08)',
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59,130,246,0.08)',
         pointRadius: 0,
         borderWidth: 2,
         tension: 0.3,

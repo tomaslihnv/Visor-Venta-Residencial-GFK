@@ -12,7 +12,7 @@ export const mp = {
   edificio:    '',
   propietario: '',
   direccion:   '',
-  tipologias:  [], // [{ id, nombre, sup, ufm2 }]
+  tipologias:  [], // [{ id, nombre, sup, ufm2, cuantity }]
   geocoords:   null, // { lat, lng } — never persisted
   inComp:      false,
   inMapa:      false,
@@ -96,6 +96,11 @@ function _renderTipos() {
             ${typeOptions}
           </select>
         </div>
+        <label class="mp-metric-row">
+          <span>Cantidad</span>
+          <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
+            data-id="${tipo.id}" data-metric="cuantity" value="${tipo.cuantity ?? ''}" />
+        </label>
         <label class="mp-metric-row">
           <span>Útil m²</span>
           <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
@@ -183,7 +188,7 @@ export function initMpPanel() {
   $('#mpInProy')?.addEventListener('change',    e => { mp.inProy    = e.target.checked; _save(); });
 
   $('#mpAddTipo')?.addEventListener('click', () => {
-    mp.tipologias.push({ id: _nextId(), nombre: '', sup: null, ufm2: null });
+    mp.tipologias.push({ id: _nextId(), nombre: '', sup: null, ufm2: null, cuantity: null });
     _renderTipos();
     _save();
   });
