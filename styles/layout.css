@@ -179,7 +179,7 @@
 .dropzone.dragover { border-color: #3b82f6; background: #eff6ff; }
 .dropzone-inner { text-align: center; color: #64748b; }
 .dropzone-inner h2 { font-size: 22px; margin-bottom: 8px; color: #334155; }
-.saved-datasets-sidebar-list { display: flex; flex-direction: column; gap: 6px; }
+.saved-datasets-sidebar-list { display: flex; flex-direction: column; gap: 4px; }
 .saved-dataset-btn {
   display: block; width: 100%; text-align: left;
   padding: 7px 10px; border-radius: 6px; border: 1px solid #cbd5e1;

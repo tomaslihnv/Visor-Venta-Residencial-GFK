@@ -11,8 +11,12 @@
 // 2. Mover el archivo descargado a data/multifamily/.
 // 3. Agregar una entrada acá con su label y el path del archivo.
 export const SAVED_DATASETS = [
-  { label: 'Multifamily', file: 'data/multifamily/multifamily.json' },
-  { label: 'Todos los Multifamily', file: 'data/multifamily/Todos_los_MF.json' },
+  { label: 'Santiago (Jul 2026)',         file: 'data/multifamily/multifamily_santiago_20260702.json' },
+  { label: 'Estación Central (Jul 2026)', file: 'data/multifamily/multifamily_estacion_central_20260702.json' },
+  { label: 'Las Condes (Jul 2026)',       file: 'data/multifamily/multifamily_las_condes_20260702.json' },
+  { label: 'Lo Barnechea (Jul 2026)',     file: 'data/multifamily/multifamily_lo_barnechea_20260702.json' },
+  { label: 'Providencia (Jul 2026)',      file: 'data/multifamily/multifamily_providencia_20260702.json' },
+  { label: 'Ñuñoa (Jul 2026)',            file: 'data/multifamily/multifamily_nunoa_20260702.json' },
 ];
 
 export const COLUMN_MAP = {

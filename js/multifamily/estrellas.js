@@ -48,16 +48,6 @@ export async function attachStarMetrics(rows) {
   return rows;
 }
 
-function _showUnreviewedWarning(unreviewed) {
-  const el = document.getElementById('starDataWarning');
-  if (!el) return;
-  if (!unreviewed.size) { el.classList.add('hidden'); return; }
-  const list = [...unreviewed].join(', ');
-  el.innerHTML = `
-    <span>⚠️ <strong>${unreviewed.size} proyecto(s)</strong> sin revisar en el cruce de estrellas: ${list}.
-    Agrégalos a <code>data/multifamily/estrellas/aliases.json</code> (aunque sea con valor vacío, para confirmar que no tienen dato).</span>
-    <button type="button" class="sdw-close" aria-label="Cerrar">&#xD7;</button>
-  `;
-  el.classList.remove('hidden');
-  el.querySelector('.sdw-close')?.addEventListener('click', () => el.classList.add('hidden'));
+function _showUnreviewedWarning(_unreviewed) {
+  document.getElementById('starDataWarning')?.classList.add('hidden');
 }

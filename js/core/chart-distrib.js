@@ -1,6 +1,14 @@
 import { norm } from './utils.js';
 import { copyChartPng } from './export.js';
 
+function _parseAxisVal(s) {
+  if (s == null || s === '') return null;
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+
+function _$(id) { return document.getElementById(id); }
+
 // ── Normal / density helpers ──────────────────────────────────────────────
 
 function _probit(p) {
@@ -112,6 +120,10 @@ export function initDistribListeners(state, distribCols, mp) {
 
   document.getElementById('distribCol')?.addEventListener('change', rerender);
   document.getElementById('distribNormalToggle')?.addEventListener('change', rerender);
+  _$('distribXMin')?.addEventListener('input', rerender);
+  _$('distribXMax')?.addEventListener('input', rerender);
+  _$('distribYMin')?.addEventListener('input', rerender);
+  _$('distribYMax')?.addEventListener('input', rerender);
   document.querySelector('.distrib-mp-btn')?.addEventListener('click', () => {
     document.querySelector('.distrib-mp-btn').classList.toggle('active');
     rerender();
@@ -614,7 +626,9 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
       },
       scales: {
         x: {
-          type: 'linear', min: xMin, max: xMax,
+          type: 'linear',
+          min: _parseAxisVal(_$('distribXMin')?.value) ?? xMin,
+          max: _parseAxisVal(_$('distribXMax')?.value) ?? xMax,
           title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
@@ -756,7 +770,10 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
           title: { display: true, text: 'Percentil (%)', font: { size: fs } },
           ticks: { callback: v => v + '%', font: { size: fs } } },
         y: { title: { display: true, text: label, font: { size: fs } },
-          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+          ...(_parseAxisVal(_$('distribXMin')?.value) !== null ? { min: _parseAxisVal(_$('distribXMin').value) } : {}),
+          ...(_parseAxisVal(_$('distribXMax')?.value) !== null ? { max: _parseAxisVal(_$('distribXMax').value) } : {}),
+        },
       },
     },
   });
@@ -875,6 +892,8 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
       scales: {
         x: {
           type: 'linear',
+          ...(_parseAxisVal(_$('distribXMin')?.value) !== null ? { min: _parseAxisVal(_$('distribXMin').value) } : {}),
+          ...(_parseAxisVal(_$('distribXMax')?.value) !== null ? { max: _parseAxisVal(_$('distribXMax').value) } : {}),
           title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => _fmtVal(v), font: { size: fs } },
         },
@@ -882,6 +901,8 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
           title: { display: true, text: 'Densidad', font: { size: fs } },
           ticks: { display: false },
           grid: { display: false },
+          ...(_parseAxisVal(_$('distribYMin')?.value) !== null ? { min: _parseAxisVal(_$('distribYMin').value) } : {}),
+          ...(_parseAxisVal(_$('distribYMax')?.value) !== null ? { max: _parseAxisVal(_$('distribYMax').value) } : {}),
         },
       },
     },
@@ -1015,12 +1036,17 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
         annotation: { annotations },
       },
       scales: {
-        x: { type: 'linear', min: x0, max: x1,
+        x: { type: 'linear',
+          min: _parseAxisVal(_$('distribXMin')?.value) ?? x0,
+          max: _parseAxisVal(_$('distribXMax')?.value) ?? x1,
           title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => _fmtVal(v), font: { size: fs } } },
         y: { beginAtZero: true,
           title: { display: true, text: '% de datos', font: { size: fs } },
-          ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } } },
+          ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } },
+          ...(_parseAxisVal(_$('distribYMin')?.value) !== null ? { min: _parseAxisVal(_$('distribYMin').value) } : {}),
+          ...(_parseAxisVal(_$('distribYMax')?.value) !== null ? { max: _parseAxisVal(_$('distribYMax').value) } : {}),
+        },
       },
     },
   });

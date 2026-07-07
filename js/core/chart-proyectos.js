@@ -1,5 +1,13 @@
 import { norm } from './utils.js';
 
+function _parseAxisVal(s) {
+  if (s == null || s === '') return null;
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+
+function _$(id) { return document.getElementById(id); }
+
 // metricDefs: array of { id, label, col, agg, fmt }
 // agg: 'avg' | 'sum' | 'count'
 // fmt: function(value) => string
@@ -50,6 +58,8 @@ export function initProyectosListeners(state, metricDefs, mp, options = {}) {
   document.getElementById(selectId)?.addEventListener('change', () => {
     renderProyectos(state, metricDefs, mp, options);
   });
+  _$('proyYMin')?.addEventListener('input', () => renderProyectos(state, metricDefs, mp, options));
+  _$('proyYMax')?.addEventListener('input', () => renderProyectos(state, metricDefs, mp, options));
 
   const fontSlider = document.getElementById('proyFontSize');
   const fontVal    = document.getElementById('proyFontSizeVal');
@@ -251,6 +261,8 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
           title: { display: false },
           ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
+          ...(_parseAxisVal(_$('proyYMin')?.value) !== null ? { min: _parseAxisVal(_$('proyYMin').value) } : {}),
+          ...(_parseAxisVal(_$('proyYMax')?.value) !== null ? { max: _parseAxisVal(_$('proyYMax').value) } : {}),
         },
       },
     },

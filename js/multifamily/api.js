@@ -1,4 +1,4 @@
-import { INCITI_API_KEY, INCITI_API_URL } from '../config.local.js';
+import { INCITI_API_KEY, INCITI_API_URL, INCITI_PROXY_URL } from '../config.local.js';
 
 // ── Inciti API — Multifamily ───────────────────────────────────────────────
 
@@ -18,85 +18,66 @@ const DEFAULT_POLYGONS = [
 
 // ── Normalización de respuesta → filas planas ──────────────────────────────
 //
-// La API devuelve proyectos con series trimestrales por tipología.
-// El visor espera una fila por (proyecto × tipología) con el período más
-// reciente. Si un proyecto no tiene tipologías en el último período, se omite.
+// Estructura real de la API:
+//   payload.projects.entities[]          → proyectos
+//     .id, .name, .developer, .status, .location{lat,lng,commune}
+//     .periods[]                         → series temporales
+//       .key, .label (ej: "2024-10", "Oct 2024")
+//       .stages[]                        → etapas del proyecto
+//         .totalStock, .availableUnits
+//         .programs[]                    → tipologías (3D2B, 2D2B, etc.)
+//           .program, .stock, .available
+//           .priceUF, .ufPerM2, .avgUsefulM2
+//
+// Se toma el último período disponible de cada entidad y se genera
+// una fila por (entidad × stage × programa).
 
-const TIPOLOGIA_MAP = {
-  ESTUDIO: 'Estudio',
-  '1D1B':  '1D1B',
-  '2D1B':  '2D1B',
-  '2D2B':  '2D2B',
-  '3D2B':  '3D2B',
-};
-
-// Devuelve el último período con datos de un array de series trimestrales.
-function _lastPeriod(series) {
-  if (!Array.isArray(series) || !series.length) return null;
-  return series[series.length - 1];
+function _lastPeriod(periods) {
+  if (!Array.isArray(periods) || !periods.length) return null;
+  return periods[periods.length - 1];
 }
 
-// Aplana un proyecto en una o más filas (una por tipología).
-function _flattenProject(project) {
-  const rows = [];
+function _flattenProject(entity) {
+  const rows   = [];
+  const loc    = entity.location ?? {};
+  const period = _lastPeriod(entity.periods);
+  if (!period) return rows;
 
-  // Series por tipología
-  const tipoSeries = project.tipologias ?? project.series ?? project.units ?? {};
-  const tipoKeys   = Object.keys(tipoSeries);
-
-  if (tipoKeys.length === 0) {
-    // Sin tipologías → una sola fila con datos de nivel edificio
-    rows.push(_buildRow(project, null, null));
-    return rows;
+  const base = {
+    'Proyecto':      entity.name          ?? entity.id ?? '',
+    'Propietario':   entity.owner         ?? '',
+    'Administrador': entity.administrator ?? '',
+    'Comuna':        loc.commune          ?? loc.comuna ?? '',
+    'Período':       period.label         ?? period.key ?? '',
+  };
+  const lat = loc.lat ?? null;
+  const lng = loc.lng ?? null;
+  if (lat != null && lng != null) {
+    base['__lat'] = Number(lat);
+    base['__lng'] = Number(lng);
   }
 
-  for (const tipoKey of tipoKeys) {
-    const tipoData = tipoSeries[tipoKey];
-    const periodo  = _lastPeriod(tipoData?.series ?? tipoData);
-    if (!periodo) continue;
-    rows.push(_buildRow(project, tipoKey, periodo));
+  for (const prog of (period.programs ?? [])) {
+    const stock = _num(prog.stock);
+    const avail = _num(prog.available);
+    const vac   = _num(prog.vacancy);
+    const vacPct = vac != null ? Math.round(vac * 100 * 10) / 10 : null;
+
+    rows.push({
+      ...base,
+      'Programa':       prog.program ?? '',
+      'Stock':          stock,
+      'Disponibilidad': avail,
+      'Vacancia (%)':   vacPct,
+      'Ocupación (%)':  vacPct != null ? Math.round((100 - vacPct) * 10) / 10 : null,
+      'Útil (m²)':      _num(prog.usefulM2),
+      'Arriendo UF':    _num(prog.rentUF),
+      'UF/m²':          _num(prog.rentUfPerM2),
+      'Estado Prog.':   prog.status ?? '',
+    });
   }
 
   return rows;
-}
-
-function _buildRow(project, tipoKey, periodo) {
-  const tipologia = tipoKey ? (TIPOLOGIA_MAP[tipoKey] ?? tipoKey) : null;
-
-  // Coordenadas: pueden venir como location.lat/lng, lat/lng, latitud/longitud
-  const lat = project.location?.lat ?? project.lat ?? project.latitud ?? null;
-  const lng = project.location?.lng ?? project.lng ?? project.longitud ?? null;
-
-  const row = {
-    'Proyecto':       project.nombre ?? project.name ?? project.id ?? '',
-    'Propietario':    project.owner  ?? project.propietario ?? '',
-    'Administrador':  project.administrador ?? project.operator ?? project.admin ?? '',
-    'Comuna':         project.location?.comuna ?? project.comuna ?? '',
-    'Estado':         project.estado ?? project.status ?? '',
-    'Reporta':        project.reporta ?? project.reports ?? '',
-  };
-
-  if (lat != null && lng != null) {
-    row['__lat'] = Number(lat);
-    row['__lng'] = Number(lng);
-  }
-
-  if (tipologia) row['Programa'] = tipologia;
-
-  if (periodo) {
-    row['Período']         = periodo.period ?? periodo.periodo ?? periodo.quarter ?? '';
-    row['Stock']           = _num(periodo.stock);
-    row['Disponibilidad']  = _num(periodo.disponibilidad ?? periodo.available ?? periodo.availability);
-    row['Vacancia (%)']    = _num(periodo.vacancia ?? periodo.vacancy ?? periodo.vacancyRate);
-    row['Útil (m²)']       = _num(periodo.sup ?? periodo.area ?? periodo.m2util ?? periodo.usableArea);
-    row['Arriendo UF']     = _num(periodo.arriendo ?? periodo.rentUF ?? periodo.renta);
-    row['UF/m²']           = _num(periodo.ufm2 ?? periodo.rentUFm2 ?? periodo.rentPerM2);
-    row['Ocupación (%)']   = periodo.vacancia != null
-      ? Math.round((1 - (row['Vacancia (%)'] ?? 0) / 100) * 100 * 10) / 10
-      : _num(periodo.ocupacion ?? periodo.occupancy);
-  }
-
-  return row;
 }
 
 function _num(v) {
@@ -114,11 +95,11 @@ export async function fetchMultifamily({ polygons, onProgress } = {}) {
     );
   }
 
-  const url  = INCITI_API_URL.replace(/\/$/, '') + '/' + ENDPOINT_PATH;
-  const body = {
-    market:   'multifamily',
-    polygons: polygons ?? DEFAULT_POLYGONS,
-  };
+  // En desarrollo usar el proxy local (resuelve CORS).
+  // En producción, si Inciti habilita CORS para el dominio, INCITI_PROXY_URL queda vacío.
+  const base = INCITI_PROXY_URL ? INCITI_PROXY_URL : INCITI_API_URL.replace(/\/$/, '');
+  const url  = base + '/' + ENDPOINT_PATH;
+  const body = { market: 'multifamily', polygons: polygons ?? DEFAULT_POLYGONS };
 
   onProgress?.('Conectando con Inciti…');
 
@@ -149,14 +130,14 @@ export async function fetchMultifamily({ polygons, onProgress } = {}) {
   }
   console.groupEnd();
 
-  const projects = payload.projects ?? [];
-  if (!projects.length) {
+  const entities = payload.projects?.entities ?? [];
+  if (!entities.length) {
     throw new Error('La API devolvió 0 proyectos. Verifica el polígono y el endpoint.');
   }
 
-  onProgress?.(`${projects.length} proyectos recibidos. Normalizando…`);
+  onProgress?.(`${entities.length} proyectos recibidos. Normalizando…`);
 
-  const rows = projects.flatMap(_flattenProject).filter(r => {
+  const rows = entities.flatMap(_flattenProject).filter(r => {
     const v = r['Arriendo UF'];
     return v != null && !isNaN(v) && v > 0;
   });

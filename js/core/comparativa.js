@@ -261,7 +261,7 @@ export function renderComparativa(state, compConfig, mp) {
       }
     } else {
       // flat Mi Proyecto (for multifamily-like visors)
-      html += _cell(1, 'comp-num');
+      html += _cell(mp.stock != null ? mp.stock : '—', 'comp-num');
       metricCols.forEach((mc, mi) => {
         const mcNorm = _norm(mc.col);
         let val = null;

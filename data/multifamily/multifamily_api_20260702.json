@@ -1,0 +1,38 @@
+[
+  {
+    "Proyecto": "JARDINES DE SEMINARIO",
+    "Propietario": "BRIMAC",
+    "Administrador": "BRIMAC",
+    "Comuna": "NUNOA",
+    "Estado": "entrega inmediata",
+    "Período": "Oct 2019",
+    "__lat": -33.46033477783203,
+    "__lng": -70.62511444091797,
+    "Programa": "3D2B",
+    "Stock": 74.0,
+    "Disponibilidad": 10.0,
+    "Vacancia (%)": 13.5,
+    "Ocupación (%)": 86.5,
+    "Útil (m²)": 73.08000183105469,
+    "Arriendo UF": 4278.0,
+    "UF/m²": 53.49840417428479
+  },
+  {
+    "Proyecto": "JARDINES DE SEMINARIO",
+    "Propietario": "BRIMAC",
+    "Administrador": "BRIMAC",
+    "Comuna": "NUNOA",
+    "Estado": "entrega inmediata",
+    "Período": "Oct 2019",
+    "__lat": -33.46033477783203,
+    "__lng": -70.62511444091797,
+    "Programa": "2D2B",
+    "Stock": 86.0,
+    "Disponibilidad": 9.0,
+    "Vacancia (%)": 10.5,
+    "Ocupación (%)": 89.5,
+    "Útil (m²)": 57.95999908447266,
+    "Arriendo UF": 3851.0,
+    "UF/m²": 59.97975331792294
+  }
+]

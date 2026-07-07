@@ -54,6 +54,13 @@ export function resetMapOnLoad() {
   document.getElementById('mapUndoBtn')?.classList.add('hidden');
 }
 
+// Devuelve el último polígono dibujado en formato Inciti [{lat, lng}, ...]
+// o null si no hay ninguno. Usado por módulos de visor para consultar la API.
+export function getLastPolygon() {
+  if (!_lastPolyPoints.length) return null;
+  return _lastPolyPoints.map(p => ({ lat: p.lat, lng: p.lng }));
+}
+
 // ── Coord helpers ─────────────────────────────────────────────────────────
 
 function _hasDirectCoords(state) {

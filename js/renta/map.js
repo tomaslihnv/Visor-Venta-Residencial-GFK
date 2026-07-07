@@ -948,7 +948,7 @@ function renderRanking() {
   if (!el) return;
 
   const proyCol  = state.columns.find(c => ['proyecto', 'edificio', 'nombre', 'building'].some(k => norm(c.name).includes(k)))?.name;
-  const tipoCol  = state.columns.find(c => ['tipo', 'propiedad'].some(k => norm(c.name).includes(k)))?.name;
+  const tipoCol  = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)))?.name;
   const supCol   = state.columns.find(c =>
     c.type === 'number' && ['útil', 'util', 'sup. út', 'sup út'].some(k => norm(c.name).includes(norm(k)))
   )?.name;

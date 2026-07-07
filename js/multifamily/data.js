@@ -1,7 +1,6 @@
 import { detectColType } from '../core/utils.js';
 import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, SAVED_DATASETS } from './config.js';
 import { attachStarMetrics } from './estrellas.js';
-import { fetchMultifamily } from './api.js';
 
 // ── Estado global del visor ────────────────────────────────────────────────
 export const state = {
@@ -127,47 +126,59 @@ function _renderSavedDatasetsList() {
     cont.innerHTML = '<p class="hint">Sin datasets guardados todavía.</p>';
     return;
   }
-  cont.innerHTML = SAVED_DATASETS
-    .map((entry, i) => `<button type="button" class="saved-dataset-btn" data-idx="${i}">${entry.label}</button>`)
-    .join('');
+
+  const selected = new Set();
+
+  cont.innerHTML = SAVED_DATASETS.map((entry, i) => `
+    <button type="button" class="saved-dataset-btn" data-idx="${i}">${entry.label}</button>
+  `).join('');
+
+  async function _loadSelected() {
+    if (!selected.size) {
+      document.getElementById('dashboard')?.classList.add('hidden');
+      document.getElementById('dropzone')?.classList.remove('hidden');
+      const fileNameEl = document.getElementById('fileName');
+      if (fileNameEl) fileNameEl.textContent = '';
+      return;
+    }
+    const entries = [...selected].map(i => SAVED_DATASETS[i]);
+    cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.disabled = true);
+    try {
+      const results = await Promise.all(
+        entries.map(e => fetch(e.file).then(r => {
+          if (!r.ok) throw new Error(`No se encontró ${e.file}`);
+          return r.json();
+        }))
+      );
+      const merged = results.flat();
+      const label  = entries.map(e => e.label).join(' + ');
+      const fileNameEl = document.getElementById('fileName');
+      if (fileNameEl) fileNameEl.textContent = label;
+      const withStars = await attachStarMetrics(merged);
+      onDataLoaded(withStars);
+    } catch (err) {
+      console.error(err);
+      alert('Error cargando datasets: ' + err.message);
+    } finally {
+      cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.disabled = false);
+    }
+  }
+
   cont.querySelectorAll('.saved-dataset-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      loadSavedDataset(SAVED_DATASETS[+btn.dataset.idx]);
+      const idx = +btn.dataset.idx;
+      if (selected.has(idx)) {
+        selected.delete(idx);
+        btn.classList.remove('active');
+      } else {
+        selected.add(idx);
+        btn.classList.add('active');
+      }
+      _loadSelected();
     });
   });
 }
 _renderSavedDatasetsList();
-
-// ── Botón "Cargar desde API Inciti" ───────────────────────────────────────
-document.getElementById('loadApiBtn')?.addEventListener('click', async () => {
-  const btn      = document.getElementById('loadApiBtn');
-  const statusEl = document.getElementById('apiStatus');
-  btn.disabled = true;
-  statusEl.style.display = '';
-
-  const onProgress = msg => { statusEl.textContent = msg; };
-
-  try {
-    const rows = await fetchMultifamily({ onProgress });
-    onProgress(`Procesando ${rows.length} registros…`);
-    const normalized = _normalizeRows(rows);
-    if (!normalized.length) throw new Error('No se encontraron filas válidas tras normalizar. Revisa COLUMN_MAP_API en api.js.');
-    const withStars = await attachStarMetrics(normalized);
-    const fileNameEl = document.getElementById('fileName');
-    if (fileNameEl) fileNameEl.textContent = 'Inciti API';
-    onProgress('');
-    statusEl.style.display = 'none';
-    onDataLoaded(withStars);
-  } catch (err) {
-    console.error('[Inciti API]', err);
-    statusEl.textContent = '⚠ ' + err.message;
-    statusEl.style.color = '#dc2626';
-  } finally {
-    btn.disabled = false;
-  }
-});
 
 // ── onDataLoaded ───────────────────────────────────────────────────────────
 export function onDataLoaded(rows) {

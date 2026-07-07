@@ -34,8 +34,9 @@ except ImportError:
 ROOT = Path(__file__).parent.parent
 load_dotenv(ROOT / ".env")
 
-API_KEY = os.getenv("INCITI_API_KEY", "").strip()
-API_URL = os.getenv("INCITI_API_URL", "").strip()
+# En .env: INCITI_API_KEY tiene la URL y INCITI_API_URL tiene el UUID (key)
+API_KEY = os.getenv("INCITI_API_URL", "").strip()
+API_URL = os.getenv("INCITI_API_KEY", "").strip()
 
 if not API_KEY or not API_URL:
     sys.exit("Faltan credenciales. Completa INCITI_API_KEY e INCITI_API_URL en .env")
@@ -79,58 +80,51 @@ def _last_period(series):
     return series[-1]
 
 
-def _build_row(project, tipo_key, periodo):
-    loc = project.get("location") or {}
-    lat = loc.get("lat") or project.get("lat") or project.get("latitud")
-    lng = loc.get("lng") or project.get("lng") or project.get("longitud")
-
-    row = {
-        "Proyecto":      project.get("nombre") or project.get("name") or project.get("id") or "",
-        "Propietario":   project.get("owner") or project.get("propietario") or "",
-        "Administrador": project.get("administrador") or project.get("operator") or project.get("admin") or "",
-        "Comuna":        loc.get("comuna") or project.get("comuna") or "",
-        "Estado":        project.get("estado") or project.get("status") or "",
-        "Reporta":       project.get("reporta") or project.get("reports") or "",
-    }
-
-    if lat is not None and lng is not None:
-        row["__lat"] = float(lat)
-        row["__lng"] = float(lng)
-
-    if tipo_key:
-        row["Programa"] = TIPOLOGIA_MAP.get(tipo_key, tipo_key)
-
-    if periodo:
-        vacancia = _num(periodo.get("vacancia") or periodo.get("vacancy") or periodo.get("vacancyRate"))
-        row["Período"]       = periodo.get("period") or periodo.get("periodo") or periodo.get("quarter") or ""
-        row["Stock"]         = _num(periodo.get("stock"))
-        row["Disponibilidad"]= _num(periodo.get("disponibilidad") or periodo.get("available") or periodo.get("availability"))
-        row["Vacancia (%)"]  = vacancia
-        row["Útil (m²)"]     = _num(periodo.get("sup") or periodo.get("area") or periodo.get("m2util") or periodo.get("usableArea"))
-        row["Arriendo UF"]   = _num(periodo.get("arriendo") or periodo.get("rentUF") or periodo.get("renta"))
-        row["UF/m²"]         = _num(periodo.get("ufm2") or periodo.get("rentUFm2") or periodo.get("rentPerM2"))
-        row["Ocupación (%)"] = (
-            round((1 - vacancia / 100) * 100, 1) if vacancia is not None
-            else _num(periodo.get("ocupacion") or periodo.get("occupancy"))
-        )
-
-    return row
-
-
-def flatten_project(project):
+def flatten_project(entity):
+    """
+    Estructura real de la API (producción):
+      entity.owner, entity.administrator
+      entity.periods[-1].programs[]
+        .program, .stock, .available, .vacancy
+        .usefulM2, .rentUF, .rentUfPerM2, .status
+    """
     rows = []
-    tipo_series = project.get("tipologias") or project.get("series") or project.get("units") or {}
-
-    if not tipo_series:
-        rows.append(_build_row(project, None, None))
+    loc    = entity.get("location") or {}
+    lat    = loc.get("lat")
+    lng    = loc.get("lng")
+    period = (entity.get("periods") or [None])[-1]
+    if not period:
         return rows
 
-    for tipo_key, tipo_data in tipo_series.items():
-        series = tipo_data.get("series") if isinstance(tipo_data, dict) else tipo_data
-        periodo = _last_period(series)
-        if not periodo:
-            continue
-        rows.append(_build_row(project, tipo_key, periodo))
+    base = {
+        "Proyecto":      entity.get("name") or entity.get("id") or "",
+        "Propietario":   entity.get("owner") or "",
+        "Administrador": entity.get("administrator") or "",
+        "Comuna":        loc.get("commune") or loc.get("comuna") or "",
+        "Período":       period.get("label") or period.get("key") or "",
+    }
+    if lat is not None and lng is not None:
+        base["__lat"] = float(lat)
+        base["__lng"] = float(lng)
+
+    for prog in (period.get("programs") or []):
+        stock   = _num(prog.get("stock"))
+        avail   = _num(prog.get("available"))
+        vac_raw = _num(prog.get("vacancy"))
+        vac_pct = round(vac_raw * 100, 1) if vac_raw is not None else None
+
+        rows.append({
+            **base,
+            "Programa":       prog.get("program") or "",
+            "Stock":          stock,
+            "Disponibilidad": avail,
+            "Vacancia (%)":   vac_pct,
+            "Ocupación (%)":  round(100 - vac_pct, 1) if vac_pct is not None else None,
+            "Útil (m²)":      _num(prog.get("usefulM2")),
+            "Arriendo UF":    _num(prog.get("rentUF")),
+            "UF/m²":          _num(prog.get("rentUfPerM2")),
+            "Estado Prog.":   prog.get("status") or "",
+        })
 
     return rows
 
@@ -157,28 +151,24 @@ def fetch(polygons=None):
 def main():
     payload = fetch()
 
-    projects = payload.get("projects") or []
-    print(f"Proyectos recibidos: {len(projects)}")
+    entities = (payload.get("projects") or {}).get("entities") or []
+    print(f"Proyectos recibidos: {len(entities)}")
 
-    if not projects:
-        print("⚠ Sin proyectos. Revisa el polígono y la respuesta:")
-        print(json.dumps(payload, indent=2, ensure_ascii=False)[:2000])
+    if not entities:
+        print("Sin proyectos. Revisa el poligono y la respuesta:")
+        print(json.dumps(payload, indent=2, ensure_ascii=True)[:2000])
         sys.exit(1)
 
-    # Imprimir estructura del primer proyecto para validar mapeo
-    print("\n── Primer proyecto (estructura cruda) ──")
-    print(json.dumps(projects[0], indent=2, ensure_ascii=False)[:3000])
-    print("────────────────────────────────────────\n")
-
     rows = []
-    for p in projects:
+    for p in entities:
         rows.extend(flatten_project(p))
 
     rows_validos = [r for r in rows if r.get("Arriendo UF") and r["Arriendo UF"] > 0]
-    print(f"Filas con arriendo válido: {len(rows_validos)} / {len(rows)} totales")
+    print(f"Filas con precio valido: {len(rows_validos)} / {len(rows)} totales")
 
     if not rows_validos:
-        print("⚠ Ninguna fila con arriendo válido. Revisa _build_row y los nombres de campo.")
+        print("Sin filas con precio valido. Revisa flatten_project y los nombres de campo.")
+        print("Primera fila cruda:", json.dumps(rows[0] if rows else {}, indent=2, ensure_ascii=True))
         sys.exit(1)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -188,7 +178,7 @@ def main():
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(rows_validos, f, ensure_ascii=False, indent=2, default=str)
 
-    print(f"✓ Guardado en: {out_path}")
+    print(f"OK Guardado en: {out_path}")
     print(f"  {len(rows_validos)} filas listas para el visor")
 
 

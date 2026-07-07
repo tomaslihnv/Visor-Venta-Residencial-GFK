@@ -65,7 +65,7 @@ $('#resetBtn')?.addEventListener('click', async () => {
     if (tab === 'distribucion') (await import('../core/chart-distrib.js')).renderDistrib(_state, DISTRIB_COLS, mpCurrent);
     if (tab === 'svp')          (await import('../core/chart-svp.js')).renderSvp(_state, SVP, mpCurrent);
     if (tab === 'cruz')         (await import('../core/chart-cruz.js')).renderCruz(_state, CRUZ, mpCurrent);
-    if (tab === 'proyectos')    (await import('../core/chart-proyectos.js')).renderProyectos(_state, PROYECTOS_METRICS, mpCurrent, { projectCandidates: MAP.projectCandidates });
+    if (tab === 'proyectos')    await window._mf.renderProyectos(_state, mpCurrent);
     if (tab === 'comparativa')  (await import('../core/comparativa.js')).renderComparativa(_state, COMPARATIVA, mpCurrent);
     if (tab === 'mapa')         (await import('../core/map.js')).renderMap(_state, MAP, mpCurrent);
   };
@@ -89,6 +89,9 @@ $$('.tab').forEach(tab => {
       case 'comparativa':
         (await import('../core/comparativa.js')).renderComparativa(state, COMPARATIVA, mp);
         break;
+      case 'historico':
+        (await import('./historico.js')).renderHistorico();
+        break;
       case 'distribucion':
         (await import('../core/chart-distrib.js')).renderDistrib(state, DISTRIB_COLS, mp);
         break;
@@ -102,7 +105,7 @@ $$('.tab').forEach(tab => {
         (await import('../core/chart-cruz.js')).renderCruz(state, CRUZ, mp);
         break;
       case 'proyectos':
-        (await import('../core/chart-proyectos.js')).renderProyectos(state, PROYECTOS_METRICS, mp, { projectCandidates: MAP.projectCandidates });
+        await window._mf.renderProyectos(state, mp);
         break;
     }
   });

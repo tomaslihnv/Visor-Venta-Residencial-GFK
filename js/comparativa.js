@@ -227,7 +227,7 @@ export function renderComparativa() {
     const pctDisp = disponibles != null && ofertaTotal != null && ofertaTotal > 0
       ? disponibles / ofertaTotal * 100
       : null;
-    const velVenta = colVelVenta ? pick(colVelVenta) : null;
+    const velVenta = colVelVenta ? avg(p.rows.map(r => numVal(r[colVelVenta]))) : null;
 
     const byTipo = {};
     for (const tipo of tipologias) {
