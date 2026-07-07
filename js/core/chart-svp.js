@@ -397,9 +397,9 @@ export function renderSvp(state, svpConfig, mp) {
       : `Prom.: ${avgY.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${yOpt.label}`;
     annotations.avgLine = {
       type: 'line', scaleID: 'y', value: avgY,
-      borderColor: '#dc2626', borderWidth: 1.5, borderDash: [8, 4],
+      borderColor: '#ef4444', borderWidth: 1.5, borderDash: [8, 4],
       label: { content: avgLabel, display: true, position: 'start',
-        color: '#dc2626', backgroundColor: 'rgba(255,255,255,0.92)',
+        color: '#ef4444', backgroundColor: 'rgba(255,255,255,0.92)',
         font: { size: fs, weight: 'bold' }, padding: { x: 6, y: 3 } },
     };
   }

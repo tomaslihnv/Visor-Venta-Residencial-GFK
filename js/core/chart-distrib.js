@@ -524,7 +524,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
   const datasets = [{
     label: label,
     data: refDataClean,
-    borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.10)',
+    borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)',
     pointRadius: 0, borderWidth: 2, cubicInterpolationMode: 'monotone', fill: true,
   }];
 
@@ -579,7 +579,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
 
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
-    const mpColor = '#96323C';
+    const mpColor = '#ef4444';
     const mpAnn = (c) => ({ content: c, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
@@ -666,7 +666,7 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
   const datasets = [{
     label: label,
     data: refDataClean,
-    borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.10)',
+    borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)',
     pointRadius: 0, borderWidth: 2, tension, fill: true,
   }];
 
@@ -720,7 +720,7 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
 
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
-    const mpColor = '#96323C';
+    const mpColor = '#ef4444';
     const mpAnn = (c) => ({ content: c, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
@@ -844,7 +844,7 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
 
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
-    const mpColor = '#96323C';
+    const mpColor = '#ef4444';
     const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
@@ -865,8 +865,8 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
       datasets: [{
         label: label,
         data: lnData,
-        borderColor: '#0ea5e9',
-        backgroundColor: 'rgba(14,165,233,0.08)',
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59,130,246,0.08)',
         pointRadius: 0,
         borderWidth: 2,
         tension: 0.3,
@@ -942,13 +942,13 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
     {
       type: 'bar', label: 'Frecuencia',
       data: bins,
-      backgroundColor: 'rgba(56,189,248,0.35)', borderColor: '#38bdf8', borderWidth: 1,
+      backgroundColor: 'rgba(59,130,246,0.55)', borderColor: 'rgba(59,130,246,0.85)', borderWidth: 1,
       barPercentage: 1.0, categoryPercentage: 1.0, order: 3,
     },
     {
       type: 'line', label: 'Densidad',
       data: kdeData,
-      borderColor: '#0ea5e9', backgroundColor: 'transparent',
+      borderColor: '#3b82f6', backgroundColor: 'transparent',
       borderWidth: 2, pointRadius: 0, tension: 0.4, fill: false, order: 2,
     },
   ];
@@ -996,7 +996,7 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
 
   const showMpDistribD = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistribD && mp?.inDistrib && mp.tipologias?.length > 0) {
-    const mpColor = '#96323C';
+    const mpColor = '#ef4444';
     const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
