@@ -11,7 +11,12 @@
 // 2. Mover el archivo descargado a data/multifamily/.
 // 3. Agregar una entrada acá con su label y el path del archivo.
 export const SAVED_DATASETS = [
-  { label: 'Multifamily', file: 'data/multifamily/multifamily.json' },
+  { label: 'Santiago (Jul 2026)',         file: 'data/multifamily/multifamily_santiago_20260702.json' },
+  { label: 'Estación Central (Jul 2026)', file: 'data/multifamily/multifamily_estacion_central_20260702.json' },
+  { label: 'Las Condes (Jul 2026)',       file: 'data/multifamily/multifamily_las_condes_20260702.json' },
+  { label: 'Lo Barnechea (Jul 2026)',     file: 'data/multifamily/multifamily_lo_barnechea_20260702.json' },
+  { label: 'Providencia (Jul 2026)',      file: 'data/multifamily/multifamily_providencia_20260702.json' },
+  { label: 'Ñuñoa (Jul 2026)',            file: 'data/multifamily/multifamily_nunoa_20260702.json' },
 ];
 
 export const COLUMN_MAP = {
@@ -65,6 +70,10 @@ export const KPIS = [
 // ── Gráfico Proyectos ──────────────────────────────────────────────────────
 export const PROYECTOS_METRICS = [
   {
+    id: 'util',      label: 'Útil (m²)',           col: 'Útil (m²)',
+    agg: 'avg',  fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }),
+  },
+  {
     id: 'vacancia',  label: 'Vacancia (%)',        col: 'Vacancia (%)',
     agg: 'avg',  fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + '%',
   },
@@ -77,12 +86,20 @@ export const PROYECTOS_METRICS = [
     agg: 'avg',  fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   },
   {
+    id: 'ocupacion', label: 'Ocupación (%)',       col: 'Ocupación (%)',
+    agg: 'avg',  fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + '%',
+  },
+  {
     id: 'stock',     label: 'Stock',               col: 'Stock',
-    agg: 'avg',  fmt: v => String(Math.round(v)),
+    agg: 'sum',  fmt: v => String(Math.round(v)),
   },
   {
     id: 'disponib',  label: 'Disponibilidad',      col: 'Disponibilidad',
-    agg: 'avg',  fmt: v => String(Math.round(v)),
+    agg: 'sum',  fmt: v => String(Math.round(v)),
+  },
+  {
+    id: 'rating',    label: 'Rating Google',       col: 'Rating',
+    agg: 'avg',  fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ★',
   },
 ];
 
@@ -140,6 +157,13 @@ export const SVP = {
   ],
   yOptions: [
     {
+      value:       'util',
+      label:       'Útil (m²)',
+      candidates:  ['util (m', 'útil (m', 'm² util'],
+      formatValue: v => `${v.toLocaleString('es-CL')} m²`,
+      formatAvg:   v => `Prom.: ${v.toLocaleString('es-CL')} m²`,
+    },
+    {
       value:       'arriendo',
       label:       'Arriendo UF',
       candidates:  ['arriendo uf', 'arriendo'],
@@ -192,6 +216,15 @@ export const SVP = {
   // No group column for multifamily (building-level, no tipología)
   groupCandidates: [],
   projCandidates:  ['proyecto', 'edificio', 'nombre'],
+  // Valor de "Mi Proyecto" por tipología según el modo de eje Y elegido.
+  // Vacancia/Ocupación/Stock/Disponibilidad/Rating son métricas de edificio,
+  // no existen por tipología, así que no hay punto que graficar para esos modos.
+  getMpY: (t, mode) => {
+    if (mode === 'util')     return t.sup;
+    if (mode === 'ufm2')     return t.ufm2;
+    if (mode === 'arriendo') return t.renta;
+    return null;
+  },
   // Cuadrito de resumen dentro del gráfico
   summaryFields: [
     { label: 'Proyectos',         candidates: ['proyecto', 'edificio', 'nombre'], agg: 'countUnique' },
@@ -223,11 +256,12 @@ export const CRUZ = {
 
 // ── Distribución ───────────────────────────────────────────────────────────
 export const DISTRIB_COLS = [
-  { col: 'Arriendo UF',  label: 'Arriendo UF' },
-  { col: 'UF/m²',        label: 'UF/m²' },
-  { col: 'Vacancia (%)', label: 'Vacancia (%)' },
-  { col: 'Útil (m²)',    label: 'm² útil' },
-  { col: 'Stock',        label: 'Stock' },
+  { col: 'Arriendo UF',  label: 'Arriendo UF',   unit: 'UF' },
+  { col: 'UF/m²',        label: 'UF/m²',         unit: 'UF/m²' },
+  { col: 'Útil (m²)',    label: 'm² útil',       unit: 'm²' },
+  { col: 'Vacancia (%)', label: 'Vacancia (%)',  unit: '%',  perBuilding: true },
+  { col: 'Stock',        label: 'Stock',         unit: 'unid.' },
+  { col: 'Rating',       label: 'Rating Google', unit: '★',  perBuilding: true },
 ];
 
 // ── Mapa ───────────────────────────────────────────────────────────────────
@@ -263,8 +297,8 @@ export const COMPARATIVA = {
     { label: 'Estado',        candidates: ['estado'] },
   ],
   metricColumns: [
-    { label: 'Stock',       candidates: ['stock'],         fmt: 'int' },
-    { label: 'Disponib.',   candidates: ['disponibilidad'], fmt: 'int' },
+    { label: 'Stock',       candidates: ['stock'],         fmt: 'int', agg: 'sum' },
+    { label: 'Disponib.',   candidates: ['disponibilidad'], fmt: 'int', agg: 'sum' },
     { label: 'Vacancia %',  candidates: ['vacancia'],      fmt: 'pct' },
     { label: 'Arriendo UF', candidates: ['arriendo uf', 'arriendo'], fmt: 'uf1' },
     { label: 'UF/m²',       candidates: ['uf/m', 'uf / m'], fmt: 'uf2' },

@@ -321,18 +321,21 @@ export function renderSvp(state, svpConfig, mp) {
   if (xOpt.value === 'util' && mp?.inSvp && mp.tipologias?.length > 0) {
     const mpColor = '#1e293b';
     const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.ufm2 != null);
-    const mpFiltered = tipoFilter
+    // Respeta tanto el "Tipo" local del gráfico (si existe) como el filtro
+    // de Programa del sidebar, igual que los comparables.
+    const programaFilter = state.filterValues?.programa;
+    let mpFiltered = tipoFilter
       ? mpTipos.filter(t => String(t.nombre).toUpperCase() === tipoFilter.toUpperCase())
       : mpTipos;
-    if (mpFiltered.length > 0) {
-      const getMpY = svpConfig.getMpY ?? ((t, mode) => mode === 'ufm2' ? t.ufm2 : t.sup * t.ufm2);
+    if (programaFilter?.size > 0) mpFiltered = mpFiltered.filter(t => programaFilter.has(t.nombre));
+    const getMpY = svpConfig.getMpY ?? ((t, mode) => mode === 'ufm2' ? t.ufm2 : t.sup * t.ufm2);
+    const mpPoints = mpFiltered
+      .map(t => ({ x: t.sup, y: getMpY(t, yAxisMode), label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}` }))
+      .filter(p => p.y != null);
+    if (mpPoints.length > 0) {
       mpDatasets.push({
         label: mp.proyecto || 'Mi Proyecto',
-        data: mpFiltered.map(t => ({
-          x: t.sup,
-          y: getMpY(t, yAxisMode),
-          label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}`,
-        })),
+        data: mpPoints,
         backgroundColor: mpColor, borderColor: mpColor,
         borderWidth: 2, pointRadius: 7, pointHoverRadius: 9,
       });

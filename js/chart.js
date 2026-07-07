@@ -34,6 +34,12 @@ function _mpTipoVisible(nombre, activeTipos) {
   return false;
 }
 
+function _parseAxisVal(s) {
+  if (s == null || s === '') return null;
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+
 // ============== KPIs ==============
 export function renderKpis() {
   const rows = state.filtered;
@@ -89,6 +95,8 @@ export function renderKpis() {
 }
 
 // ============== Gráfico ==============
+let chartListenersReady = false;
+
 export function populateChartSelectors() {
   const xSel = $('#chartX');
   const ySel = $('#chartY');
@@ -115,9 +123,12 @@ export function populateChartSelectors() {
   if (state.columns.find(c => c.name === 'Edificio')) xSel.value = 'Edificio';
   if (state.columns.find(c => c.name === 'UF/m²')) ySel.value = 'UF/m²';
 
-  ['#chartType', '#chartX', '#chartY', '#chartAgg', '#chartGroup', '#chartSort'].forEach(sel => {
-    $(sel).addEventListener('change', renderChart);
-  });
+  if (!chartListenersReady) {
+    chartListenersReady = true;
+    ['#chartType', '#chartX', '#chartY', '#chartAgg', '#chartGroup', '#chartSort'].forEach(sel => {
+      $(sel).addEventListener('change', renderChart);
+    });
+  }
 }
 
 function aggregate(values, mode) {
@@ -334,6 +345,8 @@ export function populateProyectosSelectors() {
   if (!sel || proyListenersReady) return;
   proyListenersReady = true;
   sel.addEventListener('change', renderProyectos);
+  $('#proyYMin')?.addEventListener('input', renderProyectos);
+  $('#proyYMax')?.addEventListener('input', renderProyectos);
 
   const proyFontSlider = $('#proyFontSize');
   const proyFontVal    = $('#proyFontSizeVal');
@@ -577,6 +590,8 @@ export function renderProyectos() {
           ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
           grid: { display: false },
+          ...(_parseAxisVal($('#proyYMin')?.value) !== null ? { min: _parseAxisVal($('#proyYMin').value) } : {}),
+          ...(_parseAxisVal($('#proyYMax')?.value) !== null ? { max: _parseAxisVal($('#proyYMax').value) } : {}),
         },
       },
     },
@@ -1234,10 +1249,13 @@ export function populateDistribSelectors() {
     }
   }
 
-  colSel.addEventListener('change', renderDistrib);
-
   if (!distribListenersReady) {
     distribListenersReady = true;
+    colSel.addEventListener('change', renderDistrib);
+    $('#distribXMin')?.addEventListener('input', renderDistrib);
+    $('#distribXMax')?.addEventListener('input', renderDistrib);
+    $('#distribYMin')?.addEventListener('input', renderDistrib);
+    $('#distribYMax')?.addEventListener('input', renderDistrib);
 
     document.querySelectorAll('.distrib-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1651,6 +1669,8 @@ export function renderDistrib() {
       scales: isDens ? {
         x: {
           type: 'linear',
+          ...(_parseAxisVal($('#distribXMin')?.value) !== null ? { min: _parseAxisVal($('#distribXMin').value) } : {}),
+          ...(_parseAxisVal($('#distribXMax')?.value) !== null ? { max: _parseAxisVal($('#distribXMax').value) } : {}),
           title: { display: true, text: col, font: { size: fs } },
           ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
@@ -1658,6 +1678,8 @@ export function renderDistrib() {
           title: { display: true, text: 'Densidad', font: { size: fs } },
           ticks: { display: false },
           grid: { display: false },
+          ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
+          ...(_parseAxisVal($('#distribYMax')?.value) !== null ? { max: _parseAxisVal($('#distribYMax').value) } : {}),
         },
       } : {
         x: {
@@ -1668,6 +1690,8 @@ export function renderDistrib() {
         y: {
           title: { display: true, text: col, font: { size: fs } },
           ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+          ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
+          ...(_parseAxisVal($('#distribYMax')?.value) !== null ? { max: _parseAxisVal($('#distribYMax').value) } : {}),
         },
       },
     },

@@ -12,6 +12,7 @@
     <a href="index.html"       class="nav-link">Venta</a>
     <a href="renta.html"       class="nav-link">Renta</a>
     <a href="multifamily.html" class="nav-link active">Multifamily</a>
+    <a href="oficinas.html"    class="nav-link">Oficinas</a>
   </nav>
 
   <header class="topbar">
@@ -62,15 +63,16 @@
                 <span>Vacancia (%)</span>
                 <input type="number" id="mpVacancia" class="mp-metric-input mp-input" min="0" max="100" step="0.1" placeholder="—" />
               </label>
-              <label class="mp-metric-row">
-                <span>Arriendo UF</span>
-                <input type="number" id="mpArriendo" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
-              </label>
-              <label class="mp-metric-row">
-                <span>UF/m²</span>
-                <input type="number" id="mpUfm2" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
-              </label>
             </div>
+          </div>
+
+          <!-- Unidades / tipologías -->
+          <div class="mp-field">
+            <div class="mp-tipos-header">
+              <label class="mp-label">Unidades por tipología</label>
+              <button id="mpAddTipo" class="mp-add-btn" type="button">+ Agregar</button>
+            </div>
+            <div id="mpTiposContainer" class="mp-tipos-container"></div>
           </div>
 
           <div class="mp-includes">
@@ -79,6 +81,7 @@
             <label class="mp-check-row"><input type="checkbox" id="mpInMapa" /><span>Mapa</span></label>
             <label class="mp-check-row"><input type="checkbox" id="mpInDistrib" /><span>Distribución</span></label>
             <label class="mp-check-row"><input type="checkbox" id="mpInSvp" /><span>Sup. vs Arriendo</span></label>
+            <label class="mp-check-row"><input type="checkbox" id="mpInCruz" /><span>Cruz</span></label>
             <label class="mp-check-row"><input type="checkbox" id="mpInProy" /><span>Proyectos</span></label>
           </div>
         </div>
@@ -118,7 +121,7 @@
       <div id="dropzone" class="dropzone">
         <div class="dropzone-inner">
           <h2>Arrastrá tu Excel acá</h2>
-          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>. El archivo debe ser exportado desde <strong>Inciti</strong> en formato multifamily.</p>
+          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong> o seleccioná un dataset guardado.</p>
         </div>
       </div>
 
@@ -133,6 +136,7 @@
           <button class="tab" data-tab="cruz">Cruz</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="comparativa">Resumen</button>
+          <button class="tab" data-tab="historico">Histórico</button>
           <button class="tab" data-tab="tabla">Datos</button>
         </div>
 
@@ -271,11 +275,14 @@
             <div class="ctrl">
               <label>Métrica</label>
               <select id="proyMetrica">
-                <option value="vacancia">Vacancia (%)</option>
+                <option value="util">Útil (m²)</option>
                 <option value="arriendo">Arriendo UF prom.</option>
                 <option value="ufm2">UF/m²</option>
+                <option value="vacancia">Vacancia (%)</option>
+                <option value="ocupacion">Ocupación (%)</option>
                 <option value="stock">Stock</option>
                 <option value="disponib">Disponibilidad</option>
+                <option value="rating">Rating Google</option>
               </select>
             </div>
             <div class="ctrl distrib-font-ctrl">
@@ -308,6 +315,14 @@
                 <button class="proy-median-btn" data-median="hide">Ocultar</button>
               </div>
             </div>
+            <div class="ctrl axis-range-ctrl">
+              <label>Eje Y</label>
+              <div class="axis-range-row">
+                <input type="number" id="proyYMin" class="axis-range-input" placeholder="mín">
+                <span>–</span>
+                <input type="number" id="proyYMax" class="axis-range-input" placeholder="máx">
+              </div>
+            </div>
             <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
           <div class="chart-wrap" id="proyWrap">
@@ -326,6 +341,7 @@
               <label>Vista</label>
               <div class="distrib-ratio-row">
                 <button class="distrib-mode-btn active" data-mode="acumulada">Acumulada</button>
+                <button class="distrib-mode-btn" data-mode="cuantil">Cuantil</button>
                 <button class="distrib-mode-btn" data-mode="densidad">Densidad</button>
                 <button class="distrib-mode-btn" data-mode="lognormal">Log-normal</button>
               </div>
@@ -349,7 +365,7 @@
               </div>
             </div>
             <div class="ctrl distrib-marker-group">
-              <label>Marcar precio</label>
+              <label id="distribMarkLabel">Marcar valor</label>
               <div class="marker-add">
                 <input type="number" id="distribPriceInput" min="0" step="1" placeholder="ej: 20">
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
@@ -376,10 +392,117 @@
                 <button class="ratio-btn" data-ratio="1">1:1</button>
               </div>
             </div>
+            <div class="ctrl axis-range-ctrl">
+              <label>Eje X</label>
+              <div class="axis-range-row">
+                <input type="number" id="distribXMin" class="axis-range-input" placeholder="mín">
+                <span>–</span>
+                <input type="number" id="distribXMax" class="axis-range-input" placeholder="máx">
+              </div>
+            </div>
+            <div class="ctrl axis-range-ctrl">
+              <label>Eje Y</label>
+              <div class="axis-range-row">
+                <input type="number" id="distribYMin" class="axis-range-input" placeholder="mín">
+                <span>–</span>
+                <input type="number" id="distribYMax" class="axis-range-input" placeholder="máx">
+              </div>
+            </div>
             <button id="distribExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
           <div class="chart-wrap" id="distribWrap">
             <canvas id="distribChart"></canvas>
+          </div>
+        </div>
+
+        <!-- TAB: HISTÓRICO -->
+        <div class="tab-panel" data-panel="historico">
+          <div id="histPanel" class="hist-panel">
+
+            <!-- Selector de comunas -->
+            <div class="hist-toolbar">
+              <div class="hist-toolbar-group">
+                <span class="hist-label">Comunas</span>
+                <div id="histComunaChips" class="hist-chips"></div>
+              </div>
+              <span id="histLoadingMsg" class="hist-loading">Cargando…</span>
+            </div>
+
+            <!-- Filtros -->
+            <div id="histFiltros" class="hist-filtros" style="display:none;">
+
+              <div class="hist-filter-group">
+                <span class="hist-label">Programa</span>
+                <div id="histProgChips" class="hist-chips"></div>
+              </div>
+
+              <div class="hist-filter-group">
+                <span class="hist-label">Proyecto</span>
+                <select id="histProyectoSel" class="hist-select">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+
+              <div class="hist-filter-group">
+                <span class="hist-label">Período</span>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:5px;">
+                  <select id="histXFrom" class="hist-select" title="Período inicial"></select>
+                  <span style="color:#94a3b8;font-size:12px;">–</span>
+                  <select id="histXTo" class="hist-select" title="Período final"></select>
+                </div>
+              </div>
+
+              <div class="hist-filter-group">
+                <span class="hist-label">Líneas extra</span>
+                <div class="hist-chips" style="margin-top:5px;">
+                  <button id="histAvgBtn" class="prog-chip">Promedio mercado</button>
+                  <button id="histPortfolioBtn" class="prog-chip">Portfolio SITU</button>
+                </div>
+              </div>
+
+              <div class="hist-filter-group">
+                <span class="hist-label">Serie propia</span>
+                <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap;">
+                  <label class="primary-btn" style="cursor:pointer;font-size:0.8em;padding:5px 12px;">
+                    Cargar JSON
+                    <input type="file" id="histInternalFile" accept=".json" style="display:none">
+                  </label>
+                  <span id="histInternalName" class="hist-file-name"></span>
+                  <button id="histInternalClear" class="hist-clear-btn" style="display:none;" title="Quitar serie">✕</button>
+                </div>
+                <div class="hist-hint">JSON: <code>[{"periodo":"2024-Q1","vacancia_pct":12.5,"arriendo_uf":450}]</code></div>
+              </div>
+
+            </div>
+
+            <!-- Gráficos -->
+            <div id="histCharts" class="hist-charts" style="display:none;">
+
+              <div class="hist-chart-card">
+                <div class="hist-chart-header">
+                  <span class="hist-chart-title">Arriendo UF promedio</span>
+                  <button id="histCopyRent" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
+                </div>
+                <div class="hist-chart-wrap" id="histWrapRent">
+                  <canvas id="histChartRent"></canvas>
+                </div>
+              </div>
+
+              <div class="hist-chart-card">
+                <div class="hist-chart-header">
+                  <span class="hist-chart-title">Vacancia %</span>
+                  <button id="histCopyVac" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
+                </div>
+                <div class="hist-chart-wrap" id="histWrapVac">
+                  <canvas id="histChartVac"></canvas>
+                </div>
+              </div>
+
+            </div>
+
+            <p id="histEmpty" style="text-align:center;color:#94a3b8;padding:40px 0;">
+              Seleccioná una o más comunas para ver el histórico.
+            </p>
           </div>
         </div>
 

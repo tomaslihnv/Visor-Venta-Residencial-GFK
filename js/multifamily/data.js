@@ -126,14 +126,55 @@ function _renderSavedDatasetsList() {
     cont.innerHTML = '<p class="hint">Sin datasets guardados todavía.</p>';
     return;
   }
-  cont.innerHTML = SAVED_DATASETS
-    .map((entry, i) => `<button type="button" class="saved-dataset-btn" data-idx="${i}">${entry.label}</button>`)
-    .join('');
+
+  const selected = new Set();
+
+  cont.innerHTML = SAVED_DATASETS.map((entry, i) => `
+    <button type="button" class="saved-dataset-btn" data-idx="${i}">${entry.label}</button>
+  `).join('');
+
+  async function _loadSelected() {
+    if (!selected.size) {
+      document.getElementById('dashboard')?.classList.add('hidden');
+      document.getElementById('dropzone')?.classList.remove('hidden');
+      const fileNameEl = document.getElementById('fileName');
+      if (fileNameEl) fileNameEl.textContent = '';
+      return;
+    }
+    const entries = [...selected].map(i => SAVED_DATASETS[i]);
+    cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.disabled = true);
+    try {
+      const results = await Promise.all(
+        entries.map(e => fetch(e.file).then(r => {
+          if (!r.ok) throw new Error(`No se encontró ${e.file}`);
+          return r.json();
+        }))
+      );
+      const merged = results.flat();
+      const label  = entries.map(e => e.label).join(' + ');
+      const fileNameEl = document.getElementById('fileName');
+      if (fileNameEl) fileNameEl.textContent = label;
+      const withStars = await attachStarMetrics(merged);
+      onDataLoaded(withStars);
+    } catch (err) {
+      console.error(err);
+      alert('Error cargando datasets: ' + err.message);
+    } finally {
+      cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.disabled = false);
+    }
+  }
+
   cont.querySelectorAll('.saved-dataset-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      loadSavedDataset(SAVED_DATASETS[+btn.dataset.idx]);
+      const idx = +btn.dataset.idx;
+      if (selected.has(idx)) {
+        selected.delete(idx);
+        btn.classList.remove('active');
+      } else {
+        selected.add(idx);
+        btn.classList.add('active');
+      }
+      _loadSelected();
     });
   });
 }
@@ -166,7 +207,7 @@ export function onDataLoaded(rows) {
     import('../core/chart-proyectos.js'),
     import('../core/map.js'),
   ]).then(([
-    { initMpPanel },
+    {},
     { buildFilters, applyFilters },
     { renderKpis },
     { initTableListeners, renderTable },
@@ -177,9 +218,31 @@ export function onDataLoaded(rows) {
     { resetMapOnLoad, geocodeData, renderMap },
   ]) => {
     import('./miProyecto.js').then(({ mp }) => {
-      initMpPanel();
-
       const container = document.getElementById('filtersContainer');
+
+      // Valor de "Mi Proyecto" para el gráfico de Proyectos, según la métrica
+      // elegida. Usado en los 3 lugares que pueden re-renderizar ese gráfico
+      // (filtros, mpchange, render inicial) para que Mi Proyecto no desaparezca
+      // al cambiar un filtro o togglear un checkbox de "Incluir en".
+      const getProyMpValue = (metricId, mp) => {
+        // Si hay Programas filtrados en el sidebar, promediar solo las
+        // tipologías de Mi Proyecto que coincidan (igual que los comparables).
+        const programaFilter = state.filterValues?.programa;
+        const tipos = (programaFilter?.size > 0)
+          ? (mp.tipologias ?? []).filter(t => programaFilter.has(t.nombre))
+          : (mp.tipologias ?? []);
+        const avgTipo = field => {
+          const vals = tipos.map(t => t[field]).filter(v => v != null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+        };
+        if (metricId === 'util')     return avgTipo('sup');
+        if (metricId === 'arriendo') return avgTipo('renta');
+        if (metricId === 'ufm2')     return avgTipo('ufm2');
+        if (metricId === 'stock')    return mp.stock ?? null;
+        if (metricId === 'vacancia') return mp.vacancia ?? null;
+        return null;
+      };
+      const proyOptions = { projectCandidates: MAP.projectCandidates, getMpValue: getProyMpValue };
 
       const onChange = _state => {
         renderKpis(_state.filtered, _state.raw.length, KPIS);
@@ -190,7 +253,7 @@ export function onDataLoaded(rows) {
           if (tab === 'distribucion') renderDistrib(_state, DISTRIB_COLS, mpCurrent);
           if (tab === 'svp')          renderSvp(_state, SVP, mpCurrent);
           if (tab === 'cruz')         renderCruz(_state, CRUZ, mpCurrent);
-          if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, mpCurrent, { projectCandidates: MAP.projectCandidates });
+          if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, mpCurrent, proyOptions);
           if (tab === 'comparativa')  import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_state, COMPARATIVA, mpCurrent));
           if (tab === 'mapa')         renderMap(_state, MAP, mpCurrent);
         });
@@ -202,7 +265,7 @@ export function onDataLoaded(rows) {
         renderDistrib:  (_s, _mp) => import('../core/chart-distrib.js').then(({ renderDistrib })  => renderDistrib(_s, DISTRIB_COLS, _mp)),
         renderSvp:      (_s, _mp) => import('../core/chart-svp.js').then(({ renderSvp })          => renderSvp(_s, SVP, _mp)),
         renderCruz:     (_s, _mp) => import('../core/chart-cruz.js').then(({ renderCruz })        => renderCruz(_s, CRUZ, _mp)),
-        renderProyectos:(_s, _mp) => import('../core/chart-proyectos.js').then(({ renderProyectos }) => renderProyectos(_s, PROYECTOS_METRICS, _mp, { projectCandidates: MAP.projectCandidates })),
+        renderProyectos:(_s, _mp) => import('../core/chart-proyectos.js').then(({ renderProyectos }) => renderProyectos(_s, PROYECTOS_METRICS, _mp, proyOptions)),
         renderMap:      (_s, _mp) => renderMap(_s, MAP, _mp),
         renderComparativa: (_s, _mp) => import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_s, COMPARATIVA, _mp)),
         state, onChange,
@@ -217,16 +280,7 @@ export function onDataLoaded(rows) {
       populateSvpSelectors(state, SVP);
       initSvpListeners(state, SVP, mp);
       initCruzListeners(state, CRUZ, mp);
-      initProyectosListeners(state, PROYECTOS_METRICS, mp, {
-        projectCandidates: MAP.projectCandidates,
-        getMpValue: (metricId, mp) => {
-          if (metricId === 'arriendo') return mp.arriendo ?? null;
-          if (metricId === 'ufm2')     return mp.ufm2 ?? null;
-          if (metricId === 'stock')    return mp.stock ?? null;
-          if (metricId === 'vacancia') return mp.vacancia ?? null;
-          return null;
-        },
-      });
+      initProyectosListeners(state, PROYECTOS_METRICS, mp, proyOptions);
       initTableListeners(state, onChange);
 
       resetMapOnLoad();

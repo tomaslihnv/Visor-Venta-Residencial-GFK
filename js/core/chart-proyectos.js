@@ -1,5 +1,13 @@
 import { norm } from './utils.js';
 
+function _parseAxisVal(s) {
+  if (s == null || s === '') return null;
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+
+function _$(id) { return document.getElementById(id); }
+
 // metricDefs: array of { id, label, col, agg, fmt }
 // agg: 'avg' | 'sum' | 'count'
 // fmt: function(value) => string
@@ -7,6 +15,20 @@ import { norm } from './utils.js';
 // options: { canvasId, selectId, exportBtnId, projectCandidates }
 
 const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#a855f7'];
+
+// Mediana ponderada: pairs = [[valor, peso], ...]. Con peso 1 para todos
+// equivale a la mediana simple de siempre.
+function _weightedMedian(pairs) {
+  const sorted = pairs.filter(([, w]) => w > 0).sort((a, b) => a[0] - b[0]);
+  const total  = sorted.reduce((s, [, w]) => s + w, 0);
+  if (!total) return null;
+  let acc = 0;
+  for (const [v, w] of sorted) {
+    acc += w;
+    if (acc >= total / 2) return v;
+  }
+  return sorted[sorted.length - 1]?.[0] ?? null;
+}
 
 function _withMargin(dataUrl, m) {
   return new Promise(resolve => {
@@ -36,6 +58,8 @@ export function initProyectosListeners(state, metricDefs, mp, options = {}) {
   document.getElementById(selectId)?.addEventListener('change', () => {
     renderProyectos(state, metricDefs, mp, options);
   });
+  _$('proyYMin')?.addEventListener('input', () => renderProyectos(state, metricDefs, mp, options));
+  _$('proyYMax')?.addEventListener('input', () => renderProyectos(state, metricDefs, mp, options));
 
   const fontSlider = document.getElementById('proyFontSize');
   const fontVal    = document.getElementById('proyFontSizeVal');
@@ -164,10 +188,23 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
   const MP_COLOR  = '#96323C';
   const BAR_COLOR = '#DDE0E3';
 
-  const sortedVals = entries.map(([, v]) => v).sort((a, b) => a - b);
-  const medianVal  = showMedian && sortedVals.length
-    ? sortedVals[Math.floor(sortedVals.length / 2)]
-    : null;
+  // Mediana ponderada por Stock: cada unidad pesa igual, no cada proyecto
+  // (un edificio de 391 unidades influye más que uno de 54).
+  const stockCol = state.columns.find(c => norm(c.name).includes('stock'))?.name;
+  const stockByProj = {};
+  if (stockCol) {
+    for (const r of state.filtered) {
+      const proj = String(r[proyCol] ?? '').trim();
+      if (!proj) continue;
+      const v = Number(r[stockCol]);
+      if (!isNaN(v) && v > 0) stockByProj[proj] = (stockByProj[proj] ?? 0) + v;
+    }
+  }
+  const weightedPairs = entries.map(([proj, val]) => [
+    val,
+    stockCol ? (proj === mpName ? (mp?.stock ?? 0) : (stockByProj[proj] ?? 0)) : 1,
+  ]);
+  const medianVal = showMedian ? _weightedMedian(weightedPairs) : null;
 
   const barLabelsPlugin = {
     id: 'barLabels',
@@ -224,6 +261,8 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
           title: { display: false },
           ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
+          ...(_parseAxisVal(_$('proyYMin')?.value) !== null ? { min: _parseAxisVal(_$('proyYMin').value) } : {}),
+          ...(_parseAxisVal(_$('proyYMax')?.value) !== null ? { max: _parseAxisVal(_$('proyYMax').value) } : {}),
         },
       },
     },

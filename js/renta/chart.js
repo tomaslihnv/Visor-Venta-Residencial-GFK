@@ -2,6 +2,12 @@ import { $, fmt, extractDormitorios } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 
+function _parseAxisVal(s) {
+  if (s == null || s === '') return null;
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+
 // ── Normal distribution helpers ───────────────────────────────────────────
 
 function _probit(p) {
@@ -182,6 +188,8 @@ export function populateProyectosSelectors() {
   if (proyListenersReady) return;
   proyListenersReady = true;
   $('#proyMetrica')?.addEventListener('change', renderProyectos);
+  $('#proyYMin')?.addEventListener('input', renderProyectos);
+  $('#proyYMax')?.addEventListener('input', renderProyectos);
 
   const proyFontSlider = $('#proyFontSize');
   const proyFontVal    = $('#proyFontSizeVal');
@@ -375,6 +383,8 @@ export function renderProyectos() {
           title: { display: false },
           ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
+          ...(_parseAxisVal($('#proyYMin')?.value) !== null ? { min: _parseAxisVal($('#proyYMin').value) } : {}),
+          ...(_parseAxisVal($('#proyYMax')?.value) !== null ? { max: _parseAxisVal($('#proyYMax').value) } : {}),
         },
       },
     },
@@ -644,7 +654,7 @@ export function renderSupVsRenta() {
         label: mpPName,
         data: mpFiltered.map(t => ({
           x: t.sup,
-          y: yAxisMode === 'ufm2' ? t.ufm2 : t.sup * t.ufm2,
+          y: yAxisMode === 'ufm2' ? t.ufm2 : (t.renta ?? t.sup * t.ufm2),
           label: `${mpPName} ${t.nombre}`,
         })),
         backgroundColor: mpColor,
@@ -917,11 +927,14 @@ export function populateDistribSelectors() {
     }
   }
 
-  colSel.addEventListener('change', renderDistrib);
-
   if (!distribListenersReady) {
     distribListenersReady = true;
+    colSel.addEventListener('change', renderDistrib);
     $('#distribNormalToggle')?.addEventListener('change', renderDistrib);
+    $('#distribXMin')?.addEventListener('input', renderDistrib);
+    $('#distribXMax')?.addEventListener('input', renderDistrib);
+    $('#distribYMin')?.addEventListener('input', renderDistrib);
+    $('#distribYMax')?.addEventListener('input', renderDistrib);
     document.querySelector('.distrib-mp-btn')?.addEventListener('click', () => {
       document.querySelector('.distrib-mp-btn').classList.toggle('active');
       renderDistrib();
@@ -1311,6 +1324,8 @@ export function renderDistrib() {
         y: {
           title: { display: true, text: col, font: { size: fs } },
           ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+          ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
+          ...(_parseAxisVal($('#distribYMax')?.value) !== null ? { max: _parseAxisVal($('#distribYMax').value) } : {}),
         },
       },
     },
@@ -1573,12 +1588,17 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
         annotation: { annotations },
       },
       scales: {
-        x: { type: 'linear', min: x0, max: x1,
+        x: { type: 'linear',
+          min: _parseAxisVal($('#distribXMin')?.value) ?? x0,
+          max: _parseAxisVal($('#distribXMax')?.value) ?? x1,
           title: { display: true, text: col, font: { size: fs } },
           ticks: { callback: v => fmtVal(v), font: { size: fs } } },
         y: { beginAtZero: true,
           title: { display: true, text: '% de datos', font: { size: fs } },
-          ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } } },
+          ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } },
+          ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
+          ...(_parseAxisVal($('#distribYMax')?.value) !== null ? { max: _parseAxisVal($('#distribYMax').value) } : {}),
+        },
       },
     },
   });
@@ -1713,6 +1733,8 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
       scales: {
         x: {
           type: 'linear',
+          ...(_parseAxisVal($('#distribXMin')?.value) !== null ? { min: _parseAxisVal($('#distribXMin').value) } : {}),
+          ...(_parseAxisVal($('#distribXMax')?.value) !== null ? { max: _parseAxisVal($('#distribXMax').value) } : {}),
           title: { display: true, text: col, font: { size: fs } },
           ticks: { callback: v => fmtVal(v), font: { size: fs } },
         },
@@ -1720,6 +1742,8 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
           title: { display: true, text: 'Densidad', font: { size: fs } },
           ticks: { display: false },
           grid: { display: false },
+          ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
+          ...(_parseAxisVal($('#distribYMax')?.value) !== null ? { max: _parseAxisVal($('#distribYMax').value) } : {}),
         },
       },
     },

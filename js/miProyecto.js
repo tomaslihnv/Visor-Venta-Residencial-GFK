@@ -2,6 +2,11 @@ import { $, debounce } from './utils.js';
 
 const STORAGE_KEY = 'visor_mp_v1';
 
+// Date.now() puede repetirse si se agregan dos tipologías en el mismo milisegundo
+// (ej. doble click), dejando ids duplicados y rompiendo los lookups por id.
+let _idCounter = 0;
+const _nextId = () => `${Date.now()}_${_idCounter++}`;
+
 // ── Global state ───────────────────────────────────────────────────────────
 export const mp = {
   edificio:    '',
@@ -178,7 +183,7 @@ export function initMpPanel() {
   $('#mpInProy')?.addEventListener('change',    e => { mp.inProy    = e.target.checked; _save(); });
 
   $('#mpAddTipo')?.addEventListener('click', () => {
-    mp.tipologias.push({ id: Date.now(), nombre: '', sup: null, ufm2: null });
+    mp.tipologias.push({ id: _nextId(), nombre: '', sup: null, ufm2: null });
     _renderTipos();
     _save();
   });

@@ -1,6 +1,14 @@
 import { norm } from './utils.js';
 import { copyChartPng } from './export.js';
 
+function _parseAxisVal(s) {
+  if (s == null || s === '') return null;
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+
+function _$(id) { return document.getElementById(id); }
+
 // ── Normal / density helpers ──────────────────────────────────────────────
 
 function _probit(p) {
@@ -112,6 +120,10 @@ export function initDistribListeners(state, distribCols, mp) {
 
   document.getElementById('distribCol')?.addEventListener('change', rerender);
   document.getElementById('distribNormalToggle')?.addEventListener('change', rerender);
+  _$('distribXMin')?.addEventListener('input', rerender);
+  _$('distribXMax')?.addEventListener('input', rerender);
+  _$('distribYMin')?.addEventListener('input', rerender);
+  _$('distribYMax')?.addEventListener('input', rerender);
   document.querySelector('.distrib-mp-btn')?.addEventListener('click', () => {
     document.querySelector('.distrib-mp-btn').classList.toggle('active');
     rerender();
@@ -344,6 +356,28 @@ function _fmtVal(v) {
   return v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Tipologías de Mi Proyecto a graficar: respeta el filtro de Programa activo
+// en el sidebar (si hay alguno), igual que los comparables del mercado.
+function _mpTiposFiltrados(mp) {
+  const tipos = (mp.tipologias ?? []).filter(t => t.nombre);
+  const programaFilter = _distribState?.filterValues?.programa;
+  if (programaFilter?.size > 0) return tipos.filter(t => programaFilter.has(t.nombre));
+  return tipos;
+}
+
+// Valor de una tipología de Mi Proyecto para la columna de distribución elegida.
+// Vacancia/Stock/Rating son métricas de edificio, no existen por tipología —
+// no hay punto que graficar para esas, a diferencia de Útil/UF/m²/Arriendo.
+function _mpValForCol(col, t) {
+  const nc = norm(col);
+  if (nc.includes('uf/m')) return t.ufm2 ?? null;
+  if (nc.includes('util') || nc.includes('útil')) return t.sup ?? null;
+  if (nc.includes('renta') || nc.includes('arriendo') || nc.includes('precio')) {
+    return t.renta ?? (t.sup != null && t.ufm2 != null ? t.sup * t.ufm2 : null);
+  }
+  return null;
+}
+
 function _statsPlugin(normalFit, fs) {
   return {
     id: 'normalStats',
@@ -377,9 +411,14 @@ export function renderDistrib(state, distribCols, mp) {
   const colSel = document.getElementById('distribCol');
   if (!colSel || !state.filtered.length) return;
 
-  const col  = colSel.value;
-  const _nc  = norm(col);
-  _distribUnit = (_nc.includes('uf/m') || _nc.includes('uf / m')) ? 'UF/m²' : 'UF';
+  const col = colSel.value;
+  // El def original (con unit/perBuilding) se resuelve igual que en
+  // populateDistribSelectors, ya que colSel.value guarda el nombre real
+  // de columna, no el candidate de config.
+  const def = distribCols.find(d => state.columns.find(c => norm(c.name).includes(norm(d.col)))?.name === col);
+  _distribUnit = def?.unit ?? '';
+  const markLabel = document.getElementById('distribMarkLabel');
+  if (markLabel) markLabel.textContent = `Marcar ${def?.label ?? 'valor'}`;
   const fs   = parseInt(document.getElementById('distribFontSize')?.value ?? '11');
   const mode = document.querySelector('.distrib-mode-btn.active')?.dataset.mode ?? 'acumulada';
 
@@ -387,29 +426,86 @@ export function renderDistrib(state, distribCols, mp) {
   const ctx = document.getElementById('distribChart')?.getContext('2d');
   if (!ctx) return;
 
-  const sortedVals = state.filtered
+  // Métricas de edificio (Vacancia, Rating) se repiten idénticas en cada fila
+  // de tipología del mismo proyecto — sin deduplicar, los edificios con más
+  // tipologías pesarían más de lo debido en la distribución.
+  let rows = state.filtered;
+  if (def?.perBuilding) {
+    const projCol = state.columns.find(c => ['proyecto', 'edificio', 'nombre'].some(k => norm(c.name).includes(norm(k))))?.name;
+    if (projCol) {
+      const seen = new Set();
+      rows = rows.filter(r => {
+        const key = r[projCol];
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+  }
+
+  const sortedVals = rows
     .map(r => Number(r[col])).filter(v => !isNaN(v) && v > 0)
     .sort((a, b) => a - b);
   if (sortedVals.length < 2) return;
 
   const showNormal = document.getElementById('distribNormalToggle')?.checked ?? false;
+  const label = def?.label ?? col;
 
   if (mode === 'densidad') {
-    _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp);
+    _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label);
   } else if (mode === 'lognormal') {
-    _renderLognormal(ctx, sortedVals, col, fs, mp);
+    _renderLognormal(ctx, sortedVals, col, fs, mp, label);
+  } else if (mode === 'cuantil') {
+    _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label);
   } else {
-    _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp);
+    _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label);
   }
 }
 
-// ── Modo Acumulada (CDF) ──────────────────────────────────────────────────
+// ── Normal fit para modo CDF (x=valor, y=percentil) ──────────────────────
 
-function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
+function _computeNormalFitCDF(sortedVals) {
+  const n = sortedVals.length;
+  if (n < 3) return null;
+  const mu    = sortedVals.reduce((a, b) => a + b, 0) / n;
+  const sigma = Math.sqrt(sortedVals.reduce((s, v) => s + (v - mu) ** 2, 0) / n);
+  if (sigma === 0) return null;
+
+  // CDF formato: x=valor, y=percentil (0–100)
+  const curve = Array.from({ length: 99 }, (_, i) => {
+    const pct = i + 1;
+    return { x: mu + sigma * _probit(pct / 100), y: pct };
+  });
+
+  // R² en espacio de valores (comparar cuantiles empíricos vs teóricos)
+  const valAtPct = pct => {
+    const h = (pct / 100) * (n - 1);
+    const lo = Math.floor(h), hi = Math.ceil(h);
+    if (lo === hi) return sortedVals[lo];
+    return sortedVals[lo] + (h - lo) * (sortedVals[hi] - sortedVals[lo]);
+  };
+  let ssRes = 0, ssTot = 0;
+  const sample = Array.from({ length: 91 }, (_, i) => i + 5);
+  const empMean = sample.reduce((s, p) => s + valAtPct(p), 0) / sample.length;
+  for (const pct of sample) {
+    const emp  = valAtPct(pct);
+    const theo = mu + sigma * _probit(pct / 100);
+    ssRes += (emp - theo) ** 2;
+    ssTot += (emp - empMean) ** 2;
+  }
+  const r2 = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
+  return { curve, mu, sigma, r2 };
+}
+
+// ── Modo Acumulada — CDF real (x=valor, y=% acumulado) ────────────────────
+// La curva crece rápido donde hay más densidad (zona del promedio) y se aplana
+// en las colas: forma sigmoide/logística para datos normales o levemente sesgados.
+
+function _readSmooth() { return 0.4; }
+
+function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
   const n = sortedVals.length;
 
-  // Cuantil con interpolación lineal entre estadísticos de orden (evita el
-  // efecto "escalera" de redondear al dato más cercano con pocas muestras).
   const valAtPct = pct => {
     const h = (pct / 100) * (n - 1);
     const lo = Math.floor(h), hi = Math.ceil(h);
@@ -417,12 +513,16 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
     return sortedVals[lo] + (h - lo) * (sortedVals[hi] - sortedVals[lo]);
   };
 
-  const refDataClean = Array.from({ length: 101 }, (_, pct) => ({ x: pct, y: valAtPct(pct) }));
+  // CDF: x = valor, y = percentil acumulado (0–100)
+  const refDataClean = Array.from({ length: 101 }, (_, pct) => ({ x: valAtPct(pct), y: pct }));
+  const xMin = sortedVals[0], xMax = sortedVals[n - 1];
 
-  const normalFit = showNormal ? _computeNormalFit(sortedVals, refDataClean) : null;
+  const normalFit = showNormal ? _computeNormalFitCDF(sortedVals) : null;
 
+  // cubicInterpolationMode:'monotone' evita overshoot — sin esto el bezier sube/baja
+  // más allá del rango 0-100 y Chart.js recorta la línea, creando "cortes" visibles.
   const datasets = [{
-    label: col,
+    label: label,
     data: refDataClean,
     borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.10)',
     pointRadius: 0, borderWidth: 2, cubicInterpolationMode: 'monotone', fill: true,
@@ -434,6 +534,148 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
       data: normalFit.curve,
       borderColor: '#f97316', backgroundColor: 'transparent',
       pointRadius: 0, borderWidth: 2, borderDash: [6, 3], cubicInterpolationMode: 'monotone', fill: false,
+    });
+  }
+
+  const ANN_COLOR = '#6b7280';
+  const annotations = {};
+  const annLabel = (content) => ({
+    content, display: true, position: 'start',
+    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+  });
+
+  // Marcadores de percentil → encuentra el valor y dibuja la cruz
+  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+    const price = valAtPct(pct);
+    annotations[`pv_${pct}`] = {
+      type: 'line', xMin: price, xMax: price, yMax: pct,
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}`),
+    };
+    annotations[`ph_${pct}`] = {
+      type: 'line', yMin: pct, yMax: pct, xMax: price,
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`),
+    };
+  });
+
+  // Marcadores de valor → encuentra el percentil y dibuja la cruz
+  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+    const pct = _lerpAtX(refDataClean, price);
+    annotations[`prv_${price}`] = {
+      type: 'line', xMin: price, xMax: price, yMax: pct ?? 100,
+      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`),
+    };
+    if (pct !== null) {
+      annotations[`prh_${price}`] = {
+        type: 'line', yMin: pct, yMax: pct, xMax: price,
+        borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`P${pct.toFixed(1)}`),
+      };
+    }
+  });
+
+  const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
+  if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
+    const mpColor = '#96323C';
+    const mpAnn = (c) => ({ content: c, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    _mpTiposFiltrados(mp).forEach(t => {
+      const val = _mpValForCol(col, t);
+      if (val == null) return;
+      const pct = _lerpAtX(refDataClean, val);
+      if (pct === null) return;
+      annotations[`mp_v_${t.id}`] = {
+        type: 'line', xMin: val, xMax: val, yMax: pct,
+        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+        label: mpAnn(`${t.nombre}: ${_fmtVal(val)}`),
+      };
+      annotations[`mp_h_${t.id}`] = {
+        type: 'line', yMin: pct, yMax: pct, xMax: val,
+        borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+        label: mpAnn(`P${pct.toFixed(1)}`),
+      };
+    });
+  }
+
+  _distribChart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets },
+    plugins: [_statsPlugin(normalFit, fs)],
+    options: {
+      responsive: true, maintainAspectRatio: false, parsing: false,
+      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: fs } } },
+        tooltip: {
+          mode: 'nearest', intersect: false, axis: 'x',
+          callbacks: {
+            title: items => {
+              const pt = items[0]?.raw;
+              return pt ? `${_fmtVal(pt.x)} ${_distribUnit}` : '';
+            },
+            label: item => {
+              const y = item.raw?.y;
+              if (y == null) return '';
+              return ` ${item.dataset.label}: P${_fmtVal(y)}`;
+            },
+          },
+        },
+        annotation: { annotations },
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          min: _parseAxisVal(_$('distribXMin')?.value) ?? xMin,
+          max: _parseAxisVal(_$('distribXMax')?.value) ?? xMax,
+          title: { display: true, text: label, font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+        },
+        y: {
+          type: 'linear', min: 0, max: 100,
+          title: { display: true, text: 'Acumulado (%)', font: { size: fs } },
+          ticks: { callback: v => v + '%', font: { size: fs } },
+        },
+      },
+    },
+  });
+  _enableAnnotationLabelDrag(_distribChart);
+}
+
+// ── Modo Cuantil — función cuantil (x=% percentil, y=valor) ──────────────
+// Permite leer directamente "¿cuánto vale el P50?". Para datos sesgados se
+// aplana en la zona de mayor densidad y sube rápido en las colas.
+
+function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
+  const n = sortedVals.length;
+  const tension = _readSmooth();
+
+  const valAtPct = pct => {
+    const h = (pct / 100) * (n - 1);
+    const lo = Math.floor(h), hi = Math.ceil(h);
+    if (lo === hi) return sortedVals[lo];
+    return sortedVals[lo] + (h - lo) * (sortedVals[hi] - sortedVals[lo]);
+  };
+
+  // Cuantil: x = percentil (0–100), y = valor
+  const refDataClean = Array.from({ length: 101 }, (_, pct) => ({ x: pct, y: valAtPct(pct) }));
+
+  const normalFit = showNormal ? _computeNormalFit(sortedVals, refDataClean) : null;
+
+  const datasets = [{
+    label: label,
+    data: refDataClean,
+    borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.10)',
+    pointRadius: 0, borderWidth: 2, tension, fill: true,
+  }];
+
+  if (normalFit) {
+    datasets.push({
+      label: `Normal (μ=${_fmtVal(normalFit.mu)}, σ=${_fmtVal(normalFit.sigma)})`,
+      data: normalFit.curve,
+      borderColor: '#f97316', backgroundColor: 'transparent',
+      pointRadius: 0, borderWidth: 2, borderDash: [6, 3], tension, fill: false,
     });
   }
 
@@ -478,13 +720,10 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
 
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
-    const nc = norm(col);
-    const isUfm2  = nc.includes('uf/m');
-    const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('arriendo') || nc.includes('precio'));
     const mpColor = '#96323C';
-    const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
-    mp.tipologias.filter(t => t.nombre).forEach(t => {
-      let val = isUfm2 ? t.ufm2 : isRenta ? (t.renta ?? (t.sup != null && t.ufm2 != null ? t.sup * t.ufm2 : null)) : t.sup;
+    const mpAnn = (c) => ({ content: c, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    _mpTiposFiltrados(mp).forEach(t => {
+      const val = _mpValForCol(col, t);
       if (val == null) return;
       const pct = _lerpAtY(refDataClean, val);
       if (pct === null) return;
@@ -506,9 +745,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
     data: { datasets },
     plugins: [_statsPlugin(normalFit, fs)],
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      parsing: false,
+      responsive: true, maintainAspectRatio: false, parsing: false,
       layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
@@ -532,8 +769,11 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp) {
         x: { type: 'linear', min: 0, max: 100,
           title: { display: true, text: 'Percentil (%)', font: { size: fs } },
           ticks: { callback: v => v + '%', font: { size: fs } } },
-        y: { title: { display: true, text: col, font: { size: fs } },
-          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } } },
+        y: { title: { display: true, text: label, font: { size: fs } },
+          ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+          ...(_parseAxisVal(_$('distribXMin')?.value) !== null ? { min: _parseAxisVal(_$('distribXMin').value) } : {}),
+          ...(_parseAxisVal(_$('distribXMax')?.value) !== null ? { max: _parseAxisVal(_$('distribXMax').value) } : {}),
+        },
       },
     },
   });
@@ -563,7 +803,7 @@ function _computeLogNormal(sortedVals, nPoints = 300) {
   });
 }
 
-function _renderLognormal(ctx, sortedVals, col, fs, mp) {
+function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
   const lnData = _computeLogNormal(sortedVals);
   if (!lnData.length) return;
 
@@ -604,13 +844,10 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp) {
 
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
-    const nc = norm(col);
-    const isUfm2  = nc.includes('uf/m');
-    const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('arriendo') || nc.includes('precio'));
     const mpColor = '#96323C';
     const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
-    mp.tipologias.filter(t => t.nombre).forEach(t => {
-      let val = isUfm2 ? t.ufm2 : isRenta ? (t.renta ?? (t.sup != null && t.ufm2 != null ? t.sup * t.ufm2 : null)) : t.sup;
+    _mpTiposFiltrados(mp).forEach(t => {
+      const val = _mpValForCol(col, t);
       if (val == null) return;
       const pct = _lerpAtY(refData, val);
       const pctStr = pct !== null ? `P${Math.round(pct)}: ` : '';
@@ -626,7 +863,7 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp) {
     type: 'line',
     data: {
       datasets: [{
-        label: col,
+        label: label,
         data: lnData,
         borderColor: '#0ea5e9',
         backgroundColor: 'rgba(14,165,233,0.08)',
@@ -655,13 +892,17 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp) {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: col, font: { size: fs } },
+          ...(_parseAxisVal(_$('distribXMin')?.value) !== null ? { min: _parseAxisVal(_$('distribXMin').value) } : {}),
+          ...(_parseAxisVal(_$('distribXMax')?.value) !== null ? { max: _parseAxisVal(_$('distribXMax').value) } : {}),
+          title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => _fmtVal(v), font: { size: fs } },
         },
         y: {
           title: { display: true, text: 'Densidad', font: { size: fs } },
           ticks: { display: false },
           grid: { display: false },
+          ...(_parseAxisVal(_$('distribYMin')?.value) !== null ? { min: _parseAxisVal(_$('distribYMin').value) } : {}),
+          ...(_parseAxisVal(_$('distribYMax')?.value) !== null ? { max: _parseAxisVal(_$('distribYMax').value) } : {}),
         },
       },
     },
@@ -671,7 +912,7 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp) {
 
 // ── Modo Densidad (histograma + KDE + normal PDF) ─────────────────────────
 
-function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp) {
+function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
   const refData  = Array.from({ length: 101 }, (_, pct) => {
     const idx = Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1);
     return { x: pct, y: sortedVals[idx] };
@@ -755,13 +996,10 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp) {
 
   const showMpDistribD = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistribD && mp?.inDistrib && mp.tipologias?.length > 0) {
-    const nc = norm(col);
-    const isUfm2  = nc.includes('uf/m');
-    const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('arriendo') || nc.includes('precio'));
     const mpColor = '#96323C';
     const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
-    mp.tipologias.filter(t => t.nombre).forEach(t => {
-      let val = isUfm2 ? t.ufm2 : isRenta ? (t.renta ?? (t.sup != null && t.ufm2 != null ? t.sup * t.ufm2 : null)) : t.sup;
+    _mpTiposFiltrados(mp).forEach(t => {
+      const val = _mpValForCol(col, t);
       if (val == null) return;
       const pct = _lerpAtY(refData, val);
       const pctStr = pct !== null ? `P${Math.round(pct)}: ` : '';
@@ -798,12 +1036,17 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp) {
         annotation: { annotations },
       },
       scales: {
-        x: { type: 'linear', min: x0, max: x1,
-          title: { display: true, text: col, font: { size: fs } },
+        x: { type: 'linear',
+          min: _parseAxisVal(_$('distribXMin')?.value) ?? x0,
+          max: _parseAxisVal(_$('distribXMax')?.value) ?? x1,
+          title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => _fmtVal(v), font: { size: fs } } },
         y: { beginAtZero: true,
           title: { display: true, text: '% de datos', font: { size: fs } },
-          ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } } },
+          ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } },
+          ...(_parseAxisVal(_$('distribYMin')?.value) !== null ? { min: _parseAxisVal(_$('distribYMin').value) } : {}),
+          ...(_parseAxisVal(_$('distribYMax')?.value) !== null ? { max: _parseAxisVal(_$('distribYMax').value) } : {}),
+        },
       },
     },
   });
