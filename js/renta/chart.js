@@ -351,8 +351,8 @@ export function renderProyectos() {
   const medianAnnotations = medianVal != null ? {
     mediana: {
       type: 'line', yMin: medianVal, yMax: medianVal,
-      borderColor: '#dc2626', borderWidth: 1.5, borderDash: [5, 4],
-      label: { content: `Mediana: ${metric.fmt(medianVal)}`, display: true, position: 'end', font: { size: fs - 1 }, color: '#dc2626', backgroundColor: 'rgba(255,255,255,0.85)' },
+      borderColor: '#ef4444', borderWidth: 1.5, borderDash: [5, 4],
+      label: { content: `Mediana: ${metric.fmt(medianVal)}`, display: true, position: 'end', font: { size: fs - 1 }, color: '#ef4444', backgroundColor: 'rgba(255,255,255,0.92)' },
     },
   } : {};
 
