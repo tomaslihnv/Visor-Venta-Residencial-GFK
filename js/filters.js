@@ -1,9 +1,8 @@
-import { $, debounce, fmt } from './utils.js';
+import { $, debounce, fmt, norm, fmtTipo } from './utils.js';
 import { state } from './data.js';
 
 // ============== Resolución de columnas ==============
 function findCol(candidates) {
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   return state.columns.find(c => candidates.some(k => norm(c.name).includes(norm(k))))?.name ?? null;
 }
 
@@ -33,14 +32,6 @@ const F = {
 };
 
 const refs = {}; // referencias a elementos DOM para actualizaciones dinámicas
-
-// ============== Helpers de formato ==============
-function fmtTipo(v) {
-  if (typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= 10) return `${v}D`;
-  const s = String(v).trim();
-  if (/^\d+$/.test(s) && +s > 0 && +s <= 10) return `${s}D`;
-  return s;
-}
 
 // ============== Fecha → Trimestre ==============
 function dateToQuarter(val) {
@@ -109,7 +100,6 @@ function _buildMulti(key, colName, label, container, fmtFn = fmt, searchable = f
     const inp = document.createElement('input');
     inp.type = 'text'; inp.placeholder = 'Buscar…'; inp.className = 'filter-search';
     inp.addEventListener('input', () => {
-      const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
       const q = norm(inp.value);
       for (const lab of multi.children) {
         lab.style.display = norm(lab.textContent).includes(q) ? '' : 'none';
@@ -147,44 +137,6 @@ function _buildMulti(key, colName, label, container, fmtFn = fmt, searchable = f
 
   group.appendChild(multi);
   container.appendChild(group);
-}
-
-// --- Rango simple (siempre visible) ---
-function _buildRange(key, colName, label, unit, container) {
-  const nums = state.raw.map(r => Number(r[colName])).filter(v => !isNaN(v));
-  if (!nums.length) return;
-  const dMin = Math.floor(Math.min(...nums)), dMax = Math.ceil(Math.max(...nums));
-
-  const group = document.createElement('div');
-  group.className = 'filter-group';
-  group.innerHTML = `<label class="title">${label}</label>`;
-
-  const row = document.createElement('div');
-  row.className = 'range-row';
-
-  const inMin = document.createElement('input');
-  inMin.type = 'number'; inMin.placeholder = String(dMin);
-  const inMax = document.createElement('input');
-  inMax.type = 'number'; inMax.placeholder = String(dMax);
-
-  const sep = document.createElement('span'); sep.textContent = '—';
-  row.append(inMin, sep, inMax);
-  if (unit) {
-    const u = document.createElement('span'); u.className = 'range-unit'; u.textContent = unit;
-    row.append(u);
-  }
-  group.appendChild(row);
-  container.appendChild(group);
-
-  refs[key] = { type: 'range', inMin, inMax, colName };
-
-  const onChange = debounce(() => {
-    F[`${key}Min`] = inMin.value === '' ? null : Number(inMin.value);
-    F[`${key}Max`] = inMax.value === '' ? null : Number(inMax.value);
-    applyFilters();
-  }, 250);
-  inMin.addEventListener('input', onChange);
-  inMax.addEventListener('input', onChange);
 }
 
 // --- Rango por tipología ---
