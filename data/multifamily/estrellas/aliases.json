@@ -1,0 +1,16 @@
+{
+  "_comment": "Proyecto (multifamily.json) -> edificio (estrellas/metrics.json). Vacío = sin match real en el scraper, queda sin rating.",
+  "Collective Santiago": "collective santiago san francisco",
+  "Somma Las Clarisas": "somma las clarisas",
+  "Nativo Riesco": "nativo riesco",
+  "Neohaus": "",
+  "Boldo Club de Campo": "boldo club de campo",
+  "Nomad Bellet": "nomad bellet",
+  "Nomad Holley": "nomad holley",
+  "Soho Barrio Italia": "soho barrio italia",
+  "Asturias 77": "somma asturias",
+  "Edificio Switch": "switch vespucio",
+  "Somma Inés de Suárez": "somma inés de suárez",
+  "Somma Plaza Ñuñoa": "somma plaza ñuñoa",
+  "Somma Vista Calán": "somma vista calán"
+}

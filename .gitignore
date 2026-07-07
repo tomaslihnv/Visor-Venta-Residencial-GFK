@@ -4,6 +4,9 @@ Inputs de inciti/
 *.xls
 *.csv
 
+# Credenciales locales (API keys — nunca commitear)
+js/config.local.js
+
 # Python
 __pycache__/
 *.py[cod]
@@ -25,3 +28,4 @@ desktop.ini
 
 # Memoria de Claude Code
 memory/
+

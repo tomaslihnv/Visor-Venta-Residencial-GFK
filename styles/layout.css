@@ -179,5 +179,14 @@
 .dropzone.dragover { border-color: #3b82f6; background: #eff6ff; }
 .dropzone-inner { text-align: center; color: #64748b; }
 .dropzone-inner h2 { font-size: 22px; margin-bottom: 8px; color: #334155; }
+.saved-datasets-sidebar-list { display: flex; flex-direction: column; gap: 4px; }
+.saved-dataset-btn {
+  display: block; width: 100%; text-align: left;
+  padding: 7px 10px; border-radius: 6px; border: 1px solid #cbd5e1;
+  background: #fff; color: #334155; font-size: 13px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.saved-dataset-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+.saved-dataset-btn.active { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
 
 .hidden { display: none !important; }

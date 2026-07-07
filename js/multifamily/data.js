@@ -1,5 +1,6 @@
 import { detectColType } from '../core/utils.js';
-import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './config.js';
+import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, SAVED_DATASETS } from './config.js';
+import { attachStarMetrics } from './estrellas.js';
 
 // ── Estado global del visor ────────────────────────────────────────────────
 export const state = {
@@ -90,7 +91,7 @@ function loadFile(file) {
       const ws  = wb.Sheets[sheetName];
       const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
       if (!raw.length) { alert(`La hoja "${sheetName}" está vacía.`); return; }
-      onDataLoaded(_normalizeRows(raw));
+      attachStarMetrics(_normalizeRows(raw)).then(onDataLoaded);
     } catch (err) {
       console.error(err);
       alert('Error leyendo el archivo: ' + err.message);
@@ -98,6 +99,86 @@ function loadFile(file) {
   };
   reader.readAsArrayBuffer(file);
 }
+
+// ── Datasets guardados (JSON pre-cargados) ─────────────────────────────────
+function loadSavedDataset(entry) {
+  const fileNameEl = document.getElementById('fileName');
+  fetch(entry.file)
+    .then(r => {
+      if (!r.ok) throw new Error(`No se encontró ${entry.file}`);
+      return r.json();
+    })
+    .then(rows => attachStarMetrics(rows))
+    .then(rows => {
+      if (fileNameEl) fileNameEl.textContent = entry.label;
+      onDataLoaded(rows);
+    })
+    .catch(err => {
+      console.error(err);
+      alert('Error cargando dataset guardado: ' + err.message);
+    });
+}
+
+function _renderSavedDatasetsList() {
+  const cont = document.getElementById('savedDatasetsList');
+  if (!cont) return;
+  if (!SAVED_DATASETS.length) {
+    cont.innerHTML = '<p class="hint">Sin datasets guardados todavía.</p>';
+    return;
+  }
+
+  const selected = new Set();
+
+  cont.innerHTML = SAVED_DATASETS.map((entry, i) => `
+    <button type="button" class="saved-dataset-btn" data-idx="${i}">${entry.label}</button>
+  `).join('');
+
+  async function _loadSelected() {
+    if (!selected.size) {
+      document.getElementById('dashboard')?.classList.add('hidden');
+      document.getElementById('dropzone')?.classList.remove('hidden');
+      const fileNameEl = document.getElementById('fileName');
+      if (fileNameEl) fileNameEl.textContent = '';
+      return;
+    }
+    const entries = [...selected].map(i => SAVED_DATASETS[i]);
+    cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.disabled = true);
+    try {
+      const results = await Promise.all(
+        entries.map(e => fetch(e.file).then(r => {
+          if (!r.ok) throw new Error(`No se encontró ${e.file}`);
+          return r.json();
+        }))
+      );
+      const merged = results.flat();
+      const label  = entries.map(e => e.label).join(' + ');
+      const fileNameEl = document.getElementById('fileName');
+      if (fileNameEl) fileNameEl.textContent = label;
+      const withStars = await attachStarMetrics(merged);
+      onDataLoaded(withStars);
+    } catch (err) {
+      console.error(err);
+      alert('Error cargando datasets: ' + err.message);
+    } finally {
+      cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.disabled = false);
+    }
+  }
+
+  cont.querySelectorAll('.saved-dataset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = +btn.dataset.idx;
+      if (selected.has(idx)) {
+        selected.delete(idx);
+        btn.classList.remove('active');
+      } else {
+        selected.add(idx);
+        btn.classList.add('active');
+      }
+      _loadSelected();
+    });
+  });
+}
+_renderSavedDatasetsList();
 
 // ── onDataLoaded ───────────────────────────────────────────────────────────
 export function onDataLoaded(rows) {
@@ -122,22 +203,46 @@ export function onDataLoaded(rows) {
     import('../core/table.js'),
     import('../core/chart-distrib.js'),
     import('../core/chart-svp.js'),
+    import('../core/chart-cruz.js'),
     import('../core/chart-proyectos.js'),
     import('../core/map.js'),
   ]).then(([
-    { initMpPanel },
+    {},
     { buildFilters, applyFilters },
     { renderKpis },
     { initTableListeners, renderTable },
-    { populateDistribSelectors, initDistribListeners },
-    { populateSvpSelectors, initSvpListeners },
-    { initProyectosListeners },
+    { populateDistribSelectors, initDistribListeners, renderDistrib },
+    { populateSvpSelectors, initSvpListeners, renderSvp },
+    { initCruzListeners, renderCruz },
+    { initProyectosListeners, renderProyectos },
     { resetMapOnLoad, geocodeData, renderMap },
   ]) => {
     import('./miProyecto.js').then(({ mp }) => {
-      initMpPanel();
-
       const container = document.getElementById('filtersContainer');
+
+      // Valor de "Mi Proyecto" para el gráfico de Proyectos, según la métrica
+      // elegida. Usado en los 3 lugares que pueden re-renderizar ese gráfico
+      // (filtros, mpchange, render inicial) para que Mi Proyecto no desaparezca
+      // al cambiar un filtro o togglear un checkbox de "Incluir en".
+      const getProyMpValue = (metricId, mp) => {
+        // Si hay Programas filtrados en el sidebar, promediar solo las
+        // tipologías de Mi Proyecto que coincidan (igual que los comparables).
+        const programaFilter = state.filterValues?.programa;
+        const tipos = (programaFilter?.size > 0)
+          ? (mp.tipologias ?? []).filter(t => programaFilter.has(t.nombre))
+          : (mp.tipologias ?? []);
+        const avgTipo = field => {
+          const vals = tipos.map(t => t[field]).filter(v => v != null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+        };
+        if (metricId === 'util')     return avgTipo('sup');
+        if (metricId === 'arriendo') return avgTipo('renta');
+        if (metricId === 'ufm2')     return avgTipo('ufm2');
+        if (metricId === 'stock')    return mp.stock ?? null;
+        if (metricId === 'vacancia') return mp.vacancia ?? null;
+        return null;
+      };
+      const proyOptions = { projectCandidates: MAP.projectCandidates, getMpValue: getProyMpValue };
 
       const onChange = _state => {
         renderKpis(_state.filtered, _state.raw.length, KPIS);
@@ -145,9 +250,10 @@ export function onDataLoaded(rows) {
 
         const tab = document.querySelector('.tab.active')?.dataset.tab;
         import('./miProyecto.js').then(({ mp: mpCurrent }) => {
-          if (tab === 'distribucion') renderDistrib(_state, mpCurrent);
-          if (tab === 'svp')          renderSvp(_state, mpCurrent);
-          if (tab === 'proyectos')    renderProyectos(_state, mpCurrent);
+          if (tab === 'distribucion') renderDistrib(_state, DISTRIB_COLS, mpCurrent);
+          if (tab === 'svp')          renderSvp(_state, SVP, mpCurrent);
+          if (tab === 'cruz')         renderCruz(_state, CRUZ, mpCurrent);
+          if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, mpCurrent, proyOptions);
           if (tab === 'comparativa')  import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_state, COMPARATIVA, mpCurrent));
           if (tab === 'mapa')         renderMap(_state, MAP, mpCurrent);
         });
@@ -158,11 +264,12 @@ export function onDataLoaded(rows) {
       window._mf = {
         renderDistrib:  (_s, _mp) => import('../core/chart-distrib.js').then(({ renderDistrib })  => renderDistrib(_s, DISTRIB_COLS, _mp)),
         renderSvp:      (_s, _mp) => import('../core/chart-svp.js').then(({ renderSvp })          => renderSvp(_s, SVP, _mp)),
-        renderProyectos:(_s, _mp) => import('../core/chart-proyectos.js').then(({ renderProyectos }) => renderProyectos(_s, PROYECTOS_METRICS, _mp, { projectCandidates: MAP.projectCandidates })),
+        renderCruz:     (_s, _mp) => import('../core/chart-cruz.js').then(({ renderCruz })        => renderCruz(_s, CRUZ, _mp)),
+        renderProyectos:(_s, _mp) => import('../core/chart-proyectos.js').then(({ renderProyectos }) => renderProyectos(_s, PROYECTOS_METRICS, _mp, proyOptions)),
         renderMap:      (_s, _mp) => renderMap(_s, MAP, _mp),
         renderComparativa: (_s, _mp) => import('../core/comparativa.js').then(({ renderComparativa }) => renderComparativa(_s, COMPARATIVA, _mp)),
         state, onChange,
-        FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME,
+        FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME,
       };
 
       buildFilters(FILTERS, state, container, onChange);
@@ -172,16 +279,8 @@ export function onDataLoaded(rows) {
       initDistribListeners(state, DISTRIB_COLS, mp);
       populateSvpSelectors(state, SVP);
       initSvpListeners(state, SVP, mp);
-      initProyectosListeners(state, PROYECTOS_METRICS, mp, {
-        projectCandidates: MAP.projectCandidates,
-        getMpValue: (metricId, mp) => {
-          if (metricId === 'arriendo') return mp.arriendo ?? null;
-          if (metricId === 'ufm2')     return mp.ufm2 ?? null;
-          if (metricId === 'stock')    return mp.stock ?? null;
-          if (metricId === 'vacancia') return mp.vacancia ?? null;
-          return null;
-        },
-      });
+      initCruzListeners(state, CRUZ, mp);
+      initProyectosListeners(state, PROYECTOS_METRICS, mp, proyOptions);
       initTableListeners(state, onChange);
 
       resetMapOnLoad();
@@ -198,4 +297,4 @@ export function onDataLoaded(rows) {
   });
 }
 
-export { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME };
+export { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME };

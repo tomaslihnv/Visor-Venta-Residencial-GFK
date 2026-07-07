@@ -2,9 +2,8 @@ import { norm } from './utils.js';
 import { copyChartPng } from './export.js';
 
 // svpConfig: {
-//   xCandidates:   string[]   — candidates for X axis column (e.g. m² útil)
-//   xLabel:        string
-//   yOptions:      [{ value, label, candidates }]  — Y axis options
+//   xOptions:      [{ value, label, candidates, formatValue }]  — X axis options
+//   yOptions:      [{ value, label, candidates, formatValue, formatAvg }]  — Y axis options
 //   groupCandidates?: string[]  — candidates for tipología/group column (optional)
 //   projCandidates?:  string[]
 // }
@@ -14,11 +13,53 @@ const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#e
 let _svpReady  = false;
 export const svpMarkers = new Set();
 
+// Estado del triángulo de pendiente (draggable)
+let svpSlopeXPct     = 0.22;   // posición a lo largo del eje X (0–1)
+let svpSlopeDragging = false;
+let svpSlopeBbox     = null;   // { x, y, w, h } en coordenadas canvas (CSS px)
+
+function _svpSlpHit(mx, my) {
+  return svpSlopeBbox &&
+    mx >= svpSlopeBbox.x && mx <= svpSlopeBbox.x + svpSlopeBbox.w &&
+    my >= svpSlopeBbox.y && my <= svpSlopeBbox.y + svpSlopeBbox.h;
+}
+const _svpSlpDown = (state, svpConfig, mp) => e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  if (_svpSlpHit(e.clientX - r.left, e.clientY - r.top)) {
+    svpSlopeDragging = true;
+    e.preventDefault();
+  }
+};
+const _svpSlpMove = (state, svpConfig, mp) => e => {
+  const canvas = e.currentTarget;
+  const showTrend = document.getElementById('svpTrendToggle')?.checked ?? false;
+  if (!showTrend || !svpSlopeBbox) { canvas.style.cursor = ''; return; }
+  const r = canvas.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  if (!svpSlopeDragging) {
+    canvas.style.cursor = _svpSlpHit(mx, my) ? 'grab' : '';
+    return;
+  }
+  canvas.style.cursor = 'grabbing';
+  if (!state.chart) return;
+  const { scales } = state.chart;
+  const xMin = scales.x.min, xMax = scales.x.max, range = xMax - xMin;
+  const dataX = scales.x.getValueForPixel(mx);
+  svpSlopeXPct = Math.max(0.02, Math.min(0.78, (dataX - xMin) / range));
+  state.chart.update('none');
+};
+const _svpSlpUp = state => e => {
+  svpSlopeDragging = false;
+  e.currentTarget.style.cursor = '';
+  state.chart?.update('none');
+};
+
 export function initSvpListeners(state, svpConfig, mp) {
   if (_svpReady) return;
   _svpReady = true;
 
   document.getElementById('svpTipoFilter')?.addEventListener('change', () => renderSvp(state, svpConfig, mp));
+  document.getElementById('svpXAxis')?.addEventListener('change',      () => renderSvp(state, svpConfig, mp));
   document.getElementById('svpYAxis')?.addEventListener('change',      () => renderSvp(state, svpConfig, mp));
   document.getElementById('svpTrendToggle')?.addEventListener('change',() => renderSvp(state, svpConfig, mp));
   document.getElementById('svpAvgToggle')?.addEventListener('change',  () => renderSvp(state, svpConfig, mp));
@@ -61,6 +102,14 @@ export function initSvpListeners(state, svpConfig, mp) {
   });
 
   _initSvpFilterWidget(state);
+
+  const svpCanvas = document.getElementById('svpChart');
+  if (svpCanvas) {
+    svpCanvas.addEventListener('mousedown',  _svpSlpDown(state, svpConfig, mp));
+    svpCanvas.addEventListener('mousemove',  _svpSlpMove(state, svpConfig, mp));
+    svpCanvas.addEventListener('mouseup',    _svpSlpUp(state));
+    svpCanvas.addEventListener('mouseleave', _svpSlpUp(state));
+  }
 }
 
 function _initSvpFilterWidget(state) {
@@ -150,18 +199,30 @@ function _updateSvpFilterWidget(state) {
 
 export function populateSvpSelectors(state, svpConfig) {
   const tipoSel = document.getElementById('svpTipoFilter');
-  if (!tipoSel) return;
-  tipoSel.innerHTML = '<option value="">Todas</option>';
+  if (tipoSel) {
+    tipoSel.innerHTML = '<option value="">Todas</option>';
 
-  if (svpConfig.groupCandidates?.length) {
-    const tipoCol = state.columns.find(c => svpConfig.groupCandidates.some(k => norm(c.name).includes(norm(k))));
-    if (tipoCol) {
-      const tipos = [...new Set(state.raw.map(r => r[tipoCol.name]).filter(Boolean))].sort();
-      for (const t of tipos) {
-        const o = document.createElement('option');
-        o.value = t; o.textContent = t;
-        tipoSel.appendChild(o);
+    if (svpConfig.groupCandidates?.length) {
+      const tipoCol = state.columns.find(c => svpConfig.groupCandidates.some(k => norm(c.name).includes(norm(k))));
+      if (tipoCol) {
+        const tipos = [...new Set(state.raw.map(r => r[tipoCol.name]).filter(Boolean))].sort();
+        for (const t of tipos) {
+          const o = document.createElement('option');
+          o.value = t; o.textContent = t;
+          tipoSel.appendChild(o);
+        }
       }
+    }
+  }
+
+  // Populate X axis selector
+  const xAxisSel = document.getElementById('svpXAxis');
+  if (xAxisSel && svpConfig.xOptions?.length) {
+    xAxisSel.innerHTML = '';
+    for (const opt of svpConfig.xOptions) {
+      const o = document.createElement('option');
+      o.value = opt.value; o.textContent = opt.label;
+      xAxisSel.appendChild(o);
     }
   }
 
@@ -180,11 +241,14 @@ export function populateSvpSelectors(state, svpConfig) {
 function _refreshSvpMarkerTags(state, svpConfig, mp) {
   const cont = document.getElementById('svpM2Tags');
   if (!cont) return;
+  const xAxisMode = document.getElementById('svpXAxis')?.value ?? svpConfig.xOptions[0]?.value;
+  const xOpt = svpConfig.xOptions?.find(o => o.value === xAxisMode) ?? svpConfig.xOptions?.[0];
+  const xFmt = xOpt?.formatValue ?? (v => `${v.toLocaleString('es-CL')} ${xOpt?.label ?? ''}`);
   cont.innerHTML = '';
   [...svpMarkers].sort((a, b) => a - b).forEach(v => {
     const tag = document.createElement('span');
     tag.className = 'marker-tag pct-tag';
-    tag.innerHTML = `${v.toLocaleString('es-CL')} m² <button class="rm-svp-m2">×</button>`;
+    tag.innerHTML = `${xFmt(v)} <button class="rm-svp-m2">×</button>`;
     tag.querySelector('.rm-svp-m2').addEventListener('click', () => {
       svpMarkers.delete(v);
       _refreshSvpMarkerTags(state, svpConfig, mp);
@@ -215,14 +279,16 @@ function _linearRegression(pts) {
 export function renderSvp(state, svpConfig, mp) {
   if (!state.filtered.length) return;
 
+  const xAxisMode = document.getElementById('svpXAxis')?.value ?? svpConfig.xOptions[0]?.value;
   const yAxisMode = document.getElementById('svpYAxis')?.value ?? svpConfig.yOptions[0]?.value;
   const fs        = parseInt(document.getElementById('svpFontSize')?.value ?? '11');
 
+  const xOpt = svpConfig.xOptions?.find(o => o.value === xAxisMode) ?? svpConfig.xOptions?.[0];
   const yOpt = svpConfig.yOptions?.find(o => o.value === yAxisMode) ?? svpConfig.yOptions?.[0];
-  if (!yOpt) return;
+  if (!xOpt || !yOpt) return;
 
   const xCol = state.columns.find(c =>
-    c.type === 'number' && svpConfig.xCandidates.some(k => norm(c.name).includes(norm(k)))
+    xOpt.candidates.some(k => norm(c.name).includes(norm(k)))
   );
   const yCol = state.columns.find(c =>
     yOpt.candidates.some(k => norm(c.name).includes(norm(k)))
@@ -236,6 +302,9 @@ export function renderSvp(state, svpConfig, mp) {
 
   if (!xCol || !yCol) return;
 
+  const markLabel = document.getElementById('svpMarkLabel');
+  if (markLabel) markLabel.textContent = `Marcar ${xOpt.label}`;
+
   if (state.chart) { state.chart.destroy(); state.chart = null; }
   const ctx = document.getElementById('svpChart')?.getContext('2d');
   if (!ctx) return;
@@ -246,23 +315,27 @@ export function renderSvp(state, svpConfig, mp) {
     rows = rows.filter(r => String(r[groupCol.name] ?? '') === tipoFilter);
   }
 
-  // Mi Proyecto dataset
+  // Mi Proyecto dataset (solo disponible cuando el eje X es la superficie útil,
+  // que es el único valor que se ingresa por tipología en el panel)
   const mpDatasets = [];
-  if (mp?.inSvp && mp.tipologias?.length > 0) {
+  if (xOpt.value === 'util' && mp?.inSvp && mp.tipologias?.length > 0) {
     const mpColor = '#1e293b';
     const mpTipos = mp.tipologias.filter(t => t.nombre && t.sup != null && t.ufm2 != null);
-    const mpFiltered = tipoFilter
+    // Respeta tanto el "Tipo" local del gráfico (si existe) como el filtro
+    // de Programa del sidebar, igual que los comparables.
+    const programaFilter = state.filterValues?.programa;
+    let mpFiltered = tipoFilter
       ? mpTipos.filter(t => String(t.nombre).toUpperCase() === tipoFilter.toUpperCase())
       : mpTipos;
-    if (mpFiltered.length > 0) {
-      const getMpY = svpConfig.getMpY ?? ((t, mode) => mode === 'ufm2' ? t.ufm2 : t.sup * t.ufm2);
+    if (programaFilter?.size > 0) mpFiltered = mpFiltered.filter(t => programaFilter.has(t.nombre));
+    const getMpY = svpConfig.getMpY ?? ((t, mode) => mode === 'ufm2' ? t.ufm2 : t.sup * t.ufm2);
+    const mpPoints = mpFiltered
+      .map(t => ({ x: t.sup, y: getMpY(t, yAxisMode), label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}` }))
+      .filter(p => p.y != null);
+    if (mpPoints.length > 0) {
       mpDatasets.push({
         label: mp.proyecto || 'Mi Proyecto',
-        data: mpFiltered.map(t => ({
-          x: t.sup,
-          y: getMpY(t, yAxisMode),
-          label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}`,
-        })),
+        data: mpPoints,
         backgroundColor: mpColor, borderColor: mpColor,
         borderWidth: 2, pointRadius: 7, pointHoverRadius: 9,
       });
@@ -348,7 +421,8 @@ export function renderSvp(state, svpConfig, mp) {
     }
   }
 
-  // m² markers
+  // Marcadores del eje X
+  const xFmtFn = xOpt.formatValue ?? (v => `${v.toLocaleString('es-CL')} ${xOpt.label}`);
   const yFmtFn = yOpt.formatValue ?? (v => `${v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${yOpt.label}`);
   [...svpMarkers].sort((a, b) => a - b).forEach(m2 => {
     if (reg) {
@@ -356,7 +430,7 @@ export function renderSvp(state, svpConfig, mp) {
       annotations[`sv_${m2}`] = {
         type: 'line', xMin: m2, xMax: m2, yMax: trendY,
         borderColor: MARKER_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-        label: { content: `${m2.toLocaleString('es-CL')} m²`, display: true, position: 'start',
+        label: { content: xFmtFn(m2), display: true, position: 'start',
           color: MARKER_COLOR, backgroundColor: 'rgba(255,255,255,0.92)',
           font: { size: fs, weight: 'bold' }, padding: { x: 4, y: 2 }, xAdjust: 4 },
       };
@@ -371,7 +445,7 @@ export function renderSvp(state, svpConfig, mp) {
       annotations[`sv_${m2}`] = {
         type: 'line', scaleID: 'x', value: m2,
         borderColor: MARKER_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-        label: { content: `${m2.toLocaleString('es-CL')} m²`, display: true, position: 'start',
+        label: { content: xFmtFn(m2), display: true, position: 'start',
           color: MARKER_COLOR, backgroundColor: 'rgba(255,255,255,0.92)',
           font: { size: fs, weight: 'bold' }, padding: { x: 4, y: 2 }, xAdjust: 4 },
       };
@@ -401,10 +475,148 @@ export function renderSvp(state, svpConfig, mp) {
 
   const yTooltip = yOpt.formatTooltip ?? (v => yFmtFn(v));
 
+  // Plugin: triángulo de pendiente sobre la línea de tendencia
+  const svpSlopePlugin = {
+    id: 'svpSlope',
+    afterDraw(chart) {
+      if (!showTrend || !reg || !allCompPts.length) return;
+
+      const { ctx: c, scales, chartArea: ca } = chart;
+      const xs = allCompPts.map(p => p.x);
+      const xMin = Math.min(...xs), xMax = Math.max(...xs);
+      const range = xMax - xMin;
+
+      const x0 = xMin + range * svpSlopeXPct;
+      const dxData = range * 0.14;
+      const x1 = x0 + dxData;
+      const y0 = reg.m * x0 + reg.b;
+      const y1 = reg.m * x1 + reg.b;
+
+      const px0 = scales.x.getPixelForValue(x0);
+      const px1 = scales.x.getPixelForValue(x1);
+      const py0 = scales.y.getPixelForValue(y0);
+      const py1 = scales.y.getPixelForValue(y1);
+
+      if (px0 < ca.left || px1 > ca.right ||
+          Math.min(py0, py1) < ca.top || Math.max(py0, py1) > ca.bottom) return;
+
+      const negSlope = py1 > py0;
+      c.save();
+      c.setLineDash([]);
+
+      c.beginPath();
+      c.moveTo(px0, py0);
+      c.lineTo(px1, py0);
+      c.lineTo(px1, py1);
+      c.closePath();
+      c.fillStyle = 'rgba(30,58,95,0.10)';
+      c.fill();
+      c.strokeStyle = 'rgba(30,58,95,0.35)';
+      c.lineWidth = 1;
+      c.stroke();
+
+      const aX1 = px1, aY1 = py0;
+      const aX2 = px1 + 20, aY2 = py0 + (negSlope ? -22 : 22);
+      c.beginPath();
+      c.moveTo(aX1, aY1);
+      c.lineTo(aX2, aY2);
+      c.strokeStyle = '#9ca3af';
+      c.lineWidth = 1;
+      c.setLineDash([3, 3]);
+      c.stroke();
+      c.setLineDash([]);
+
+      const ang = Math.atan2(aY2 - aY1, aX2 - aX1);
+      const hl = 6;
+      c.beginPath();
+      c.moveTo(aX2, aY2);
+      c.lineTo(aX2 - hl * Math.cos(ang - Math.PI / 6), aY2 - hl * Math.sin(ang - Math.PI / 6));
+      c.moveTo(aX2, aY2);
+      c.lineTo(aX2 - hl * Math.cos(ang + Math.PI / 6), aY2 - hl * Math.sin(ang + Math.PI / 6));
+      c.strokeStyle = '#9ca3af';
+      c.lineWidth = 1;
+      c.stroke();
+
+      const mStr = (reg.m >= 0 ? '+' : '') +
+        reg.m.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+      const callout = `+1 ${xOpt.label}  →  ${mStr} ${yOpt.label}`;
+      c.font = `bold ${fs}px system-ui, sans-serif`;
+      const tw = c.measureText(callout).width;
+      const bp = 5, bh = fs + bp * 2, bw = tw + bp * 2;
+      const bx = Math.min(aX2 + 4, ca.right - bw - 4);
+      const by = aY2 - bh / 2;
+      c.fillStyle = 'rgba(255,255,255,0.94)';
+      c.fillRect(bx, by, bw, bh);
+      c.strokeStyle = '#d1d5db';
+      c.lineWidth = 0.8;
+      c.strokeRect(bx, by, bw, bh);
+      c.fillStyle = '#1e3a5f';
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      c.fillText(callout, bx + bp, by + bh / 2);
+
+      const bboxX = Math.min(px0, bx) - 4;
+      const bboxY = Math.min(py0, py1, by) - 6;
+      const bboxR = Math.max(px1 + 10, bx + bw) + 4;
+      const bboxB = Math.max(py0, py1, by + bh) + 6;
+      svpSlopeBbox = { x: bboxX, y: bboxY, w: bboxR - bboxX, h: bboxB - bboxY };
+
+      if (svpSlopeDragging) {
+        c.strokeStyle = 'rgba(30,58,95,0.5)';
+        c.lineWidth = 1;
+        c.setLineDash([3, 3]);
+        c.strokeRect(bboxX, bboxY, bboxR - bboxX, bboxB - bboxY);
+        c.setLineDash([]);
+      }
+
+      c.restore();
+    },
+  };
+
+  // Plugin: cuadrito de resumen (proyectos, stock, promedios)
+  const summaryPlugin = {
+    id: 'svpSummary',
+    afterDraw(chart) {
+      const fields = svpConfig.summaryFields;
+      if (!fields?.length || !rows.length) return;
+
+      const lines = fields.map(f => {
+        const col = state.columns.find(c => f.candidates.some(k => norm(c.name).includes(norm(k))));
+        if (!col) return null;
+        let val;
+        if (f.agg === 'countUnique') {
+          val = new Set(rows.map(r => r[col.name]).filter(v => v != null && v !== '')).size;
+        } else {
+          const nums = rows.map(r => Number(r[col.name])).filter(v => !isNaN(v));
+          if (!nums.length) return null;
+          val = f.agg === 'sum' ? nums.reduce((s, v) => s + v, 0) : nums.reduce((s, v) => s + v, 0) / nums.length;
+        }
+        const fmtFn = f.fmt ?? (v => v.toLocaleString('es-CL'));
+        return `${f.label}: ${fmtFn(val)}`;
+      }).filter(Boolean);
+      if (!lines.length) return;
+
+      const { ctx: c, chartArea: { left, top } } = chart;
+      c.save();
+      c.font = `bold ${fs}px system-ui, sans-serif`;
+      const w = Math.max(...lines.map(l => c.measureText(l).width));
+      const pad = 6, lh = fs + 4, h = lines.length * lh + pad;
+      const bx = left + 6, by = top + 6;
+      c.fillStyle = 'rgba(255,255,255,0.92)';
+      c.fillRect(bx, by, w + pad * 2, h);
+      c.strokeStyle = '#cbd5e1'; c.lineWidth = 1;
+      c.strokeRect(bx, by, w + pad * 2, h);
+      c.fillStyle = '#1e3a5f';
+      c.textAlign = 'left'; c.textBaseline = 'middle';
+      lines.forEach((l, i) => c.fillText(l, bx + pad, by + pad / 2 + lh * i + lh / 2));
+      c.restore();
+    },
+  };
+
   state.chart = new Chart(ctx, {
     type: 'scatter',
     data: { datasets },
-    plugins: [r2Plugin],
+    plugins: [r2Plugin, svpSlopePlugin, summaryPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -417,7 +629,7 @@ export function renderSvp(state, svpConfig, mp) {
               if (item.dataset.showLine) return null;
               const d = item.raw;
               const name = d.label ? `${d.label}: ` : '';
-              return `${name}${Number(d.x).toLocaleString('es-CL')} ${svpConfig.xLabel ?? 'm²'} · ${yTooltip(d.y)}`;
+              return `${name}${xFmtFn(Number(d.x))} · ${yTooltip(d.y)}`;
             },
           },
         },
@@ -425,7 +637,7 @@ export function renderSvp(state, svpConfig, mp) {
       },
       scales: {
         x: {
-          title: { display: true, text: svpConfig.xLabel ?? 'm²', font: { size: fs } },
+          title: { display: true, text: xOpt.label, font: { size: fs } },
           ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
         },
         y: {
@@ -435,4 +647,6 @@ export function renderSvp(state, svpConfig, mp) {
       },
     },
   });
+
+  _updateSvpFilterWidget(state);
 }

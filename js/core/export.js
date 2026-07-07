@@ -17,18 +17,55 @@ export function exportCsv(state, filename) {
   URL.revokeObjectURL(url);
 }
 
+// Exporta state.raw (datos ya normalizados, sin filtrar) como JSON para
+// guardarlo en data/<visor>/ y poder recargarlo sin volver a procesar el Excel.
+export function exportJson(state, filename) {
+  if (!state.raw.length) return;
+  const blob = new Blob([JSON.stringify(state.raw)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${filename}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function copyChartPng(chart, wrapEl, ratioSelector) {
   if (!chart || !wrapEl) return false;
   const scale = 4, pad = 32;
   const ratio = document.querySelector(ratioSelector + '.active')?.dataset.ratio ?? 'auto';
   const origDPR = chart.options.devicePixelRatio ?? window.devicePixelRatio;
+  const origW   = chart.width;
+  const origH   = chart.height;
   const exportW = wrapEl.clientWidth - pad;
-  const exportH = ratio === 'auto' ? chart.height : Math.round(exportW / parseFloat(ratio));
+  const exportH = ratio === 'auto' ? origH : Math.round(exportW / parseFloat(ratio));
+  const scaleX  = exportW / origW;
+  const scaleY  = exportH / origH;
+
+  // Escalar xAdjust/yAdjust de anotaciones para que las etiquetas queden
+  // en la misma posición relativa en la imagen exportada.
+  const anns = chart.options?.plugins?.annotation?.annotations ?? {};
+  const saved = {};
+  for (const [key, ann] of Object.entries(anns)) {
+    if (!ann?.label) continue;
+    saved[key] = { x: ann.label.xAdjust ?? 0, y: ann.label.yAdjust ?? 0 };
+    ann.label.xAdjust = saved[key].x * scaleX;
+    ann.label.yAdjust = saved[key].y * scaleY;
+  }
+
   chart.options.devicePixelRatio = scale;
   chart.resize(exportW, exportH);
   const url = chart.toBase64Image('image/png', 1);
   chart.options.devicePixelRatio = origDPR;
-  chart.resize();
+  chart.resize(origW, origH);
+
+  // Restaurar adjusts originales
+  for (const [key, ann] of Object.entries(anns)) {
+    if (!ann?.label || !saved[key]) continue;
+    ann.label.xAdjust = saved[key].x;
+    ann.label.yAdjust = saved[key].y;
+  }
+  chart.update('none');
+
   const res = await fetch(url);
   const blob = await res.blob();
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
