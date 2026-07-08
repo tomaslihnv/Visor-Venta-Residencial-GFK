@@ -1,4 +1,4 @@
-import { $, detectColType } from '../utils.js'; // Mantenemos tu ruta original
+import { $, detectColType } from './utils.js';
 
 // ============== Estado global ==============
 export const state = {

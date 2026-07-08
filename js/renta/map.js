@@ -1,5 +1,5 @@
 import { state } from './data.js';
-import { $, fmt, extractDormitorios } from './utils.js';
+import { $, fmt, extractDormitorios, norm } from './utils.js';
 import { mp } from './miProyecto.js';
 
 // ============== Cache y estado ==============
@@ -25,10 +25,6 @@ export function resetMapOnLoad() {
 }
 
 // ============== Helpers ==============
-function norm(s) {
-  return s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-}
-
 function findAddressCol() {
   const keywords = ['direccion', 'address', 'domicilio', 'ubicacion', 'calle'];
   return state.columns.find(c => keywords.some(k => norm(c.name).includes(k)));

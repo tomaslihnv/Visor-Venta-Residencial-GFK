@@ -1,10 +1,8 @@
-import { $ } from '../utils.js';
-import { extractDormitorios } from './utils.js';
+import { $, extractDormitorios, norm } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 
 function findCol(candidates) {
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   return state.columns.find(c => candidates.some(k => norm(c.name).includes(norm(k))))?.name ?? null;
 }
 
