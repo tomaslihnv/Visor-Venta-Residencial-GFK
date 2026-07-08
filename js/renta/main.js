@@ -54,7 +54,6 @@ $$('.tab').forEach(tab => {
   });
 });
 
-// ============== Copiar tabla comparativa ==============
 // ============== Filter IO ==============
 import('./filters.js').then(({ getFilterState, applyFilterState }) => {
   initFilterIO({
