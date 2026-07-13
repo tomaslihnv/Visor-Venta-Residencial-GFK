@@ -1089,7 +1089,14 @@ export function populateDistribSelectors() {
         renderDistrib();
       });
     });
-    $('#histBins')?.addEventListener('input', renderDistrib);
+    const _histBinsSlider = $('#histBins');
+    const _histBinsVal    = document.getElementById('histBinsVal');
+    if (_histBinsSlider) {
+      _histBinsSlider.addEventListener('input', () => {
+        if (_histBinsVal) _histBinsVal.textContent = +_histBinsSlider.value === 0 ? 'Auto' : _histBinsSlider.value;
+        renderDistrib();
+      });
+    }
 
     document.querySelectorAll('.ratio-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1305,9 +1312,9 @@ export function renderDistrib() {
     const n = histVals.length;
     const x0 = histVals[0];
     const x1 = histVals[n - 1];
-    const binsInput = _parseAxisVal($('#histBins')?.value);
-    const nBins = binsInput != null
-      ? Math.min(Math.max(Math.round(binsInput), 2), 100)
+    const binsInput = parseInt($('#histBins')?.value ?? '0');
+    const nBins = binsInput > 0
+      ? Math.min(Math.max(binsInput, 2), 80)
       : Math.min(Math.max(Math.ceil(Math.sqrt(n)), 5), 40);
     const binW = (x1 - x0) / nBins || 1;
 
@@ -1316,13 +1323,12 @@ export function renderDistrib() {
       counts[Math.min(Math.floor((v - x0) / binW), nBins - 1)]++;
     }
 
-    const labels = Array.from({ length: nBins }, (_, i) =>
-      (x0 + i * binW).toLocaleString('es-CL', { maximumFractionDigits: 0 })
-    );
+    const binData = counts.map((count, i) => ({ x: x0 + (i + 0.5) * binW, y: count }));
 
     const yMinV = _parseAxisVal($('#distribYMin')?.value);
     const yMaxV = _parseAxisVal($('#distribYMax')?.value);
 
+    // Plugin que dibuja el ratio/tamaño en la esquina
     const distribSettingsPlugin = {
       id: 'distribSettings',
       afterDraw(chart) {
@@ -1339,13 +1345,29 @@ export function renderDistrib() {
       },
     };
 
+    // Plugin que fuerza los ticks exactamente en los bordes de los bins.
+    // Chart.js con escala linear genera ticks en valores "lindos" (2000, 2500…)
+    // que no coinciden con los bordes reales, lo que hace que las etiquetas
+    // aparezcan en medio de las barras. Aquí los reemplazamos.
+    const histEdgeTicksPlugin = {
+      id: 'histEdgeTicks',
+      afterBuildTicks(chart, args) {
+        if (args?.scale?.id !== 'x') return;
+        // Máximo ~12 ticks visibles; saltar bins si hay demasiados
+        const edgeCount = nBins + 1;
+        const step     = Math.max(1, Math.ceil(edgeCount / 12));
+        args.scale.ticks = Array.from({ length: edgeCount }, (_, i) => ({
+          value: x0 + i * binW,
+        })).filter((_, i) => i % step === 0);
+      },
+    };
+
     distribChart = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels,
         datasets: [{
           label: col,
-          data: counts,
+          data: binData,
           backgroundColor: 'rgba(59,130,246,0.55)',
           borderColor: 'rgba(59,130,246,0.85)',
           borderWidth: 1,
@@ -1354,10 +1376,11 @@ export function renderDistrib() {
           categoryPercentage: 1.0,
         }],
       },
-      plugins: [distribSettingsPlugin],
+      plugins: [distribSettingsPlugin, histEdgeTicksPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        parsing: false,
         layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
         plugins: {
           legend: { display: false },
@@ -1369,15 +1392,25 @@ export function renderDistrib() {
                 const hi = lo + binW;
                 return `${lo.toLocaleString('es-CL', { maximumFractionDigits: 0 })} – ${hi.toLocaleString('es-CL', { maximumFractionDigits: 0 })} ${distribUnit}`;
               },
-              label: item => ` ${item.raw} unidades`,
+              label: item => ` ${item.parsed.y} unidades`,
             },
           },
           annotation: { annotations: {} },
         },
         scales: {
           x: {
+            type: 'linear',
+            // Medio bin de margen a cada lado: el eje Y queda a la izquierda
+            // de la primera barra (no encima de su borde), y hay espacio al final.
+            min: x0 - binW * 0.5,
+            max: x1 + binW * 0.5,
+            offset: false,
             title: { display: true, text: col, font: { size: fs } },
-            ticks: { font: { size: fs }, maxRotation: 45 },
+            ticks: {
+              font: { size: fs },
+              maxRotation: 45,
+              callback: v => v.toLocaleString('es-CL', { maximumFractionDigits: 0 }),
+            },
             grid: { display: false },
           },
           y: {

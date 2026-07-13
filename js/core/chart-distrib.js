@@ -1011,10 +1011,23 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
     });
   }
 
+  const _minV  = sortedVals[0];
+  const _nBins = bins.length;
+  const _histEdgeTicks = {
+    id: 'histEdgeTicks',
+    afterBuildTicks(chart, args) {
+      if (args?.scale?.id !== 'x') return;
+      const step = Math.max(1, Math.ceil((_nBins + 1) / 12));
+      args.scale.ticks = Array.from({ length: _nBins + 1 }, (_, i) => ({
+        value: _minV + i * bw,
+      })).filter((_, i) => i % step === 0);
+    },
+  };
+
   _distribChart = new Chart(ctx, {
     type: 'bar',
     data: { datasets },
-    plugins: [_statsPlugin(showNormal ? normalFit : null, fs)],
+    plugins: [_statsPlugin(showNormal ? normalFit : null, fs), _histEdgeTicks],
     options: {
       responsive: true, maintainAspectRatio: false, parsing: false,
       plugins: {

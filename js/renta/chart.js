@@ -1566,8 +1566,21 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
     },
   };
 
+  const _minVR  = sortedVals[0];
+  const _nBinsR = bins.length;
+  const _histEdgeTicksR = {
+    id: 'histEdgeTicks',
+    afterBuildTicks(chart, args) {
+      if (args?.scale?.id !== 'x') return;
+      const step = Math.max(1, Math.ceil((_nBinsR + 1) / 12));
+      args.scale.ticks = Array.from({ length: _nBinsR + 1 }, (_, i) => ({
+        value: _minVR + i * bw,
+      })).filter((_, i) => i % step === 0);
+    },
+  };
+
   distribChart = new Chart(ctx, {
-    type: 'bar', data: { datasets }, plugins: [statsPlugin],
+    type: 'bar', data: { datasets }, plugins: [statsPlugin, _histEdgeTicksR],
     options: {
       responsive: true, maintainAspectRatio: false, parsing: false,
       plugins: {

@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
     /* ── Layout específico de barrio ────────────────────────────────────────── */
     .barrio-layout {
@@ -133,6 +134,22 @@
       cursor: not-allowed;
     }
 
+    .barrio-select {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      border: 1px solid var(--border, #e2e8f0);
+      background: var(--bg-card, #fff);
+      color: var(--text, #1e293b);
+      cursor: pointer;
+      appearance: auto;
+    }
+    .barrio-select:focus {
+      outline: 2px solid #3b82f6;
+      outline-offset: 1px;
+    }
+
     /* ── Panel de resultados ────────────────────────────────────────────────── */
     .barrio-results {
       flex: 1;
@@ -201,9 +218,255 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Botón captura flotante ─────────────────────────────────────────────── */
+    .barrio-capture-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 800;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      background: rgba(255,255,255,0.93);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.07);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text, #1e293b);
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .barrio-capture-btn:hover {
+      background: rgba(255,255,255,1);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.07);
+    }
+    .barrio-capture-btn:active { transform: scale(0.97); }
+    .barrio-capture-btn.loading { opacity: 0.6; cursor: wait; }
+
     /* ── Cursor crosshair en modo dibujo ────────────────────────────────────── */
     .barrio-map-wrap.drawing #barrioMap { cursor: crosshair !important; }
     .barrio-map-wrap.drawing .leaflet-interactive { cursor: crosshair !important; }
+
+    /* ── Resumen flotante sobre el mapa ────────────────────────────────────── */
+    .barrio-summary {
+      position: absolute;
+      bottom: 36px;
+      right: 12px;
+      z-index: 800;
+      background: rgba(255, 255, 255, 0.93);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.13), 0 0 0 1px rgba(0,0,0,0.07);
+      padding: 14px 16px 12px;
+      min-width: 185px;
+      pointer-events: auto;
+      transition: opacity 0.2s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .bs-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .bs-total {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text, #1e293b);
+      line-height: 1;
+      display: block;
+    }
+    .bs-subtitle {
+      font-size: 11px;
+      color: var(--text-muted, #64748b);
+      display: block;
+      margin-top: 2px;
+    }
+    .bs-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 14px;
+      padding: 0;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+    .bs-close:hover { color: #475569; }
+    .bs-divider {
+      height: 1px;
+      background: rgba(0,0,0,0.07);
+      margin: 8px 0;
+    }
+    .bs-rows { display: flex; flex-direction: column; gap: 5px; }
+    .bs-row  { display: flex; align-items: center; gap: 8px; }
+    .bs-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .bs-name { flex: 1; font-size: 12px; color: var(--text-muted, #475569); }
+    .bs-count {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text, #1e293b);
+      min-width: 20px;
+      text-align: right;
+    }
+
+    /* ── POI legend panel ───────────────────────────────────────────────────── */
+    .poi-summary {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .poi-summary-total {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text, #1e293b);
+      line-height: 1;
+    }
+    .poi-summary-label {
+      font-size: 13px;
+      color: var(--text-muted, #64748b);
+    }
+    .poi-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .poi-toggle-row {
+      display: flex;
+      gap: 6px;
+    }
+    .poi-toggle-btn {
+      flex: 1;
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border, #e2e8f0);
+      background: var(--bg-card, #fff);
+      color: var(--text, #1e293b);
+    }
+    .poi-toggle-btn:hover { background: var(--bg-subtle, #f8fafc); }
+    .poi-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .poi-cat-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .poi-cat-label-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      padding: 4px 2px;
+      border-radius: 4px;
+      user-select: none;
+    }
+    .poi-cat-label-wrap:hover { background: var(--bg-subtle, #f8fafc); }
+    .poi-cat-check {
+      accent-color: #3b82f6;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .poi-cat-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .poi-cat-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text, #1e293b);
+    }
+    .poi-cat-count {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted, #64748b);
+      background: var(--bg-subtle, #f1f5f9);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    .poi-cat-extra {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 0 2px 6px 24px; /* indent under the dot */
+    }
+    .poi-cat-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .poi-cat-opacity {
+      flex: 1;
+      height: 3px;
+      cursor: pointer;
+    }
+    .poi-cat-labels-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--text-muted, #64748b);
+      white-space: nowrap;
+      user-select: none;
+    }
+    .poi-cat-labels-wrap input { cursor: pointer; accent-color: #3b82f6; }
+    .poi-cat-bar {
+      height: 3px;
+      background: var(--bg-subtle, #f1f5f9);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .poi-cat-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      opacity: 0.55;
+    }
+    /* Etiqueta permanente sobre el mapa */
+    .leaflet-tooltip.poi-label {
+      background: rgba(255,255,255,0.96);
+      border: none;
+      border-radius: 999px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.13), 0 0 0 1px rgba(0,0,0,0.07);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      padding: 3px 9px 3px 6px;
+      color: #1e293b;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .leaflet-tooltip.poi-label::before { display: none; }
+    .poi-label-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -226,6 +489,20 @@
 
     <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
     <aside class="barrio-sidebar">
+
+      <!-- Selector de mapa base -->
+      <div class="barrio-panel">
+        <div class="barrio-panel-title">Mapa base</div>
+        <select id="barrioBasemap" class="barrio-select">
+          <option value="streets">Calles (OSM)</option>
+          <option value="voyager">Voyager</option>
+          <option value="light">Claro</option>
+          <option value="dark">Oscuro</option>
+          <option value="satellite">Satélite</option>
+          <option value="hybrid">Satélite + calles</option>
+          <option value="topo">Topográfico</option>
+        </select>
+      </div>
 
       <!-- Controles de dibujo -->
       <div class="barrio-panel">
@@ -258,6 +535,13 @@
     <!-- ── Mapa ─────────────────────────────────────────────────────────────── -->
     <div class="barrio-map-wrap" id="barrioMapWrap">
       <div id="barrioMap"></div>
+      <button id="btnCapture" class="barrio-capture-btn" title="Capturar mapa como imagen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        Capturar
+      </button>
     </div>
 
   </div>

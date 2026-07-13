@@ -1,10 +1,77 @@
 import { fetchPois } from './api.js';
 
+// ── Configuración de categorías POI ──────────────────────────────────────
+const GROUP_CONFIG = {
+  park:        { label: 'Parques',       color: '#22c55e' },
+  school:      { label: 'Colegios',      color: '#f59e0b' },
+  university:  { label: 'Universidad',   color: '#0891b2' },
+  supermarket: { label: 'Supermercados', color: '#8b5cf6' },
+  mall:        { label: 'Mall',          color: '#a855f7' },
+  pharmacy:    { label: 'Farmacias',     color: '#ec4899' },
+  salud:       { label: 'Salud',         color: '#06b6d4' },
+  fuel:        { label: 'Combustible',   color: '#f97316' },
+  bank:        { label: 'Bancos',        color: '#3b82f6' },
+  retail:      { label: 'Retail',        color: '#84cc16' },
+  police:      { label: 'Comisaría',     color: '#334155' },
+};
+const GROUP_ORDER = ['park', 'school', 'university', 'supermarket', 'mall',
+                     'pharmacy', 'salud', 'fuel', 'bank', 'retail', 'police'];
+
+// ── Capas base disponibles ────────────────────────────────────────────────
+const BASEMAPS = {
+  streets: {
+    label: 'Calles (OSM)',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+  voyager: {
+    label: 'Voyager',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '© OpenStreetMap © CARTO',
+  },
+  light: {
+    label: 'Claro',
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '© OpenStreetMap © CARTO',
+  },
+  dark: {
+    label: 'Oscuro',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '© OpenStreetMap © CARTO',
+  },
+  satellite: {
+    label: 'Satélite',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles © Esri',
+  },
+  hybrid: {
+    label: 'Satélite + calles',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    overlayUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles © Esri',
+  },
+  topo: {
+    label: 'Topográfico',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles © Esri',
+  },
+};
+
 // ── Estado del dibujo ─────────────────────────────────────────────────────
 const SNAP_PX = 15; // píxeles para cerrar el polígono al hacer clic en el primer vértice
 
 let drawState = 'idle'; // 'idle' | 'drawing' | 'complete'
 let vertices  = [];     // [[lat, lng], ...]
+
+// POI layers
+let poiLayerGroups = {};  // group -> L.layerGroup
+
+// Mapa base activo
+let currentBase    = null;
+let currentOverlay = null;
+
+// Panel resumen sobre el mapa
+let summaryPanel = null;
 
 // Capas Leaflet temporales
 let vertexMarkers = [];
@@ -16,10 +83,7 @@ let snapMarker    = null; // indicador visual de "puedes cerrar aquí"
 // ── Inicializar mapa ──────────────────────────────────────────────────────
 const map = L.map('barrioMap', { doubleClickZoom: false }).setView([-33.45, -70.65], 13);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  maxZoom: 19,
-}).addTo(map);
+_setBasemap('streets');
 
 // ── Referencias DOM ───────────────────────────────────────────────────────
 const btnDraw        = document.getElementById('btnDraw');
@@ -30,6 +94,29 @@ const instruction    = document.getElementById('barrioInstruction');
 const instructionTxt = document.getElementById('barrioInstructionText');
 const resultsPanel   = document.getElementById('barrioResults');
 const mapWrap        = document.getElementById('barrioMapWrap');
+
+// ── Mapa base ─────────────────────────────────────────────────────────────
+function _setBasemap(key) {
+  if (currentBase)    { map.removeLayer(currentBase);    currentBase    = null; }
+  if (currentOverlay) { map.removeLayer(currentOverlay); currentOverlay = null; }
+
+  const bm = BASEMAPS[key];
+  if (!bm) return;
+
+  currentBase = L.tileLayer(bm.url, {
+    attribution: bm.attribution,
+    maxZoom: 19,
+    crossOrigin: 'anonymous',
+  }).addTo(map);
+
+  if (bm.overlayUrl) {
+    currentOverlay = L.tileLayer(bm.overlayUrl, {
+      attribution: '',
+      maxZoom: 19,
+      crossOrigin: 'anonymous',
+    }).addTo(map);
+  }
+}
 
 // ── Helpers visuales ──────────────────────────────────────────────────────
 const STYLE_VERTEX  = { radius: 5, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 1, weight: 2 };
@@ -211,6 +298,201 @@ btnQuery.addEventListener('click', async () => {
   }
 });
 
+// ── POI — marcadores en el mapa ───────────────────────────────────────────
+function _clearPois() {
+  Object.values(poiLayerGroups).forEach(lg => lg.remove());
+  poiLayerGroups = {};
+  if (summaryPanel) { summaryPanel.remove(); summaryPanel = null; }
+}
+
+function _renderPois(poi) {
+  _clearPois();
+  const { items, byGroup } = poi;
+
+  // Un LayerGroup por categoría
+  Object.keys(byGroup).forEach(group => {
+    poiLayerGroups[group] = L.layerGroup().addTo(map);
+  });
+
+  items.forEach(item => {
+    if (!item.lat || !item.lng) return;
+    const cfg = GROUP_CONFIG[item.group] ?? { label: item.group, color: '#94a3b8' };
+    const m = L.circleMarker([item.lat, item.lng], {
+      radius: 7,
+      color: '#fff',
+      weight: 1.5,
+      fillColor: cfg.color,
+      fillOpacity: 0.85,
+    });
+    m._poiName  = item.name || '';
+    m._poiColor = cfg.color;
+    if (item.name) {
+      m.bindTooltip(item.name, { permanent: false, direction: 'top', offset: [0, -5] });
+    }
+    poiLayerGroups[item.group]?.addLayer(m);
+  });
+}
+
+function _toggleGroup(group, visible) {
+  const lg = poiLayerGroups[group];
+  if (!lg) return;
+  if (visible) lg.addTo(map); else lg.remove();
+}
+
+function _setGroupLabelsVisible(group, visible) {
+  poiLayerGroups[group]?.eachLayer(m => {
+    if (!m._poiName) return;
+    m.unbindTooltip();
+    const content = visible
+      ? `<span class="poi-label-dot" style="background:${m._poiColor}"></span>${m._poiName}`
+      : m._poiName;
+    m.bindTooltip(content, {
+      permanent: visible,
+      direction: 'top',
+      offset: [0, -10],
+      className: visible ? 'poi-label' : '',
+    });
+  });
+}
+
+// ── POI — panel de leyenda en el sidebar ─────────────────────────────────
+function _buildPoiPanel(poi) {
+  const { total, byGroup } = poi;
+  const maxCount = Math.max(...Object.values(byGroup).filter(Boolean));
+  const activeGroups = GROUP_ORDER.filter(g => (byGroup[g] ?? 0) > 0);
+
+  const rows = activeGroups.map(group => {
+    const cfg   = GROUP_CONFIG[group] ?? { label: group, color: '#94a3b8' };
+    const count = byGroup[group] ?? 0;
+    const pct   = maxCount > 0 ? ((count / maxCount) * 100).toFixed(0) : 0;
+    return `
+      <div class="poi-cat-row">
+        <label class="poi-cat-label-wrap">
+          <input type="checkbox" class="poi-cat-check" data-group="${group}" checked />
+          <span class="poi-cat-dot" style="background:${cfg.color}"></span>
+          <span class="poi-cat-name">${cfg.label}</span>
+          <span class="poi-cat-count">${count}</span>
+        </label>
+        <div class="poi-cat-extra">
+          <div class="poi-cat-controls">
+            <input type="range" class="poi-cat-opacity" data-group="${group}"
+                   min="0.1" max="1" step="0.05" value="0.85"
+                   style="accent-color:${cfg.color}" />
+            <label class="poi-cat-labels-wrap">
+              <input type="checkbox" class="poi-cat-labels" data-group="${group}" />
+              <span>Etiquetas</span>
+            </label>
+          </div>
+          <div class="poi-cat-bar">
+            <div class="poi-cat-bar-fill" style="width:${pct}%;background:${cfg.color}"></div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  resultsPanel.innerHTML = `
+    <div class="poi-summary">
+      <span class="poi-summary-total">${total}</span>
+      <span class="poi-summary-label">POIs en la zona</span>
+    </div>
+    <div class="poi-controls">
+      <div class="poi-toggle-row">
+        <label class="poi-labels-wrap">
+          <input type="checkbox" id="poiSummaryToggle" checked />
+          <span>Resumen en mapa</span>
+        </label>
+      </div>
+      <div class="poi-toggle-row">
+        <button class="poi-toggle-btn" id="poiShowAll">Mostrar todos</button>
+        <button class="poi-toggle-btn" id="poiHideAll">Ocultar todos</button>
+      </div>
+    </div>
+    <div class="poi-legend" id="poiLegend">${rows}</div>`;
+
+  // Toggle resumen en mapa
+  document.getElementById('poiSummaryToggle').addEventListener('change', (e) => {
+    if (summaryPanel) summaryPanel.style.display = e.target.checked ? '' : 'none';
+  });
+
+  // Mostrar / ocultar todos
+  document.getElementById('poiShowAll').addEventListener('click', () => {
+    document.querySelectorAll('.poi-cat-check').forEach(cb => {
+      cb.checked = true;
+      _toggleGroup(cb.dataset.group, true);
+    });
+  });
+  document.getElementById('poiHideAll').addEventListener('click', () => {
+    document.querySelectorAll('.poi-cat-check').forEach(cb => {
+      cb.checked = false;
+      _toggleGroup(cb.dataset.group, false);
+    });
+  });
+
+  // Visibilidad y etiquetas por categoría (delegación en el legend)
+  document.getElementById('poiLegend').addEventListener('change', (e) => {
+    const { group } = e.target.dataset;
+    if (e.target.classList.contains('poi-cat-check')) {
+      _toggleGroup(group, e.target.checked);
+    }
+    if (e.target.classList.contains('poi-cat-labels')) {
+      _setGroupLabelsVisible(group, e.target.checked);
+    }
+  });
+
+  // Opacidad por categoría — actualiza marcadores y fila del resumen
+  document.getElementById('poiLegend').addEventListener('input', (e) => {
+    if (!e.target.classList.contains('poi-cat-opacity')) return;
+    const { group } = e.target.dataset;
+    const op = +e.target.value;
+    poiLayerGroups[group]?.eachLayer(m => {
+      m.setStyle({ fillOpacity: op, opacity: Math.min(op * 1.5, 1) });
+    });
+    if (summaryPanel) {
+      const row = summaryPanel.querySelector(`.bs-row[data-group="${group}"]`);
+      if (row) row.style.opacity = op;
+    }
+  });
+}
+
+// ── Panel resumen flotante sobre el mapa ─────────────────────────────────
+function _buildSummaryPanel(poi) {
+  if (summaryPanel) { summaryPanel.remove(); summaryPanel = null; }
+
+  const { total, byGroup } = poi;
+  const activeGroups = GROUP_ORDER.filter(g => (byGroup[g] ?? 0) > 0);
+
+  const rows = activeGroups.map(group => {
+    const cfg = GROUP_CONFIG[group] ?? { label: group, color: '#94a3b8' };
+    return `
+      <div class="bs-row" data-group="${group}">
+        <span class="bs-dot" style="background:${cfg.color}"></span>
+        <span class="bs-name">${cfg.label}</span>
+        <span class="bs-count">${byGroup[group]}</span>
+      </div>`;
+  }).join('');
+
+  summaryPanel = document.createElement('div');
+  summaryPanel.className = 'barrio-summary';
+  summaryPanel.innerHTML = `
+    <div class="bs-header">
+      <div>
+        <span class="bs-total">${total}</span>
+        <span class="bs-subtitle">POIs en la zona</span>
+      </div>
+      <button class="bs-close" title="Cerrar">✕</button>
+    </div>
+    <div class="bs-divider"></div>
+    <div class="bs-rows">${rows}</div>`;
+
+  mapWrap.appendChild(summaryPanel);
+
+  summaryPanel.querySelector('.bs-close').addEventListener('click', () => {
+    summaryPanel.style.display = 'none';
+    const toggle = document.getElementById('poiSummaryToggle');
+    if (toggle) toggle.checked = false;
+  });
+}
+
 // ── Panel de resultados ───────────────────────────────────────────────────
 function _setResults(payload, errorMsg = null) {
   if (errorMsg) {
@@ -221,32 +503,86 @@ function _setResults(payload, errorMsg = null) {
   }
 
   if (!payload) {
+    _clearPois();
     resultsPanel.innerHTML = '<p class="barrio-results-empty">Los resultados de la API aparecerán aquí.</p>';
     return;
   }
 
-  const json = JSON.stringify(payload, null, 2);
-
-  // Log en consola para inspección cómoda
   console.log('[barrio] Respuesta completa de la API:', payload);
 
-  resultsPanel.innerHTML = `
-    <p class="barrio-results-title">Respuesta API Inciti</p>
-    <button class="barrio-copy-btn" id="btnCopyJson">Copiar JSON</button>
-    <pre class="barrio-raw-json">${_esc(json)}</pre>`;
-
-  document.getElementById('btnCopyJson').addEventListener('click', async () => {
-    await navigator.clipboard.writeText(json);
-    const btn = document.getElementById('btnCopyJson');
-    const prev = btn.textContent;
-    btn.textContent = '¡Copiado!';
-    setTimeout(() => { btn.textContent = prev; }, 1800);
-  });
+  if (payload.poi?.items?.length) {
+    _renderPois(payload.poi);
+    _buildPoiPanel(payload.poi);
+    _buildSummaryPanel(payload.poi);
+  } else {
+    resultsPanel.innerHTML = '<p class="barrio-results-empty">No se encontraron POIs en la zona.</p>';
+  }
 }
 
-function _esc(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+// Selector de mapa base
+document.getElementById('barrioBasemap').addEventListener('change', (e) => {
+  _setBasemap(e.target.value);
+});
+
+// Captura del mapa con html2canvas
+document.getElementById('btnCapture').addEventListener('click', async () => {
+  const btn = document.getElementById('btnCapture');
+  btn.classList.add('loading');
+  window.getSelection()?.removeAllRanges();
+  document.activeElement?.blur();
+  await new Promise(r => setTimeout(r, 80));
+
+  try {
+    const canvas = await html2canvas(mapWrap, {
+      useCORS:    true,
+      allowTaint: true,
+      logging:    false,
+      scale:      window.devicePixelRatio || 1,
+      onclone: (doc) => {
+        // Ocultar botón de captura en la imagen
+        const b = doc.getElementById('btnCapture');
+        if (b) b.style.display = 'none';
+
+        // html2canvas no soporta backdrop-filter — lo reemplazamos por fondo
+        // sólido equivalente para evitar el artefacto visual de "texto seleccionado"
+        ['.barrio-summary', '.barrio-capture-btn'].forEach(sel => {
+          doc.querySelectorAll(sel).forEach(el => {
+            el.style.backdropFilter       = 'none';
+            el.style.webkitBackdropFilter = 'none';
+            if (el.classList.contains('barrio-summary')) {
+              el.style.background = 'rgba(255,255,255,0.98)';
+            }
+          });
+        });
+
+        // Evitar aspecto de "texto seleccionado" en etiquetas de POI
+        doc.querySelectorAll('.leaflet-tooltip.poi-label, .barrio-summary, .bs-name, .bs-count, .bs-subtitle').forEach(el => {
+          el.style.userSelect       = 'none';
+          el.style.webkitUserSelect = 'none';
+        });
+      },
+    });
+
+    canvas.toBlob(async (blob) => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        const original = btn.innerHTML;
+        btn.innerHTML = btn.innerHTML.replace('Capturar', '¡Copiado!');
+        setTimeout(() => { btn.innerHTML = original; }, 2000);
+      } catch {
+        const a = document.createElement('a');
+        a.download = `barrio-${new Date().toISOString().slice(0, 10)}.png`;
+        a.href = canvas.toDataURL();
+        a.click();
+      }
+    }, 'image/png');
+  } catch (err) {
+    console.error('[barrio] Error al capturar:', err);
+    alert('No se pudo capturar el mapa.');
+  } finally {
+    btn.classList.remove('loading');
+  }
+});
 
 // Estado inicial
 _setState('idle');

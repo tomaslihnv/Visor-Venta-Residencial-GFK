@@ -277,6 +277,24 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-size: 13px; background: #fff;
 }
 .chart-controls .primary-btn { margin-left: auto; }
+
+/* ========== Collapsible visual options panel ========== */
+.ctrl-opts {
+  display: none; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+  width: 100%; padding-top: 10px; margin-top: 2px;
+  border-top: 1px dashed #e5e7eb;
+}
+.ctrl-opts.open { display: flex; }
+.ctrl-opts-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border: 1px solid #d1d5db; border-radius: 5px;
+  background: #fff; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  cursor: pointer; color: #9ca3af; transition: background 0.1s, color 0.1s;
+}
+.ctrl-opts-btn:hover { background: #f9fafb; color: #4b5563; border-color: #9ca3af; }
+.ctrl-opts-btn.active { background: #f3f4f6; color: #374151; border-color: #9ca3af; }
+
 .toggle-check {
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; color: #374151; cursor: pointer; user-select: none;

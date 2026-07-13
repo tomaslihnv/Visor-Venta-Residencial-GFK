@@ -138,6 +138,16 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
   exportCsv(state, CSV_FILENAME);
 });
 
+// ── Visual options toggle panels ───────────────────────────────────────────
+document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = document.getElementById(btn.dataset.opts);
+    if (!target) return;
+    const open = target.classList.toggle('open');
+    btn.classList.toggle('active', open);
+  });
+});
+
 // ── Guardar JSON (para data/multifamily/) ──────────────────────────────────
 $('#saveJsonBtn')?.addEventListener('click', () => {
   if (!state.raw.length) { alert('Cargá un Excel primero.'); return; }

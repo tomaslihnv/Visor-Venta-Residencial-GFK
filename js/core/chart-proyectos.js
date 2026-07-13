@@ -175,8 +175,9 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
 
   // Mi Proyecto
   let mpName = null;
+  let mpVal  = null;
   if (mp?.inProy && mp.proyecto && options.getMpValue) {
-    const mpVal = options.getMpValue(metric.id, mp);
+    mpVal = options.getMpValue(metric.id, mp);
     if (mpVal !== null && mpVal !== undefined) {
       mpName = mp.proyecto;
       entries.push([mpName, mpVal]);
@@ -226,11 +227,17 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
     },
   };
 
+  const medianLabel = medianVal != null ? [`Mediana: ${metric.fmt(medianVal)}`] : null;
+  if (medianLabel && mpName && mpVal != null && mpVal > 0 && medianVal !== mpVal) {
+    const diff = ((medianVal - mpVal) / Math.abs(mpVal)) * 100;
+    const abs  = Math.abs(diff).toLocaleString('es-CL', { maximumFractionDigits: 0 });
+    medianLabel.push(`(${abs}% ${diff > 0 ? 'mayor' : 'menor'} al proyecto)`);
+  }
   const medianAnnotations = medianVal != null ? {
     mediana: {
       type: 'line', yMin: medianVal, yMax: medianVal,
       borderColor: '#ef4444', borderWidth: 1.5, borderDash: [5, 4],
-      label: { content: `Mediana: ${metric.fmt(medianVal)}`, display: true, position: 'end', font: { size: fs - 1 }, color: '#ef4444', backgroundColor: 'rgba(255,255,255,0.92)' },
+      label: { content: medianLabel, display: true, position: 'end', font: { size: fs - 1 }, color: '#ef4444', backgroundColor: 'rgba(255,255,255,0.92)' },
     },
   } : {};
 

@@ -77,6 +77,16 @@ import('./filters.js').then(({ getFilterState, applyFilterState }) => {
   });
 });
 
+// ============== Visual options toggle panels ==============
+document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = document.getElementById(btn.dataset.opts);
+    if (!target) return;
+    const open = target.classList.toggle('open');
+    btn.classList.toggle('active', open);
+  });
+});
+
 // ============== Exportar ==============
 $('#exportCsvBtn').addEventListener('click', () => {
   import('./data.js').then(({ state }) => {

@@ -207,23 +207,26 @@
               </div>
             </div>
             <div id="svpM2Tags" class="marker-tags"></div>
-            <div class="ctrl distrib-font-ctrl">
-              <label>Texto</label>
-              <div class="distrib-font-row">
-                <input type="range" id="svpFontSize" min="8" max="36" step="1" value="11">
-                <span id="svpFontSizeVal">11px</span>
-              </div>
-            </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Proporción</label>
-              <div class="distrib-ratio-row">
-                <button class="svp-ratio-btn active" data-ratio="auto">Auto</button>
-                <button class="svp-ratio-btn" data-ratio="1.78">16:9</button>
-                <button class="svp-ratio-btn" data-ratio="1.33">4:3</button>
-                <button class="svp-ratio-btn" data-ratio="1">1:1</button>
-              </div>
-            </div>
+            <button class="ctrl-opts-btn" data-opts="svpOpts">&#9881; Visual</button>
             <button id="svpExportPngBtn" class="primary-btn">Copiar imagen</button>
+            <div class="ctrl-opts" id="svpOpts">
+              <div class="ctrl distrib-font-ctrl">
+                <label>Texto</label>
+                <div class="distrib-font-row">
+                  <input type="range" id="svpFontSize" min="8" max="36" step="1" value="11">
+                  <span id="svpFontSizeVal">11px</span>
+                </div>
+              </div>
+              <div class="ctrl distrib-ratio-ctrl">
+                <label>Proporción</label>
+                <div class="distrib-ratio-row">
+                  <button class="svp-ratio-btn active" data-ratio="auto">Auto</button>
+                  <button class="svp-ratio-btn" data-ratio="1.78">16:9</button>
+                  <button class="svp-ratio-btn" data-ratio="1.33">4:3</button>
+                  <button class="svp-ratio-btn" data-ratio="1">1:1</button>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="chart-wrap" id="svpWrap">
             <canvas id="svpChart"></canvas>
@@ -243,29 +246,6 @@
                 <option value="count">N° Unidades</option>
               </select>
             </div>
-            <div class="ctrl distrib-font-ctrl">
-              <label>Texto</label>
-              <div class="distrib-font-row">
-                <input type="range" id="proyFontSize" min="8" max="36" step="1" value="11">
-                <span id="proyFontSizeVal">11px</span>
-              </div>
-            </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Proporción</label>
-              <div class="distrib-ratio-row">
-                <button class="proy-ratio-btn active" data-ratio="auto">Auto</button>
-                <button class="proy-ratio-btn" data-ratio="1.78">16:9</button>
-                <button class="proy-ratio-btn" data-ratio="1.33">4:3</button>
-                <button class="proy-ratio-btn" data-ratio="1">1:1</button>
-              </div>
-            </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Eje X</label>
-              <div class="distrib-ratio-row">
-                <button class="proy-xrot-btn active" data-rot="diagonal">Diagonal</button>
-                <button class="proy-xrot-btn" data-rot="vertical">Vertical</button>
-              </div>
-            </div>
             <div class="ctrl distrib-ratio-ctrl">
               <label>Mediana</label>
               <div class="distrib-ratio-row">
@@ -273,15 +253,41 @@
                 <button class="proy-median-btn" data-median="hide">Ocultar</button>
               </div>
             </div>
-            <div class="ctrl axis-range-ctrl">
-              <label>Eje Y</label>
-              <div class="axis-range-row">
-                <input type="number" id="proyYMin" class="axis-range-input" placeholder="mín">
-                <span>–</span>
-                <input type="number" id="proyYMax" class="axis-range-input" placeholder="máx">
+            <button class="ctrl-opts-btn" data-opts="proyOpts">&#9881; Visual</button>
+            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
+            <div class="ctrl-opts" id="proyOpts">
+              <div class="ctrl distrib-font-ctrl">
+                <label>Texto</label>
+                <div class="distrib-font-row">
+                  <input type="range" id="proyFontSize" min="8" max="36" step="1" value="11">
+                  <span id="proyFontSizeVal">11px</span>
+                </div>
+              </div>
+              <div class="ctrl distrib-ratio-ctrl">
+                <label>Proporción</label>
+                <div class="distrib-ratio-row">
+                  <button class="proy-ratio-btn active" data-ratio="auto">Auto</button>
+                  <button class="proy-ratio-btn" data-ratio="1.78">16:9</button>
+                  <button class="proy-ratio-btn" data-ratio="1.33">4:3</button>
+                  <button class="proy-ratio-btn" data-ratio="1">1:1</button>
+                </div>
+              </div>
+              <div class="ctrl distrib-ratio-ctrl">
+                <label>Eje X</label>
+                <div class="distrib-ratio-row">
+                  <button class="proy-xrot-btn active" data-rot="diagonal">Diagonal</button>
+                  <button class="proy-xrot-btn" data-rot="vertical">Vertical</button>
+                </div>
+              </div>
+              <div class="ctrl axis-range-ctrl">
+                <label>Eje Y</label>
+                <div class="axis-range-row">
+                  <input type="number" id="proyYMin" class="axis-range-input" placeholder="mín">
+                  <span>–</span>
+                  <input type="number" id="proyYMax" class="axis-range-input" placeholder="máx">
+                </div>
               </div>
             </div>
-            <button id="proyExportPngBtn" class="primary-btn">Copiar imagen</button>
           </div>
           <div class="chart-wrap" id="proyWrap">
             <canvas id="proyChart"></canvas>
@@ -301,13 +307,6 @@
                 <button class="distrib-mode-btn active" data-mode="acumulada">Acumulada</button>
                 <button class="distrib-mode-btn" data-mode="densidad">Densidad</button>
                 <button class="distrib-mode-btn" data-mode="lognormal">Log-normal</button>
-              </div>
-            </div>
-            <div class="ctrl distrib-bins-ctrl" id="distribBinsCtrl" style="display:none">
-              <label>Bins</label>
-              <div class="distrib-font-row">
-                <input type="range" id="distribBins" min="5" max="80" step="1" value="0">
-                <span id="distribBinsVal">Auto</span>
               </div>
             </div>
             <label class="toggle-check">
@@ -333,39 +332,49 @@
               <div id="distribPctTags" class="marker-tags"></div>
               <div id="distribPriceTags" class="marker-tags"></div>
             </div>
-            <div class="ctrl distrib-font-ctrl">
-              <label>Texto</label>
+            <div class="ctrl distrib-bins-ctrl" id="distribBinsCtrl" style="display:none">
+              <label>Bins</label>
               <div class="distrib-font-row">
-                <input type="range" id="distribFontSize" min="8" max="36" step="1" value="11">
-                <span id="distribFontSizeVal">11px</span>
+                <input type="range" id="distribBins" min="5" max="80" step="1" value="0">
+                <span id="distribBinsVal">Auto</span>
               </div>
             </div>
-            <div class="ctrl distrib-ratio-ctrl">
-              <label>Proporción</label>
-              <div class="distrib-ratio-row">
-                <button class="ratio-btn active" data-ratio="auto">Auto</button>
-                <button class="ratio-btn" data-ratio="1.78">16:9</button>
-                <button class="ratio-btn" data-ratio="1.33">4:3</button>
-                <button class="ratio-btn" data-ratio="1">1:1</button>
-              </div>
-            </div>
-            <div class="ctrl axis-range-ctrl">
-              <label>Eje X</label>
-              <div class="axis-range-row">
-                <input type="number" id="distribXMin" class="axis-range-input" placeholder="mín">
-                <span>–</span>
-                <input type="number" id="distribXMax" class="axis-range-input" placeholder="máx">
-              </div>
-            </div>
-            <div class="ctrl axis-range-ctrl">
-              <label>Eje Y</label>
-              <div class="axis-range-row">
-                <input type="number" id="distribYMin" class="axis-range-input" placeholder="mín">
-                <span>–</span>
-                <input type="number" id="distribYMax" class="axis-range-input" placeholder="máx">
-              </div>
-            </div>
+            <button class="ctrl-opts-btn" data-opts="distribOpts">&#9881; Visual</button>
             <button id="distribExportPngBtn" class="primary-btn">Copiar imagen</button>
+            <div class="ctrl-opts" id="distribOpts">
+              <div class="ctrl distrib-font-ctrl">
+                <label>Texto</label>
+                <div class="distrib-font-row">
+                  <input type="range" id="distribFontSize" min="8" max="36" step="1" value="11">
+                  <span id="distribFontSizeVal">11px</span>
+                </div>
+              </div>
+              <div class="ctrl distrib-ratio-ctrl">
+                <label>Proporción</label>
+                <div class="distrib-ratio-row">
+                  <button class="ratio-btn active" data-ratio="auto">Auto</button>
+                  <button class="ratio-btn" data-ratio="1.78">16:9</button>
+                  <button class="ratio-btn" data-ratio="1.33">4:3</button>
+                  <button class="ratio-btn" data-ratio="1">1:1</button>
+                </div>
+              </div>
+              <div class="ctrl axis-range-ctrl">
+                <label>Eje X</label>
+                <div class="axis-range-row">
+                  <input type="number" id="distribXMin" class="axis-range-input" placeholder="mín">
+                  <span>–</span>
+                  <input type="number" id="distribXMax" class="axis-range-input" placeholder="máx">
+                </div>
+              </div>
+              <div class="ctrl axis-range-ctrl">
+                <label>Eje Y</label>
+                <div class="axis-range-row">
+                  <input type="number" id="distribYMin" class="axis-range-input" placeholder="mín">
+                  <span>–</span>
+                  <input type="number" id="distribYMax" class="axis-range-input" placeholder="máx">
+                </div>
+              </div>
+            </div>
           </div>
           <div class="chart-wrap" id="distribWrap">
             <canvas id="distribChart"></canvas>
