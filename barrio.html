@@ -8,7 +8,6 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
     /* ── Layout específico de barrio ────────────────────────────────────────── */
     .barrio-layout {
@@ -218,36 +217,7 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Botón captura flotante ─────────────────────────────────────────────── */
-    .barrio-capture-btn {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      z-index: 800;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 7px 12px;
-      background: rgba(255,255,255,0.93);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      border: none;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.07);
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text, #1e293b);
-      cursor: pointer;
-      transition: background 0.15s, box-shadow 0.15s;
-    }
-    .barrio-capture-btn:hover {
-      background: rgba(255,255,255,1);
-      box-shadow: 0 4px 14px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.07);
-    }
-    .barrio-capture-btn:active { transform: scale(0.97); }
-    .barrio-capture-btn.loading { opacity: 0.6; cursor: wait; }
-
-    /* ── Cursor crosshair en modo dibujo ────────────────────────────────────── */
+/* ── Cursor crosshair en modo dibujo ────────────────────────────────────── */
     .barrio-map-wrap.drawing #barrioMap { cursor: crosshair !important; }
     .barrio-map-wrap.drawing .leaflet-interactive { cursor: crosshair !important; }
 
@@ -535,13 +505,6 @@
     <!-- ── Mapa ─────────────────────────────────────────────────────────────── -->
     <div class="barrio-map-wrap" id="barrioMapWrap">
       <div id="barrioMap"></div>
-      <button id="btnCapture" class="barrio-capture-btn" title="Capturar mapa como imagen">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-          <circle cx="12" cy="13" r="4"/>
-        </svg>
-        Capturar
-      </button>
     </div>
 
   </div>

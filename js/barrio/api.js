@@ -1,52 +1,31 @@
-import { INCITI_API_KEY, INCITI_API_URL, INCITI_PROXY_URL } from '../config.local.js';
+import { INCITI_PROXY_URL } from '../config.local.js';
 
 // ── Inciti API — POIs del Barrio ───────────────────────────────────────────
 //
-// Endpoint: POST /get_insights_pro
+// El request pasa por el Cloudflare Worker (workers/inciti-proxy.js) que
+// inyecta la X-API-Key server-side. El frontend nunca maneja la key.
 //
-// Ejemplo de request:
-//
-//   curl --location --request POST 'https://api.inciti.com/api/get_insights_pro' \
-//       --header 'Content-Type: application/json' \
-//       --header 'X-API-Key: {{YOUR_API_KEY}}' \
-//       --data '{
-//           "market": "residencial",
-//           "polygons": [
-//               [
-//                   {"lat": -33.435578546992005, "lng": -70.68080131225588},
-//                   {"lat": -33.45033229249539,  "lng": -70.67856971435549},
-//                   {"lat": -33.44732445093568,  "lng": -70.66758338623049},
-//                   {"lat": -33.43514878864547,  "lng": -70.66895667724601}
-//               ]
-//           ]
-//       }'
-//
-// Notas:
-//   - El polígono se dibuja en el mapa (Leaflet) y se envía al confirmar.
-//   - Usar INCITI_PROXY_URL en desarrollo para resolver CORS.
-//   - La estructura de la respuesta (categorías de POIs, campos por POI)
-//     debe documentarse aquí una vez que se explore la respuesta real.
+// Para desarrollo local: levantar scripts/proxy.py y apuntar INCITI_PROXY_URL
+// a http://localhost:5050 en js/config.local.js.
 
 const ENDPOINT_PATH = 'get_insights_pro';
 
 export async function fetchPois(polygon, { onProgress } = {}) {
-  if (!INCITI_API_KEY || !INCITI_API_URL) {
+  if (!INCITI_PROXY_URL) {
     throw new Error(
-      'Faltan credenciales. Completa js/config.local.js con INCITI_API_KEY e INCITI_API_URL.'
+      'Falta configurar INCITI_PROXY_URL en js/config.local.js.\n' +
+      'Desarrollo: http://localhost:5050 (requiere python scripts/proxy.py)\n' +
+      'Producción: URL del Cloudflare Worker desplegado.'
     );
   }
 
-  const base = INCITI_PROXY_URL ? INCITI_PROXY_URL : INCITI_API_URL.replace(/\/$/, '');
-  const url  = `${base}/${ENDPOINT_PATH}`;
+  const url = `${INCITI_PROXY_URL.replace(/\/$/, '')}/${ENDPOINT_PATH}`;
 
   onProgress?.('Consultando POIs del barrio…');
 
   const res = await fetch(url, {
     method:  'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key':    INCITI_API_KEY,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       market:   'residencial',
       polygons: [polygon],
@@ -58,11 +37,5 @@ export async function fetchPois(polygon, { onProgress } = {}) {
     throw new Error(`Error ${res.status} ${res.statusText}${text ? ': ' + text : ''}`);
   }
 
-  const payload = await res.json();
-
-  // TODO: explorar estructura real de payload y documentarla aquí.
-  // Descomentar para inspeccionar en consola:
-  // console.log('[barrio/api] payload crudo:', JSON.stringify(payload, null, 2));
-
-  return payload;
+  return res.json();
 }
