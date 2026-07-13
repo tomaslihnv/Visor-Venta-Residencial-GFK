@@ -7,6 +7,9 @@ Inputs de inciti/
 # Credenciales locales (API keys — nunca commitear)
 js/config.local.js
 
+# Cloudflare Wrangler cache
+workers/.wrangler/
+
 # Python
 __pycache__/
 *.py[cod]
