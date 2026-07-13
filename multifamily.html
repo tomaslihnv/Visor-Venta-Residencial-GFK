@@ -6,6 +6,52 @@
   <title>Visor Multifamily</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+  <style>
+    /* ── Modal de consulta por área ──────────────────────────────────────── */
+    .area-modal {
+      position: fixed; inset: 0; z-index: 2000;
+      background: rgba(0,0,0,0.55);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .area-modal.hidden { display: none; }
+    .area-modal-box {
+      background: #fff; border-radius: 12px;
+      width: min(960px, 95vw); height: min(680px, 92vh);
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+    }
+    .area-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 18px; border-bottom: 1px solid #e2e8f0;
+      font-weight: 600; font-size: 13px; color: #1e293b;
+    }
+    .area-modal-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 17px; color: #94a3b8; line-height: 1;
+    }
+    .area-modal-close:hover { color: #1e293b; }
+    #areaQueryMap { flex: 1; }
+    .area-modal-footer {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 10px 14px; border-top: 1px solid #e2e8f0;
+    }
+    .area-modal-status {
+      flex: 1; font-size: 12px; color: #64748b; min-width: 160px;
+    }
+    .area-modal-status.error { color: #ef4444; }
+    .area-modal-status.loading { color: #3b82f6; }
+    .area-btn {
+      padding: 6px 13px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      border: 1px solid #d1d5db; background: #fff; color: #374151; cursor: pointer;
+      transition: background 0.1s;
+    }
+    .area-btn:hover:not(:disabled) { background: #f1f5f9; }
+    .area-btn:disabled { opacity: 0.45; cursor: default; }
+    .area-btn.primary {
+      background: #1e3a5f; color: #fff; border-color: #1e3a5f;
+    }
+    .area-btn.primary:hover:not(:disabled) { background: #1e293b; }
+  </style>
 </head>
 <body>
   <nav class="app-nav">
@@ -27,6 +73,7 @@
         <span>Cargar Excel</span>
       </label>
       <span id="fileName" class="file-name"></span>
+      <button id="btnAreaQuery" class="ghost-btn" title="Consultar Inciti por área dibujada en el mapa">&#128205; Área Inciti</button>
       <button id="saveJsonBtn" class="ghost-btn" title="Descargar los datos cargados como JSON para guardarlos en data/multifamily/">Guardar JSON</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
@@ -549,6 +596,26 @@
       </div>
     </section>
   </main>
+
+  <!-- Modal: consulta Inciti por área -->
+  <div id="areaModal" class="area-modal hidden">
+    <div class="area-modal-box">
+      <div class="area-modal-header">
+        <span>Consulta Inciti — Multifamily por área</span>
+        <button id="areaModalClose" class="area-modal-close" title="Cerrar">✕</button>
+      </div>
+      <div id="areaQueryMap"></div>
+      <div class="area-modal-footer">
+        <span id="areaModalStatus" class="area-modal-status">
+          Haz clic en <strong>Dibujar zona</strong> y luego marca vértices en el mapa.
+        </span>
+        <button id="areaBtnDraw"      class="area-btn primary">Dibujar zona</button>
+        <button id="areaBtnClear"     class="area-btn" disabled>Borrar</button>
+        <button id="areaBtnClosePoly" class="area-btn" disabled>Cerrar polígono</button>
+        <button id="areaBtnQuery"     class="area-btn primary" disabled>Consultar Inciti</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Libs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>

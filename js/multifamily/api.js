@@ -1,4 +1,4 @@
-import { INCITI_API_KEY, INCITI_API_URL, INCITI_PROXY_URL } from '../config.local.js';
+import { INCITI_PROXY_URL } from '../config.js';
 
 // ── Inciti API — Multifamily ───────────────────────────────────────────────
 
@@ -89,26 +89,18 @@ function _num(v) {
 // ── Fetch ──────────────────────────────────────────────────────────────────
 
 export async function fetchMultifamily({ polygons, onProgress } = {}) {
-  if (!INCITI_API_KEY || !INCITI_API_URL) {
-    throw new Error(
-      'Faltan credenciales. Completa js/config.local.js con INCITI_API_KEY e INCITI_API_URL.'
-    );
+  if (!INCITI_PROXY_URL) {
+    throw new Error('Falta configurar INCITI_PROXY_URL en js/config.js.');
   }
 
-  // En desarrollo usar el proxy local (resuelve CORS).
-  // En producción, si Inciti habilita CORS para el dominio, INCITI_PROXY_URL queda vacío.
-  const base = INCITI_PROXY_URL ? INCITI_PROXY_URL : INCITI_API_URL.replace(/\/$/, '');
-  const url  = base + '/' + ENDPOINT_PATH;
+  const url  = INCITI_PROXY_URL.replace(/\/$/, '') + '/' + ENDPOINT_PATH;
   const body = { market: 'multifamily', polygons: polygons ?? DEFAULT_POLYGONS };
 
   onProgress?.('Conectando con Inciti…');
 
   const res = await fetch(url, {
     method:  'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key':    INCITI_API_KEY,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 

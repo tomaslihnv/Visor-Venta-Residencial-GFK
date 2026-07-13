@@ -42,11 +42,15 @@ export default {
       return json({ error: 'JSON inválido' }, 400, cors);
     }
 
-    // Validación — solo permite lo que necesita el visor de barrio
+    // Validación — markets permitidos por los visores
     const { market, polygons } = body;
+    const ALLOWED_MARKETS = new Set([
+      'residencial', 'multifamily', 'oficinas',
+      'bodegas', 'parquesindustriales', 'stripcenters', 'suelos',
+    ]);
 
-    if (market !== 'residencial') {
-      return json({ error: 'market inválido — solo se acepta "residencial"' }, 400, cors);
+    if (!ALLOWED_MARKETS.has(market)) {
+      return json({ error: `market inválido — valores aceptados: ${[...ALLOWED_MARKETS].join(', ')}` }, 400, cors);
     }
     if (!Array.isArray(polygons) || polygons.length !== 1) {
       return json({ error: 'Se requiere exactamente 1 polígono en "polygons"' }, 400, cors);
