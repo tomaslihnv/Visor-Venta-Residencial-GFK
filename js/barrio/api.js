@@ -1,4 +1,4 @@
-import { INCITI_PROXY_URL } from '../config.local.js';
+import { INCITI_PROXY_URL } from '../config.js';
 
 // ── Inciti API — POIs del Barrio ───────────────────────────────────────────
 //
