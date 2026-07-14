@@ -37,6 +37,48 @@
     .area-btn.primary:hover:not(:disabled) { background: #1e293b; }
     .area-btn.cancel { color: #94a3b8; border-color: transparent; background: transparent; }
     .area-btn.cancel:hover:not(:disabled) { background: #f1f5f9; color: #374151; }
+    /* ── Preview de resultados ──────────────────────────────────────────────── */
+    #incitiPreview { width: 100%; height: 100%; display: flex; flex-direction: column; background: #fff; }
+    .preview-header {
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+      padding: 12px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .preview-count { font-size: 14px; font-weight: 600; color: #1e293b; flex: 1; }
+    .preview-selall { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; cursor: pointer; }
+    .preview-filters {
+      display: flex; gap: 8px; padding: 8px 20px; flex-wrap: wrap; flex-shrink: 0;
+      border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .preview-filters input[type="text"],
+    .preview-filters select { padding: 5px 9px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; color: #374151; background: #fff; height: 30px; }
+    .preview-filters input[type="text"] { min-width: 180px; }
+    .preview-list-header {
+      display: grid; grid-template-columns: 20px 2fr 1fr 1fr 1fr; gap: 10px; padding: 5px 24px;
+      font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 1px solid #e2e8f0; background: #f8fafc; flex-shrink: 0;
+    }
+    #previewList { flex: 1; overflow-y: auto; padding: 4px 20px; }
+    .preview-item {
+      display: grid; grid-template-columns: 20px 2fr 1fr 1fr 1fr;
+      align-items: center; gap: 10px; padding: 7px 4px;
+      border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #374151;
+    }
+    .preview-item:last-child { border-bottom: none; }
+    .preview-item.hidden { display: none; }
+    .preview-item input[type="checkbox"] { cursor: pointer; }
+    .preview-item-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .preview-item-meta { color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* ── Por comuna ─────────────────────────────────────────────────────────── */
+    #comunaQueryContainer { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    .comuna-query-panel {
+      display: flex; flex-direction: column; gap: 14px;
+      width: min(420px, 90%); padding: 28px 32px;
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.05);
+    }
+    .comuna-query-title { font-size: 15px; font-weight: 600; color: #1e293b; }
+    .comuna-query-row { display: flex; gap: 8px; align-items: center; }
+    .comuna-query-row select { flex: 1; padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 13px; color: #374151; }
   </style>
 </head>
 <body>
@@ -59,7 +101,9 @@
         <span>Cargar Excel</span>
       </label>
       <span id="fileName" class="file-name"></span>
-      <button id="btnAreaQuery" class="ghost-btn" title="Consultar Inciti por área dibujada en el mapa">&#128205; Área Inciti</button>
+      <!-- <button id="btnAreaQuery" class="ghost-btn" title="Consultar Inciti por área dibujada en el mapa">&#128205; Área Inciti</button> -->
+      <button id="btnAreaQuery" class="ghost-btn" title="Dibujar un polígono en el mapa">&#128205; Dibujar Área</button>
+      <button id="btnComunaQuery" class="ghost-btn" title="Consultar por límites de una comuna entera">&#127969; Por Comuna</button>
       <button id="saveJsonBtn" class="ghost-btn" title="Descargar los datos cargados como JSON para guardarlos en data/multifamily/">Guardar JSON</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
@@ -171,6 +215,54 @@
           <button id="areaBtnCancel"    class="area-btn cancel">Cancelar</button>
         </div>
       </div>
+
+      <div id="incitiPreview" class="hidden" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: #f8fafc; padding: 20px; box-sizing: border-box; overflow-y: auto;">
+  <div class="preview-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+    <div class="preview-title">
+      <h2 id="previewCountText" style="margin: 0; font-size: 18px; color: #1e3a5f;">Inciti encontró 0 multifamily</h2>
+      <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">Selecciona los proyectos que deseas cargar en el visor del mapa y el dashboard.</p>
+    </div>
+    <div class="preview-actions" style="display: flex; gap: 10px; align-items: center;">
+      <button id="previewBtnCancel" class="area-btn cancel">Volver</button>
+      <button id="previewBtnLoad" class="area-btn primary">Cargar Seleccionados</button>
+    </div>
+  </div>
+
+  <div class="preview-filters" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; background: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+    <input type="text" id="prevFilterName" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing:border-box;" placeholder="🔍 Filtrar por nombre..." />
+    <select id="prevFilterCommune" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todas las comunas</option></select>
+    <select id="prevFilterOwner" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todos los dueños</option></select>
+    <select id="prevFilterAdmin" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todos los administradores</option></select>
+  </div>
+
+  <div class="preview-table-container" style="flex: 1; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: auto; border: 1px solid #e2e8f0;">
+    <table class="preview-table" id="previewTable" style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+      <thead>
+        <tr style="background: #f1f5f9;">
+          <th width="40" style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;"><input type="checkbox" id="prevSelectAll" checked /></th>
+          <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Proyecto</th>
+          <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Comuna</th>
+          <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Dueño / Propietario</th>
+          <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Administrador</th>
+        </tr>
+      </thead>
+      <tbody id="previewTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="comunaQueryContainer" class="hidden" style="position: absolute; top: 20px; left: 20px; z-index: 1000; background: rgba(255,255,255,0.96); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 14px; border-radius: 8px; width: 260px; box-shadow: 0 4px 14px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);">
+  <div style="font-size: 13px; font-weight: 700; color: #1e3a5f; margin-bottom: 8px;">Consultar por Comuna (RM)</div>
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <select id="comunaSelectInput">
+      <option value="">-- Selecciona una comuna --</option>
+    </select>
+    <div style="display:flex; gap:6px;">
+      <button id="comunaBtnQuery" class="area-btn primary" style="flex:1;" disabled>Consultar</button>
+      <button id="comunaBtnCancel" class="area-btn cancel">Cerrar</button>
+    </div>
+  </div>
+</div>
 
       <div id="dashboard" class="dashboard hidden">
         <div id="starDataWarning" class="filter-io-fb-warn star-data-warning hidden"></div>

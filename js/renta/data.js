@@ -159,10 +159,14 @@ function loadFile(file) {
 
 // ============== Procesado al cargar ==============
 function onDataLoaded(rows) {
+  if (!rows.length) {
+    alert('No se encontraron datos para cargar. Revisa la consola para más detalles.');
+    return;
+  }
   state.raw = rows;
   state.filtered = rows.slice();
 
-  const colNames = Object.keys(rows[0]);
+  const colNames = Object.keys(rows[0] ?? {});
   state.columns = colNames.map(name => {
     const values = rows.map(r => r[name]);
     return { name, type: detectColType(values) };
