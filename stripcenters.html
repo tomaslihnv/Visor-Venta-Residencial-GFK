@@ -3,11 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visor Oficinas</title>
+  <title>Visor Strip Centers</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
   <style>
-    /* ── Consulta por área: mapa inline ─────────────────────────────────────── */
     #areaDrawContainer { width: 100%; height: 100%; position: relative; }
     #areaDrawContainer.drawing-active { cursor: crosshair; }
     #areaDrawMap { width: 100%; height: 100%; }
@@ -39,20 +38,20 @@
 </head>
 <body>
   <nav class="app-nav">
-    <a href="index.html"       class="nav-link">Venta</a>
-    <a href="renta.html"       class="nav-link">Renta</a>
-    <a href="multifamily.html" class="nav-link">Multifamily</a>
-    <a href="oficinas.html"    class="nav-link active">Oficinas</a>
-    <a href="bodegas.html"             class="nav-link">Bodegas</a>
+    <a href="index.html"                class="nav-link">Venta</a>
+    <a href="renta.html"                class="nav-link">Renta</a>
+    <a href="multifamily.html"          class="nav-link">Multifamily</a>
+    <a href="oficinas.html"             class="nav-link">Oficinas</a>
+    <a href="bodegas.html"              class="nav-link">Bodegas</a>
     <a href="parquesindustriales.html"  class="nav-link">Parques Ind.</a>
-    <a href="stripcenters.html"         class="nav-link">Strip Centers</a>
+    <a href="stripcenters.html"         class="nav-link active">Strip Centers</a>
     <a href="barrio.html"               class="nav-link">Barrio</a>
   </nav>
 
   <header class="topbar">
     <div class="brand">
       <span class="logo-dot"></span>
-      <h1>Visor Oficinas</h1>
+      <h1>Visor Strip Centers</h1>
     </div>
     <div class="topbar-actions">
       <label class="file-btn">
@@ -60,9 +59,9 @@
         <span>Cargar Excel</span>
       </label>
       <span id="fileName" class="file-name"></span>
-      <button id="btnAreaQuery" class="ghost-btn" disabled title="Próximamente — Inciti entrega datos de mercado a nivel de edificio, no listings individuales de oficinas. En desarrollo.">&#128205; Dibujar Área</button>
-      <button id="btnComunaQuery" class="ghost-btn" disabled title="Próximamente — Inciti entrega datos de mercado a nivel de edificio, no listings individuales de oficinas. En desarrollo.">&#127969; Por Comuna</button>
-      <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
+      <button id="btnAreaQuery"   class="ghost-btn" title="Dibujar un polígono en el mapa">&#128205; Dibujar Área</button>
+      <button id="btnComunaQuery" class="ghost-btn" title="Consultar por límites de una comuna entera">&#127969; Por Comuna</button>
+      <button id="resetBtn"       class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
   </header>
 
@@ -78,7 +77,7 @@
         <div id="mpPanelBody" class="mp-panel-body">
           <div class="mp-field">
             <label class="mp-label">Proyecto</label>
-            <input type="text" id="mpNombre" class="mp-input" placeholder="Ej: Oficina Isidora" />
+            <input type="text" id="mpNombre" class="mp-input" placeholder="Ej: Strip Center Las Condes" />
           </div>
           <div class="mp-field">
             <label class="mp-label">Dirección</label>
@@ -89,16 +88,12 @@
             <label class="mp-label">Métricas</label>
             <div class="mp-tipo-metrics">
               <label class="mp-metric-row">
-                <span>Útil m²</span>
-                <input type="number" id="mpUtil" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
+                <span>GLA m²</span>
+                <input type="number" id="mpGla" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
               </label>
               <label class="mp-metric-row">
                 <span>UF/m²</span>
                 <input type="number" id="mpUfm2" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
-              </label>
-              <label class="mp-metric-row">
-                <span>Precio UF</span>
-                <input type="number" id="mpPrecio" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
               </label>
             </div>
           </div>
@@ -120,10 +115,10 @@
         </div>
         <div id="filtrosPanelBody" class="mp-panel-body">
           <div id="filtersContainer" class="filters">
-            <p class="hint">Cargá un Excel para empezar.</p>
+            <p class="hint">Cargá datos para empezar.</p>
           </div>
           <div class="filter-io-row">
-            <button id="exportFiltersBtn" class="filter-io-btn" title="Exportar filtros como JSON. También podés arrastrar un .json aquí para cargar filtros.">&#x21E9; Exportar filtros</button>
+            <button id="exportFiltersBtn" class="filter-io-btn" title="Exportar filtros como JSON.">&#x21E9; Exportar filtros</button>
             <span id="filterIOFeedback" class="filter-io-feedback" style="display:none"></span>
           </div>
         </div>
@@ -134,7 +129,7 @@
       <div id="dropzone" class="dropzone">
         <div class="dropzone-inner">
           <h2>Arrastrá tu Excel acá</h2>
-          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>. El archivo debe tener columnas de Latitud/Longitud (listado de ofertas de arriendo/venta de oficinas).</p>
+          <p id="dropzoneHint">o usá el botón <strong>Cargar Excel</strong>, o consulta Inciti con <strong>Dibujar Área</strong> / <strong>Por Comuna</strong>.</p>
         </div>
       </div>
 
@@ -151,30 +146,30 @@
         </div>
       </div>
 
-      <div id="incitiPreview" class="hidden" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: #f8fafc; padding: 20px; box-sizing: border-box; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div id="incitiPreview" class="hidden" style="width:100%;height:100%;display:flex;flex-direction:column;background:#f8fafc;padding:20px;box-sizing:border-box;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;background:white;padding:16px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
           <div>
-            <h2 id="previewCountText" style="margin: 0; font-size: 18px; color: #1e3a5f;">Inciti encontró 0 proyectos</h2>
-            <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">Selecciona los proyectos que deseas cargar en el visor.</p>
+            <h2 id="previewCountText" style="margin:0;font-size:18px;color:#1e3a5f;">Inciti encontró 0 strip centers</h2>
+            <p style="margin:4px 0 0 0;font-size:13px;color:#64748b;">Selecciona los strip centers que deseas cargar en el visor.</p>
           </div>
-          <div style="display: flex; gap: 10px; align-items: center;">
+          <div style="display:flex;gap:10px;align-items:center;">
             <button id="previewBtnCancel" class="area-btn cancel">Volver</button>
-            <button id="previewBtnLoad" class="area-btn primary">Cargar Seleccionados</button>
+            <button id="previewBtnLoad"   class="area-btn primary">Cargar Seleccionados</button>
           </div>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; background: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <input type="text" id="prevFilterName" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing:border-box;" placeholder="🔍 Filtrar por nombre..." />
-          <select id="prevFilterCommune" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todas las comunas</option></select>
-          <select id="prevFilterOwner" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todos los corredores</option></select>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;background:white;padding:14px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+          <input type="text" id="prevFilterName"   style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;box-sizing:border-box;" placeholder="🔍 Filtrar por nombre..." />
+          <select id="prevFilterCommune" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;"><option value="">Todas las comunas</option></select>
+          <select id="prevFilterEstado"  style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;"><option value="">Todos los estados</option></select>
         </div>
-        <div style="flex: 1; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: auto; border: 1px solid #e2e8f0;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+        <div style="flex:1;background:white;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:auto;border:1px solid #e2e8f0;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left;">
             <thead>
-              <tr style="background: #f1f5f9;">
-                <th width="40" style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;"><input type="checkbox" id="prevSelectAll" checked /></th>
-                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Nombre</th>
-                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Comuna</th>
-                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Corredor</th>
+              <tr style="background:#f1f5f9;">
+                <th width="40" style="padding:10px 12px;font-weight:600;color:#334155;position:sticky;top:0;background:#f1f5f9;"><input type="checkbox" id="prevSelectAll" checked /></th>
+                <th style="padding:10px 12px;font-weight:600;color:#334155;position:sticky;top:0;background:#f1f5f9;">Nombre</th>
+                <th style="padding:10px 12px;font-weight:600;color:#334155;position:sticky;top:0;background:#f1f5f9;">Comuna</th>
+                <th style="padding:10px 12px;font-weight:600;color:#334155;position:sticky;top:0;background:#f1f5f9;">Estado</th>
               </tr>
             </thead>
             <tbody id="previewTableBody"></tbody>
@@ -182,12 +177,12 @@
         </div>
       </div>
 
-      <div id="comunaQueryContainer" class="hidden" style="position: absolute; top: 20px; left: 20px; z-index: 1000; background: rgba(255,255,255,0.96); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 14px; border-radius: 8px; width: 260px; box-shadow: 0 4px 14px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);">
-        <div style="font-size: 13px; font-weight: 700; color: #1e3a5f; margin-bottom: 8px;">Consultar por Comuna (RM)</div>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div id="comunaQueryContainer" class="hidden" style="position:absolute;top:20px;left:20px;z-index:1000;background:rgba(255,255,255,0.96);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:14px;border-radius:8px;width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.15),0 0 0 1px rgba(0,0,0,0.05);">
+        <div style="font-size:13px;font-weight:700;color:#1e3a5f;margin-bottom:8px;">Consultar por Comuna (RM)</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
           <select id="comunaSelectInput"><option value="">-- Selecciona una comuna --</option></select>
-          <div style="display:flex; gap:6px;">
-            <button id="comunaBtnQuery" class="area-btn primary" style="flex:1;" disabled>Consultar</button>
+          <div style="display:flex;gap:6px;">
+            <button id="comunaBtnQuery"  class="area-btn primary" style="flex:1;" disabled>Consultar</button>
             <button id="comunaBtnCancel" class="area-btn cancel">Cerrar</button>
           </div>
         </div>
@@ -198,7 +193,7 @@
 
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
-          <button class="tab" data-tab="proyectos">Por corredor</button>
+          <button class="tab" data-tab="proyectos">Por comuna</button>
           <button class="tab" data-tab="svp">Dispersión</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="comparativa">Resumen</button>
@@ -208,26 +203,23 @@
         <!-- TAB: MAPA -->
         <div class="tab-panel active" data-panel="mapa">
           <div id="geocodeStatus" class="geocode-status"></div>
-          <div class="map-placeholder">
-            <h3>Mapa</h3>
-            <p>Aún no detecté coordenadas válidas en tus datos.</p>
-          </div>
+          <div class="map-placeholder"><h3>Mapa</h3><p>Aún no detecté coordenadas válidas en tus datos.</p></div>
           <div id="mapWrapper" class="map-wrapper hidden">
             <div class="map-main">
               <div class="map-toolbar">
                 <button class="map-mode-btn active" data-mode="general">General</button>
                 <button class="map-mode-btn" data-mode="precio">De calor</button>
-                <button id="mapFilterWidgetBtn" class="map-mode-btn map-toolbar-toggle" title="Mostrar/ocultar panel de filtros activos">&#x2263; Filtros</button>
-                <button id="mapResumenWidgetBtn" class="map-mode-btn" title="Mostrar/ocultar panel de resumen de stock">&#x2263; Resumen</button>
-                <button id="mapSelectBtn" class="map-mode-btn map-toolbar-toggle" title="Dibuja un polígono para excluir/mantener proyectos. Esc para cancelar.">&#x2B1A; Seleccionar zona</button>
-                <button id="mapUndoBtn" class="map-mode-btn map-undo-btn hidden" title="Deshacer la última exclusión/inclusión de proyectos por zona (Ctrl+Z)">&#x21A9; Deshacer</button>
-                <button id="mapClearPolyBtn" class="map-mode-btn map-clearpoly-btn hidden" title="Solo borra el dibujo del polígono — no afecta los proyectos ya incluidos/excluidos">&#x2715; Limpiar dibujo</button>
-                <button id="mapSatelliteBtn" class="map-mode-btn map-toolbar-toggle" title="Alternar mapa / satélite">Satélite</button>
-                <button id="mapTableExportBtn" class="primary-btn">Copiar tabla</button>
+                <button id="mapFilterWidgetBtn"  class="map-mode-btn map-toolbar-toggle" title="Filtros">&#x2263; Filtros</button>
+                <button id="mapResumenWidgetBtn" class="map-mode-btn" title="Resumen">&#x2263; Resumen</button>
+                <button id="mapSelectBtn"        class="map-mode-btn map-toolbar-toggle" title="Seleccionar zona">&#x2B1A; Seleccionar zona</button>
+                <button id="mapUndoBtn"          class="map-mode-btn map-undo-btn hidden" title="Deshacer">&#x21A9; Deshacer</button>
+                <button id="mapClearPolyBtn"     class="map-mode-btn map-clearpoly-btn hidden" title="Limpiar dibujo">&#x2715; Limpiar dibujo</button>
+                <button id="mapSatelliteBtn"     class="map-mode-btn map-toolbar-toggle" title="Satélite">Satélite</button>
+                <button id="mapTableExportBtn"   class="primary-btn">Copiar tabla</button>
                 <div class="heat-metric-pills hidden" id="heatMetricPills">
                   <span class="heat-metric-label">Métrica:</span>
-                  <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
-                  <button class="heat-metric-btn" data-metric="precio">Precio UF</button>
+                  <button class="heat-metric-btn active" data-metric="ufm2">UF/m² Total</button>
+                  <button class="heat-metric-btn" data-metric="vacancia">Vacancia %</button>
                 </div>
               </div>
               <div id="map" class="map"></div>
@@ -237,16 +229,17 @@
           </div>
         </div>
 
-        <!-- TAB: POR CORREDOR -->
+        <!-- TAB: POR COMUNA -->
         <div class="tab-panel" data-panel="proyectos">
           <div class="chart-controls">
             <div class="ctrl">
               <label>Métrica</label>
               <select id="proyMetrica">
-                <option value="precio">Precio UF prom.</option>
-                <option value="ufm2">UF/m² prom.</option>
-                <option value="util">Útil (m²) prom.</option>
-                <option value="count">Ofertas</option>
+                <option value="ufm2">UF/m² Total prom.</option>
+                <option value="ufm2p1">UF/m² Piso 1 prom.</option>
+                <option value="vacancia">Vacancia % prom.</option>
+                <option value="gla">GLA total (m²)</option>
+                <option value="count">Strip Centers</option>
               </select>
             </div>
             <div class="ctrl distrib-ratio-ctrl">
@@ -284,45 +277,21 @@
               </div>
             </div>
           </div>
-          <div class="chart-wrap" id="proyWrap">
-            <canvas id="proyChart"></canvas>
-          </div>
+          <div class="chart-wrap" id="proyWrap"><canvas id="proyChart"></canvas></div>
         </div>
 
         <!-- TAB: DISPERSIÓN -->
         <div class="tab-panel" data-panel="svp">
           <div class="chart-controls">
-            <button id="svpFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Mostrar/ocultar filtros activos">&#x2263; Filtros</button>
-            <div class="ctrl">
-              <label>Eje X</label>
-              <select id="svpXAxis"></select>
-            </div>
-            <div class="ctrl">
-              <label>Eje Y</label>
-              <select id="svpYAxis"></select>
-            </div>
+            <button id="svpFilterWidgetBtn" class="map-mode-btn map-select-btn" title="Filtros">&#x2263; Filtros</button>
+            <div class="ctrl"><label>Eje X</label><select id="svpXAxis"></select></div>
+            <div class="ctrl"><label>Eje Y</label><select id="svpYAxis"></select></div>
             <div class="ctrl">
               <label>Agrupar por</label>
-              <select id="svpTipoFilter">
-                <option value="">Todos</option>
-              </select>
+              <select id="svpTipoFilter"><option value="">Todos</option></select>
             </div>
-            <label class="toggle-check">
-              <input type="checkbox" id="svpTrendToggle" checked />
-              <span>Línea de tendencia</span>
-            </label>
-            <label class="toggle-check">
-              <input type="checkbox" id="svpAvgToggle" />
-              <span>Línea de promedio</span>
-            </label>
-            <div class="ctrl distrib-marker-group">
-              <label id="svpMarkLabel">Marcar valor</label>
-              <div class="marker-add">
-                <input type="number" id="svpM2Input" min="1" step="1" placeholder="ej: 50">
-                <button id="svpAddM2" class="marker-btn pct-btn">+</button>
-              </div>
-            </div>
-            <div id="svpM2Tags" class="marker-tags"></div>
+            <label class="toggle-check"><input type="checkbox" id="svpTrendToggle" checked /><span>Línea de tendencia</span></label>
+            <label class="toggle-check"><input type="checkbox" id="svpAvgToggle" /><span>Línea de promedio</span></label>
             <button class="ctrl-opts-btn" data-opts="svpOpts">&#9881; Visual</button>
             <button id="svpExportPngBtn" class="primary-btn">Copiar imagen</button>
             <div class="ctrl-opts" id="svpOpts">
@@ -344,18 +313,13 @@
               </div>
             </div>
           </div>
-          <div class="chart-wrap" id="svpWrap">
-            <canvas id="svpChart"></canvas>
-          </div>
+          <div class="chart-wrap" id="svpWrap"><canvas id="svpChart"></canvas></div>
         </div>
 
         <!-- TAB: DISTRIBUCIÓN -->
         <div class="tab-panel" data-panel="distribucion">
           <div class="chart-controls distrib-controls">
-            <div class="ctrl">
-              <label>Valores</label>
-              <select id="distribCol"></select>
-            </div>
+            <div class="ctrl"><label>Valores</label><select id="distribCol"></select></div>
             <div class="ctrl distrib-ratio-ctrl">
               <label>Vista</label>
               <div class="distrib-ratio-row">
@@ -365,17 +329,7 @@
                 <button class="distrib-mode-btn" data-mode="lognormal">Log-normal</button>
               </div>
             </div>
-            <div class="ctrl distrib-bins-ctrl" id="distribBinsCtrl" style="display:none">
-              <label>Bins</label>
-              <div class="distrib-font-row">
-                <input type="range" id="distribBins" min="5" max="80" step="1" value="0">
-                <span id="distribBinsVal">Auto</span>
-              </div>
-            </div>
-            <label class="toggle-check">
-              <input type="checkbox" id="distribNormalToggle" />
-              <span>Dist. normal</span>
-            </label>
+            <label class="toggle-check"><input type="checkbox" id="distribNormalToggle" /><span>Dist. normal</span></label>
             <div class="ctrl distrib-marker-group">
               <label>Marcar percentil</label>
               <div class="marker-add">
@@ -386,7 +340,7 @@
             <div class="ctrl distrib-marker-group">
               <label id="distribMarkLabel">Marcar valor</label>
               <div class="marker-add">
-                <input type="number" id="distribPriceInput" min="0" step="1" placeholder="ej: 20">
+                <input type="number" id="distribPriceInput" min="0" step="0.01" placeholder="ej: 0.15">
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -415,19 +369,17 @@
               </div>
             </div>
           </div>
-          <div class="chart-wrap" id="distribWrap">
-            <canvas id="distribChart"></canvas>
-          </div>
+          <div class="chart-wrap" id="distribWrap"><canvas id="distribChart"></canvas></div>
         </div>
 
-        <!-- TAB: RESUMEN (Comparativa) -->
+        <!-- TAB: RESUMEN -->
         <div class="tab-panel" data-panel="comparativa">
           <div class="panel-toolbar">
             <div></div>
             <button id="exportCompBtn" class="primary-btn">Copiar tabla</button>
           </div>
           <div id="comparativaContent" class="comp-container">
-            <p class="hint">Cargá un Excel para ver la tabla comparativa.</p>
+            <p class="hint">Cargá datos para ver la tabla comparativa.</p>
           </div>
         </div>
 
@@ -441,10 +393,7 @@
             </div>
           </div>
           <div class="table-wrap">
-            <table id="dataTable">
-              <thead></thead>
-              <tbody></tbody>
-            </table>
+            <table id="dataTable"><thead></thead><tbody></tbody></table>
           </div>
           <div class="pagination">
             <button id="prevPage">‹ Anterior</button>
@@ -462,13 +411,11 @@
     </section>
   </main>
 
-  <!-- Libs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
-
-  <script type="module" src="js/oficinas/main.js"></script>
+  <script type="module" src="js/stripcenters/main.js"></script>
 </body>
 </html>
