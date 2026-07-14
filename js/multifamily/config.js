@@ -290,7 +290,7 @@ export const MAP = {
 // ── Tabla Comparativa ──────────────────────────────────────────────────────
 export const COMPARATIVA = {
   projectCandidates: ['proyecto', 'edificio', 'nombre'],
-  // No groupByCandidates → flat mode (no tipología matrix)
+  groupByCandidates: ['programa'],
   infoColumns: [
     { label: 'Propietario',   candidates: ['propietario'] },
     { label: 'Administrador', candidates: ['administrador'] },

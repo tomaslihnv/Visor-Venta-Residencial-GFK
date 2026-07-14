@@ -1,5 +1,5 @@
 import { state } from './data.js';
-import { $, fmt } from './utils.js';
+import { $, fmt, norm } from './utils.js';
 import { mp } from './miProyecto.js';
 
 // ============== Cache y estado ==============
@@ -12,11 +12,6 @@ export function resetMapOnLoad() {
   geoStatus.total = 0;
   geoStatus.done = 0;
   geoStatus.running = false;
-}
-
-// ============== Helpers ==============
-function norm(s) {
-  return s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
 }
 
 function findAddressCol() {
@@ -278,6 +273,25 @@ async function copyMapTable() {
   await navigator.clipboard.write([
     new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
   ]);
+}
+
+// Captura los tiles del mapa Leaflet en un canvas escalado.
+// Los marcadores SVG no se incluyen (limitación del DOM sin html2canvas).
+async function _captureMapCanvas(scale) {
+  const container = leafletMap.getContainer();
+  const cRect = container.getBoundingClientRect();
+  const out = document.createElement('canvas');
+  out.width  = Math.round(cRect.width  * scale);
+  out.height = Math.round(cRect.height * scale);
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.scale(scale, scale);
+  for (const c of container.querySelectorAll('canvas')) {
+    const r = c.getBoundingClientRect();
+    ctx.drawImage(c, r.left - cRect.left, r.top - cRect.top, c.clientWidth, c.clientHeight);
+  }
+  return out;
 }
 
 function initLeafletMap() {

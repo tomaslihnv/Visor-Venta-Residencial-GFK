@@ -2,8 +2,9 @@ import { $, $$ } from '../core/utils.js';
 import { resetFilters } from '../core/filters.js';
 import { exportCsv, exportJson } from '../core/export.js';
 import { initFilterIO } from '../core/filter-io.js';
-import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './data.js';
+import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, onDataLoaded } from './data.js';
 import { initMpPanel } from './miProyecto.js';
+import { fetchMultifamily } from './api.js';
 
 // Mostrar Mi Proyecto siempre, sin esperar a que carguen datos
 initMpPanel();
@@ -137,6 +138,167 @@ import('../core/filters.js').then(({ getFilterState, applyFilterState }) => {
 $('#exportCsvBtn')?.addEventListener('click', () => {
   exportCsv(state, CSV_FILENAME);
 });
+
+// ── Visual options toggle panels ───────────────────────────────────────────
+document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = document.getElementById(btn.dataset.opts);
+    if (!target) return;
+    const open = target.classList.toggle('open');
+    btn.classList.toggle('active', open);
+  });
+});
+
+// ── Consulta Inciti por área (mapa inline) ────────────────────────────────
+{
+  const SNAP_PX = 15;
+  const STYLE_VERTEX  = { radius: 5, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 1, weight: 2 };
+  const STYLE_FIRST   = { radius: 7, color: '#16a34a', fillColor: '#22c55e', fillOpacity: 1, weight: 2 };
+  const STYLE_EDGE    = { color: '#3b82f6', weight: 2, opacity: 0.9 };
+  const STYLE_RUBBER  = { color: '#3b82f6', weight: 2, opacity: 0.5, dashArray: '5,5' };
+  const STYLE_POLYGON = { color: '#3b82f6', weight: 2, fillColor: '#3b82f6', fillOpacity: 0.12 };
+
+  let areaMap = null, drawState = 'idle', vertices = [];
+  let vertexMarkers = [], edgePolyline = null, rubberLine = null, areaPoly = null;
+
+  const container    = document.getElementById('areaDrawContainer');
+  const dropzone     = document.getElementById('dropzone');
+  const statusEl     = document.getElementById('areaDrawStatus');
+  const btnDraw      = document.getElementById('areaBtnDraw');
+  const btnClear     = document.getElementById('areaBtnClear');
+  const btnClosePoly = document.getElementById('areaBtnClosePoly');
+  const btnQuery     = document.getElementById('areaBtnQuery');
+  const btnCancel    = document.getElementById('areaBtnCancel');
+
+  function _setStatus(text, type = '') {
+    statusEl.className = `area-draw-status${type ? ' ' + type : ''}`;
+    statusEl.innerHTML = text;
+  }
+
+  function _setState(next) {
+    drawState = next;
+    btnDraw.disabled      = next !== 'idle';
+    btnClear.disabled     = next === 'idle';
+    btnClosePoly.disabled = next !== 'drawing' || vertices.length < 3;
+    btnQuery.disabled     = next !== 'complete';
+    container.classList.toggle('drawing-active', next === 'drawing');
+
+    if (next === 'idle') {
+      _setStatus('Haz clic en <strong>Dibujar zona</strong> para comenzar.');
+    } else if (next === 'drawing') {
+      const n = vertices.length;
+      _setStatus(n === 0
+        ? 'Haz clic en el mapa para agregar el primer vértice.'
+        : `<strong>${n} vértice${n !== 1 ? 's' : ''}</strong>${n >= 3 ? ' · Clic en el primer punto o <em>Cerrar polígono</em>.' : ' · Sigue agregando (mínimo 3).'}`);
+    } else if (next === 'complete') {
+      _setStatus(`<strong>${vertices.length} vértices</strong> · Zona lista. Haz clic en <strong>Consultar Inciti</strong>.`);
+    }
+  }
+
+  function _clearTempLayers() {
+    vertexMarkers.forEach(m => areaMap.removeLayer(m)); vertexMarkers = [];
+    if (edgePolyline) { areaMap.removeLayer(edgePolyline); edgePolyline = null; }
+    if (rubberLine)   { areaMap.removeLayer(rubberLine);   rubberLine   = null; }
+  }
+
+  function _clearAll() {
+    _clearTempLayers();
+    if (areaPoly) { areaMap.removeLayer(areaPoly); areaPoly = null; }
+    vertices = [];
+    _setState('idle');
+  }
+
+  function _closePoly() {
+    if (vertices.length < 3) return;
+    _clearTempLayers();
+    areaPoly = L.polygon(vertices, STYLE_POLYGON).addTo(areaMap);
+    areaMap.fitBounds(areaPoly.getBounds(), { padding: [40, 40] });
+    _setState('complete');
+  }
+
+  function _showContainer() {
+    dropzone.classList.add('hidden');
+    container.classList.remove('hidden');
+    if (!areaMap) {
+      areaMap = L.map('areaDrawMap', { doubleClickZoom: false }).setView([-33.45, -70.65], 11);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap © CARTO', maxZoom: 19,
+      }).addTo(areaMap);
+
+      areaMap.on('click', (e) => {
+        if (drawState !== 'drawing') return;
+        const latlng = [e.latlng.lat, e.latlng.lng];
+        if (vertices.length >= 3) {
+          const fp = areaMap.latLngToContainerPoint(vertices[0]);
+          const cp = areaMap.latLngToContainerPoint(latlng);
+          if (fp.distanceTo(cp) < SNAP_PX) { _closePoly(); return; }
+        }
+        vertices.push(latlng);
+        vertexMarkers.push(
+          L.circleMarker(latlng, vertices.length === 1 ? STYLE_FIRST : STYLE_VERTEX).addTo(areaMap)
+        );
+        if (edgePolyline) areaMap.removeLayer(edgePolyline);
+        if (vertices.length > 1) edgePolyline = L.polyline(vertices, STYLE_EDGE).addTo(areaMap);
+        _setState('drawing');
+      });
+
+      areaMap.on('mousemove', (e) => {
+        if (drawState !== 'drawing' || vertices.length === 0) return;
+        const cursor = [e.latlng.lat, e.latlng.lng];
+        if (rubberLine) areaMap.removeLayer(rubberLine);
+        rubberLine = L.polyline([vertices[vertices.length - 1], cursor], STYLE_RUBBER).addTo(areaMap);
+      });
+    } else {
+      areaMap.invalidateSize();
+    }
+    _setState('idle');
+  }
+
+  function _hideContainer() {
+    container.classList.add('hidden');
+    dropzone.classList.remove('hidden');
+    _clearAll();
+  }
+
+  // Abrir
+  document.getElementById('btnAreaQuery')?.addEventListener('click', _showContainer);
+
+  // Cancelar — volver al dropzone
+  btnCancel?.addEventListener('click', _hideContainer);
+
+  // Botones de dibujo
+  btnDraw?.addEventListener('click',      () => { _clearAll(); _setState('drawing'); });
+  btnClear?.addEventListener('click',     _clearAll);
+  btnClosePoly?.addEventListener('click', _closePoly);
+
+  // Consultar Inciti
+  btnQuery?.addEventListener('click', async () => {
+    if (drawState !== 'complete' || vertices.length < 3) return;
+    const polygon_inciti = vertices.map(([lat, lng]) => ({ lat, lng }));
+
+    btnQuery.disabled = true;
+    btnClear.disabled = true;
+    _setStatus('Consultando Inciti…', 'loading');
+
+    try {
+      const rows = await fetchMultifamily({
+        polygons:   [polygon_inciti],
+        onProgress: msg => _setStatus(msg, 'loading'),
+      });
+
+      const fileNameEl = document.getElementById('fileName');
+      if (fileNameEl) fileNameEl.textContent = `Inciti · ${rows.length} registros`;
+
+      container.classList.add('hidden');
+      onDataLoaded(rows);
+    } catch (err) {
+      console.error('[multifamily/area] Error:', err);
+      _setStatus(`Error: ${err.message}`, 'error');
+      btnClear.disabled = false;
+      btnQuery.disabled = false;
+    }
+  });
+}
 
 // ── Guardar JSON (para data/multifamily/) ──────────────────────────────────
 $('#saveJsonBtn')?.addEventListener('click', () => {

@@ -1,4 +1,4 @@
-import { $, fmt, extractDormitorios } from './utils.js';
+import { $, fmt, extractDormitorios, norm } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 
@@ -254,15 +254,14 @@ export function populateProyectosSelectors() {
 export function renderProyectos() {
   if (state.filtered.length === 0) return;
 
-  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   const metricId = $('#proyMetrica')?.value ?? 'renta';
   const metric   = PROY_METRICS.find(m => m.id === metricId) ?? PROY_METRICS[0];
 
   const edifCol = state.columns.find(c =>
-    ['proyecto', 'edificio', 'nombre', 'building'].some(k => normStr(c.name).includes(k))
+    ['proyecto', 'edificio', 'nombre', 'building'].some(k => norm(c.name).includes(k))
   )?.name;
   const metricCol = metricId === 'count' ? null : state.columns.find(c =>
-    c.type === 'number' && metric.keys.some(k => normStr(c.name).includes(normStr(k)))
+    c.type === 'number' && metric.keys.some(k => norm(c.name).includes(norm(k)))
   )?.name;
 
   if (!edifCol) return;
@@ -429,8 +428,7 @@ export function populateSvpSelectors() {
   const tipoSel = $('#svpTipoFilter');
   if (!tipoSel) return;
 
-  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-  const tipoCol = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k)));
+  const tipoCol = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)));
 
   tipoSel.innerHTML = '<option value="">Todas</option>';
   if (tipoCol) {
@@ -603,24 +601,23 @@ function linearRegression(pts) {
 export function renderSupVsRenta() {
   if (state.filtered.length === 0) return;
 
-  const normStr  = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   const yAxisMode = $('#svpYAxis')?.value ?? 'renta';
   const fs        = parseInt($('#svpFontSize')?.value ?? '11');
 
   const supCol = state.columns.find(c =>
-    c.type === 'number' && ['util (m', 'útil (m', 'metros util'].some(k => normStr(c.name).includes(normStr(k)))
+    c.type === 'number' && ['util (m', 'útil (m', 'metros util'].some(k => norm(c.name).includes(norm(k)))
   );
   const rentaCol = state.columns.find(c =>
-    normStr(c.name).includes('renta uf') || normStr(c.name).includes('precio')
+    norm(c.name).includes('renta uf') || norm(c.name).includes('precio')
   );
   const ufm2Col = state.columns.find(c =>
-    normStr(c.name).includes('uf/m') || normStr(c.name).includes('uf / m')
+    norm(c.name).includes('uf/m') || norm(c.name).includes('uf / m')
   );
   const tipoCol = state.columns.find(c =>
-    ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k))
+    ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k))
   );
   const proyCol = state.columns.find(c =>
-    ['proyecto', 'edificio', 'nombre'].some(k => normStr(c.name).includes(k))
+    ['proyecto', 'edificio', 'nombre'].some(k => norm(c.name).includes(k))
   );
 
   const yCol      = yAxisMode === 'ufm2' ? ufm2Col : rentaCol;
@@ -894,10 +891,9 @@ export function populateDistribSelectors() {
   const colSel = $('#distribCol');
   if (!colSel) return;
 
-  const normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-  const rentaCol = state.columns.find(c => normStr(c.name).includes('renta uf') || normStr(c.name).includes('precio (uf'));
-  const ufm2Col  = state.columns.find(c => normStr(c.name).includes('uf/m') || normStr(c.name).includes('uf / m'));
-  const utilCol  = state.columns.find(c => ['util (m', 'util(m', 'sup. util', 'superficie util', 'sup util'].some(k => normStr(c.name).includes(k)));
+  const rentaCol = state.columns.find(c => norm(c.name).includes('renta uf') || norm(c.name).includes('precio (uf'));
+  const ufm2Col  = state.columns.find(c => norm(c.name).includes('uf/m') || norm(c.name).includes('uf / m'));
+  const utilCol  = state.columns.find(c => ['util (m', 'util(m', 'sup. util', 'superficie util', 'sup util'].some(k => norm(c.name).includes(k)));
 
   colSel.innerHTML = '';
   if (rentaCol) {
@@ -1217,12 +1213,11 @@ export function renderDistrib() {
   // ── Mi Proyecto ─────────────────────────────────────────────
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp.inDistrib && mp.tipologias.length > 0) {
-    const normFn  = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-    const nc      = normFn(col);
+    const nc      = norm(col);
     const isUfm2   = nc.includes('uf/m') || nc.includes('uf / m');
     const isRenta  = !isUfm2 && (nc.includes('renta') || nc.includes('precio'));
 
-    const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normFn(c.name).includes(k)));
+    const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)));
     const fmtTipo = v => {
       const s = String(v ?? '').trim();
       return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
@@ -1498,11 +1493,10 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
 
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp.inDistrib && mp.tipologias.length > 0) {
-    const normFn = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-    const nc = normFn(col);
+    const nc = norm(col);
     const isUfm2  = nc.includes('uf/m') || nc.includes('uf / m');
     const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('precio'));
-    const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normFn(c.name).includes(k)));
+    const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)));
     const fmtTipo = v => { const s = String(v ?? '').trim(); return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase(); };
     let mpTipos = mp.tipologias.filter(t => t.nombre);
     if (tipoColObj) {
@@ -1572,8 +1566,21 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
     },
   };
 
+  const _minVR  = sortedVals[0];
+  const _nBinsR = bins.length;
+  const _histEdgeTicksR = {
+    id: 'histEdgeTicks',
+    afterBuildTicks(chart, args) {
+      if (args?.scale?.id !== 'x') return;
+      const step = Math.max(1, Math.ceil((_nBinsR + 1) / 12));
+      args.scale.ticks = Array.from({ length: _nBinsR + 1 }, (_, i) => ({
+        value: _minVR + i * bw,
+      })).filter((_, i) => i % step === 0);
+    },
+  };
+
   distribChart = new Chart(ctx, {
-    type: 'bar', data: { datasets }, plugins: [statsPlugin],
+    type: 'bar', data: { datasets }, plugins: [statsPlugin, _histEdgeTicksR],
     options: {
       responsive: true, maintainAspectRatio: false, parsing: false,
       plugins: {
@@ -1671,11 +1678,10 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
 
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp.inDistrib && mp.tipologias.length > 0) {
-    const normFn = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
-    const nc = normFn(col);
+    const nc = norm(col);
     const isUfm2  = nc.includes('uf/m') || nc.includes('uf / m');
     const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('precio'));
-    const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normFn(c.name).includes(k)));
+    const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)));
     const fmtTipo = v => { const s = String(v ?? '').trim(); return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase(); };
     let mpTipos = mp.tipologias.filter(t => t.nombre);
     if (tipoColObj) {

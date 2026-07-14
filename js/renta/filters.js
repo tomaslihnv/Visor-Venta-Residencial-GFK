@@ -1,10 +1,8 @@
-import { $, debounce } from '../utils.js';
-import { extractDormitorios } from './utils.js';
+import { $, debounce, extractDormitorios, norm } from './utils.js';
 import { state } from './data.js';
 
 // ============== Resolución de columnas ==============
 function findCol(candidates) {
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   return state.columns.find(c => candidates.some(k => norm(c.name).includes(norm(k))))?.name ?? null;
 }
 

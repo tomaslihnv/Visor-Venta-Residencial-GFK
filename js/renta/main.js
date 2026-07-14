@@ -54,7 +54,16 @@ $$('.tab').forEach(tab => {
   });
 });
 
-// ============== Copiar tabla comparativa ==============
+// ============== Visual options toggle panels ==============
+document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = document.getElementById(btn.dataset.opts);
+    if (!target) return;
+    const open = target.classList.toggle('open');
+    btn.classList.toggle('active', open);
+  });
+});
+
 // ============== Filter IO ==============
 import('./filters.js').then(({ getFilterState, applyFilterState }) => {
   initFilterIO({

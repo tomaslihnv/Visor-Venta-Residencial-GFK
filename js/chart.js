@@ -105,217 +105,12 @@ export function renderKpis() {
   }
 }
 
-// ============== Gráfico ==============
-let chartListenersReady = false;
-
-export function populateChartSelectors() {
-  const xSel = $('#chartX');
-  const ySel = $('#chartY');
-  const gSel = $('#chartGroup');
-  xSel.innerHTML = '';
-  ySel.innerHTML = '';
-  gSel.innerHTML = '<option value="">— Ninguno —</option>';
-
-  for (const col of state.columns) {
-    const o1 = document.createElement('option');
-    o1.value = col.name; o1.textContent = col.name;
-    xSel.appendChild(o1);
-    const o3 = document.createElement('option');
-    o3.value = col.name; o3.textContent = col.name;
-    gSel.appendChild(o3);
-    if (col.type === 'number') {
-      const o2 = document.createElement('option');
-      o2.value = col.name; o2.textContent = col.name;
-      ySel.appendChild(o2);
-    }
-  }
-
-  // Defaults razonables
-  if (state.columns.find(c => c.name === 'Edificio')) xSel.value = 'Edificio';
-  if (state.columns.find(c => c.name === 'UF/m²')) ySel.value = 'UF/m²';
-
-  if (!chartListenersReady) {
-    chartListenersReady = true;
-    ['#chartType', '#chartX', '#chartY', '#chartAgg', '#chartGroup', '#chartSort'].forEach(sel => {
-      $(sel).addEventListener('change', renderChart);
-    });
-  }
-}
-
-function aggregate(values, mode) {
-  const nums = values.filter(v => !isNaN(v) && v !== null);
-  if (nums.length === 0) return mode === 'count' ? values.length : 0;
-  switch (mode) {
-    case 'count': return values.length;
-    case 'sum': return nums.reduce((a, b) => a + b, 0);
-    case 'avg': return nums.reduce((a, b) => a + b, 0) / nums.length;
-    case 'min': return Math.min(...nums);
-    case 'max': return Math.max(...nums);
-    case 'median': {
-      const s = nums.slice().sort((a, b) => a - b);
-      const m = Math.floor(s.length / 2);
-      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-    }
-  }
-  return 0;
-}
-
 const palette = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
   '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1',
   '#14b8a6', '#a855f7'
 ];
 
-export function renderChart() {
-  if (state.filtered.length === 0) return;
-  const type = $('#chartType').value;
-  const xCol = $('#chartX').value;
-  const yCol = $('#chartY').value;
-  const agg = $('#chartAgg').value;
-  const groupCol = $('#chartGroup').value;
-  const sortMode = $('#chartSort').value;
-
-  if (state.chart) state.chart.destroy();
-  const ctx = $('#mainChart').getContext('2d');
-
-  let chartConfig;
-
-  if (type === 'scatter') {
-    // Dispersión: necesita X numérico también. Si no, agrupamos por X y usamos índice.
-    const xType = state.columns.find(c => c.name === xCol)?.type;
-    if (xType === 'number' && yCol) {
-      const datasets = [];
-      if (groupCol) {
-        const groups = {};
-        for (const r of state.filtered) {
-          const g = r[groupCol] ?? '—';
-          if (!groups[g]) groups[g] = [];
-          const x = Number(r[xCol]); const y = Number(r[yCol]);
-          if (!isNaN(x) && !isNaN(y)) groups[g].push({ x, y });
-        }
-        Object.entries(groups).forEach(([g, pts], i) => {
-          datasets.push({ label: String(g), data: pts, backgroundColor: palette[i % palette.length] });
-        });
-      } else {
-        const pts = state.filtered.map(r => ({ x: Number(r[xCol]), y: Number(r[yCol]) }))
-          .filter(p => !isNaN(p.x) && !isNaN(p.y));
-        datasets.push({ label: yCol, data: pts, backgroundColor: palette[0] });
-      }
-      chartConfig = {
-        type: 'scatter',
-        data: { datasets },
-        options: chartBaseOptions({ xTitle: xCol, yTitle: yCol })
-      };
-    } else {
-      alert('Para dispersión, el eje X debe ser numérico.');
-      return;
-    }
-  } else if (type === 'pie') {
-    // Pie: agrupar por X, valor agregado
-    const groups = {};
-    for (const r of state.filtered) {
-      const k = r[xCol] ?? '—';
-      if (!groups[k]) groups[k] = [];
-      groups[k].push(yCol && agg !== 'count' ? Number(r[yCol]) : 1);
-    }
-    let entries = Object.entries(groups).map(([k, vals]) => [k, aggregate(vals, agg)]);
-    entries = sortEntries(entries, sortMode);
-    chartConfig = {
-      type: 'pie',
-      data: {
-        labels: entries.map(([k]) => String(k)),
-        datasets: [{ data: entries.map(([, v]) => v), backgroundColor: entries.map((_, i) => palette[i % palette.length]) }]
-      },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
-    };
-  } else {
-    // Bar / Line: agrupar por X, opcionalmente split por groupCol
-    if (groupCol && groupCol !== xCol) {
-      // matriz: x -> group -> [vals]
-      const xKeys = new Set();
-      const gKeys = new Set();
-      const matrix = {};
-      for (const r of state.filtered) {
-        const x = r[xCol] ?? '—';
-        const g = r[groupCol] ?? '—';
-        xKeys.add(x); gKeys.add(g);
-        const key = x + '||' + g;
-        if (!matrix[key]) matrix[key] = [];
-        matrix[key].push(yCol && agg !== 'count' ? Number(r[yCol]) : 1);
-      }
-      let labels = Array.from(xKeys);
-      const xType = state.columns.find(c => c.name === xCol)?.type;
-      labels.sort((a, b) => xType === 'number' ? Number(a) - Number(b) : String(a).localeCompare(String(b), 'es'));
-      const groupVals = Array.from(gKeys);
-      const datasets = groupVals.map((g, i) => ({
-        label: String(g),
-        data: labels.map(x => aggregate(matrix[x + '||' + g] || [], agg)),
-        backgroundColor: palette[i % palette.length],
-        borderColor: palette[i % palette.length],
-        fill: false,
-        tension: 0.2,
-      }));
-      chartConfig = {
-        type,
-        data: { labels: labels.map(String), datasets },
-        options: chartBaseOptions({ xTitle: xCol, yTitle: yCol || 'Conteo' })
-      };
-    } else {
-      const groups = {};
-      for (const r of state.filtered) {
-        const k = r[xCol] ?? '—';
-        if (!groups[k]) groups[k] = [];
-        groups[k].push(yCol && agg !== 'count' ? Number(r[yCol]) : 1);
-      }
-      let entries = Object.entries(groups).map(([k, vals]) => [k, aggregate(vals, agg)]);
-      entries = sortEntries(entries, sortMode);
-      chartConfig = {
-        type,
-        data: {
-          labels: entries.map(([k]) => String(k)),
-          datasets: [{
-            label: agg === 'count' ? 'Conteo' : `${agg.toUpperCase()} ${yCol}`,
-            data: entries.map(([, v]) => v),
-            backgroundColor: type === 'line' ? 'rgba(59,130,246,0.2)' : palette[0],
-            borderColor: palette[0],
-            borderWidth: 2,
-            fill: type === 'line',
-            tension: 0.2,
-          }]
-        },
-        options: chartBaseOptions({ xTitle: xCol, yTitle: yCol || 'Conteo' })
-      };
-    }
-  }
-
-  state.chart = new Chart(ctx, chartConfig);
-}
-
-function chartBaseOptions({ xTitle, yTitle }) {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'top' },
-      tooltip: { mode: 'index', intersect: false },
-    },
-    scales: {
-      x: { title: { display: true, text: xTitle } },
-      y: { title: { display: true, text: yTitle }, beginAtZero: true },
-    }
-  };
-}
-
-function sortEntries(entries, mode) {
-  const e = entries.slice();
-  switch (mode) {
-    case 'value-desc': return e.sort((a, b) => b[1] - a[1]);
-    case 'value-asc': return e.sort((a, b) => a[1] - b[1]);
-    case 'label-asc': return e.sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'es', { numeric: true }));
-    case 'label-desc': return e.sort((a, b) => String(b[0]).localeCompare(String(a[0]), 'es', { numeric: true }));
-  }
-  return e;
-}
 
 // ============== Proyectos (barras por edificio) ==============
 let proyChart = null;
@@ -1294,7 +1089,14 @@ export function populateDistribSelectors() {
         renderDistrib();
       });
     });
-    $('#histBins')?.addEventListener('input', renderDistrib);
+    const _histBinsSlider = $('#histBins');
+    const _histBinsVal    = document.getElementById('histBinsVal');
+    if (_histBinsSlider) {
+      _histBinsSlider.addEventListener('input', () => {
+        if (_histBinsVal) _histBinsVal.textContent = +_histBinsSlider.value === 0 ? 'Auto' : _histBinsSlider.value;
+        renderDistrib();
+      });
+    }
 
     document.querySelectorAll('.ratio-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1510,9 +1312,9 @@ export function renderDistrib() {
     const n = histVals.length;
     const x0 = histVals[0];
     const x1 = histVals[n - 1];
-    const binsInput = _parseAxisVal($('#histBins')?.value);
-    const nBins = binsInput != null
-      ? Math.min(Math.max(Math.round(binsInput), 2), 100)
+    const binsInput = parseInt($('#histBins')?.value ?? '0');
+    const nBins = binsInput > 0
+      ? Math.min(Math.max(binsInput, 2), 80)
       : Math.min(Math.max(Math.ceil(Math.sqrt(n)), 5), 40);
     const binW = (x1 - x0) / nBins || 1;
 
@@ -1521,13 +1323,12 @@ export function renderDistrib() {
       counts[Math.min(Math.floor((v - x0) / binW), nBins - 1)]++;
     }
 
-    const labels = Array.from({ length: nBins }, (_, i) =>
-      (x0 + i * binW).toLocaleString('es-CL', { maximumFractionDigits: 0 })
-    );
+    const binData = counts.map((count, i) => ({ x: x0 + (i + 0.5) * binW, y: count }));
 
     const yMinV = _parseAxisVal($('#distribYMin')?.value);
     const yMaxV = _parseAxisVal($('#distribYMax')?.value);
 
+    // Plugin que dibuja el ratio/tamaño en la esquina
     const distribSettingsPlugin = {
       id: 'distribSettings',
       afterDraw(chart) {
@@ -1544,13 +1345,29 @@ export function renderDistrib() {
       },
     };
 
+    // Plugin que fuerza los ticks exactamente en los bordes de los bins.
+    // Chart.js con escala linear genera ticks en valores "lindos" (2000, 2500…)
+    // que no coinciden con los bordes reales, lo que hace que las etiquetas
+    // aparezcan en medio de las barras. Aquí los reemplazamos.
+    const histEdgeTicksPlugin = {
+      id: 'histEdgeTicks',
+      afterBuildTicks(chart, args) {
+        if (args?.scale?.id !== 'x') return;
+        // Máximo ~12 ticks visibles; saltar bins si hay demasiados
+        const edgeCount = nBins + 1;
+        const step     = Math.max(1, Math.ceil(edgeCount / 12));
+        args.scale.ticks = Array.from({ length: edgeCount }, (_, i) => ({
+          value: x0 + i * binW,
+        })).filter((_, i) => i % step === 0);
+      },
+    };
+
     distribChart = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels,
         datasets: [{
           label: col,
-          data: counts,
+          data: binData,
           backgroundColor: 'rgba(59,130,246,0.55)',
           borderColor: 'rgba(59,130,246,0.85)',
           borderWidth: 1,
@@ -1559,10 +1376,11 @@ export function renderDistrib() {
           categoryPercentage: 1.0,
         }],
       },
-      plugins: [distribSettingsPlugin],
+      plugins: [distribSettingsPlugin, histEdgeTicksPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        parsing: false,
         layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
         plugins: {
           legend: { display: false },
@@ -1574,15 +1392,25 @@ export function renderDistrib() {
                 const hi = lo + binW;
                 return `${lo.toLocaleString('es-CL', { maximumFractionDigits: 0 })} – ${hi.toLocaleString('es-CL', { maximumFractionDigits: 0 })} ${distribUnit}`;
               },
-              label: item => ` ${item.raw} unidades`,
+              label: item => ` ${item.parsed.y} unidades`,
             },
           },
           annotation: { annotations: {} },
         },
         scales: {
           x: {
+            type: 'linear',
+            // Medio bin de margen a cada lado: el eje Y queda a la izquierda
+            // de la primera barra (no encima de su borde), y hay espacio al final.
+            min: x0 - binW * 0.5,
+            max: x1 + binW * 0.5,
+            offset: false,
             title: { display: true, text: col, font: { size: fs } },
-            ticks: { font: { size: fs }, maxRotation: 45 },
+            ticks: {
+              font: { size: fs },
+              maxRotation: 45,
+              callback: v => v.toLocaleString('es-CL', { maximumFractionDigits: 0 }),
+            },
             grid: { display: false },
           },
           y: {

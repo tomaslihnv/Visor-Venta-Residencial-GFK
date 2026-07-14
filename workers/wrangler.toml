@@ -1,0 +1,11 @@
+name              = "inciti-proxy"
+main              = "inciti-proxy.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+# Origin permitido para CORS. Cambiar al dominio real donde esté desplegado el visor.
+# En desarrollo puedes dejar "*" o tu localhost. En producción poner el dominio exacto.
+ALLOWED_ORIGIN = "*"
+
+# INCITI_API_KEY se define como secret (nunca en este archivo):
+#   npx wrangler secret put INCITI_API_KEY

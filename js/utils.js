@@ -41,3 +41,12 @@ export function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
+
+export const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+
+export function fmtTipo(v) {
+  if (typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= 10) return `${v}D`;
+  const s = String(v).trim();
+  if (/^\d+$/.test(s) && +s > 0 && +s <= 10) return `${s}D`;
+  return s;
+}
