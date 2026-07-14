@@ -114,9 +114,9 @@ export const SVP = {
   groupCandidates: ['tipo', 'corredor'],
   projCandidates:  ['nombre'],
   getMpY: (t, mode) => {
-    if (mode === 'ufm2')   return t.ufm2   ?? null;
-    if (mode === 'precio')  return t.renta  ?? null;
-    if (mode === 'util')    return t.sup    ?? null;
+    if (mode === 'ufm2')   return t.ufm2  ?? null;
+    if (mode === 'precio')  return t.renta ?? null;
+    if (mode === 'util')    return t.sup   ?? null;
     return null;
   },
   summaryFields: [

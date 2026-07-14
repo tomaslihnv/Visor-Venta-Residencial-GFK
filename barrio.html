@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Análisis de Barrio</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    /* ── Layout específico de barrio ────────────────────────────────────────── */
+    .barrio-layout {
+      display: flex;
+      height: calc(100vh - var(--topbar-h, 52px) - var(--nav-h, 36px));
+      overflow: hidden;
+    }
+
+    .barrio-sidebar {
+      width: 300px;
+      min-width: 300px;
+      background: var(--bg-card, #fff);
+      border-right: 1px solid var(--border, #e2e8f0);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .barrio-map-wrap {
+      flex: 1;
+      position: relative;
+    }
+
+    #barrioMap {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Panel de control ───────────────────────────────────────────────────── */
+    .barrio-panel {
+      padding: 16px;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+
+    .barrio-panel-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted, #64748b);
+      margin-bottom: 10px;
+    }
+
+    /* ── Instrucciones / estado ─────────────────────────────────────────────── */
+    .barrio-instruction {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--bg-subtle, #f8fafc);
+      border: 1px solid var(--border, #e2e8f0);
+      font-size: 13px;
+      color: var(--text, #1e293b);
+      line-height: 1.45;
+    }
+
+    .barrio-instruction.drawing {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+      color: #1e40af;
+    }
+
+    .barrio-instruction.ready {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+      color: #166534;
+    }
+
+    .barrio-instruction.loading {
+      background: #fefce8;
+      border-color: #fde68a;
+      color: #854d0e;
+    }
+
+    .barrio-instruction-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .vertex-count {
+      font-weight: 700;
+    }
+
+    /* ── Botones ────────────────────────────────────────────────────────────── */
+    .barrio-btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .barrio-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border, #e2e8f0);
+      background: var(--bg-card, #fff);
+      color: var(--text, #1e293b);
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .barrio-btn:hover:not(:disabled) {
+      background: var(--bg-subtle, #f8fafc);
+    }
+
+    .barrio-btn.primary {
+      background: #3b82f6;
+      color: #fff;
+      border-color: #3b82f6;
+    }
+
+    .barrio-btn.primary:hover:not(:disabled) {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+
+    .barrio-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .barrio-select {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      border: 1px solid var(--border, #e2e8f0);
+      background: var(--bg-card, #fff);
+      color: var(--text, #1e293b);
+      cursor: pointer;
+      appearance: auto;
+    }
+    .barrio-select:focus {
+      outline: 2px solid #3b82f6;
+      outline-offset: 1px;
+    }
+
+    /* ── Panel de resultados ────────────────────────────────────────────────── */
+    .barrio-results {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .barrio-results-empty {
+      color: var(--text-muted, #64748b);
+      font-size: 13px;
+      text-align: center;
+      margin-top: 24px;
+    }
+
+    .barrio-results-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text, #1e293b);
+    }
+
+    .barrio-raw-json {
+      background: var(--bg-subtle, #f8fafc);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 11px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 60vh;
+      overflow-y: auto;
+      color: var(--text, #1e293b);
+    }
+
+    .barrio-copy-btn {
+      align-self: flex-end;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border, #e2e8f0);
+      background: var(--bg-card, #fff);
+      color: var(--text, #1e293b);
+    }
+
+    .barrio-copy-btn:hover {
+      background: var(--bg-subtle, #f8fafc);
+    }
+
+    /* ── Spinner ────────────────────────────────────────────────────────────── */
+    .barrio-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #fde68a;
+      border-top-color: #854d0e;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Cursor crosshair en modo dibujo ────────────────────────────────────── */
+    .barrio-map-wrap.drawing #barrioMap { cursor: crosshair !important; }
+    .barrio-map-wrap.drawing .leaflet-interactive { cursor: crosshair !important; }
+
+    /* ── Resumen flotante sobre el mapa ────────────────────────────────────── */
+    .barrio-summary {
+      position: absolute;
+      bottom: 36px;
+      right: 12px;
+      z-index: 800;
+      background: rgba(255, 255, 255, 0.93);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.13), 0 0 0 1px rgba(0,0,0,0.07);
+      padding: 14px 16px 12px;
+      min-width: 185px;
+      pointer-events: auto;
+      transition: opacity 0.2s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .bs-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .bs-total {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text, #1e293b);
+      line-height: 1;
+      display: block;
+    }
+    .bs-subtitle {
+      font-size: 11px;
+      color: var(--text-muted, #64748b);
+      display: block;
+      margin-top: 2px;
+    }
+    .bs-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 14px;
+      padding: 0;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+    .bs-close:hover { color: #475569; }
+    .bs-divider {
+      height: 1px;
+      background: rgba(0,0,0,0.07);
+      margin: 8px 0;
+    }
+    .bs-rows { display: flex; flex-direction: column; gap: 5px; }
+    .bs-row  { display: flex; align-items: center; gap: 8px; }
+    .bs-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .bs-name { flex: 1; font-size: 12px; color: var(--text-muted, #475569); }
+    .bs-count {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text, #1e293b);
+      min-width: 20px;
+      text-align: right;
+    }
+
+    /* ── POI legend panel ───────────────────────────────────────────────────── */
+    .poi-summary {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .poi-summary-total {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text, #1e293b);
+      line-height: 1;
+    }
+    .poi-summary-label {
+      font-size: 13px;
+      color: var(--text-muted, #64748b);
+    }
+    .poi-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .poi-toggle-row {
+      display: flex;
+      gap: 6px;
+    }
+    .poi-toggle-btn {
+      flex: 1;
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border, #e2e8f0);
+      background: var(--bg-card, #fff);
+      color: var(--text, #1e293b);
+    }
+    .poi-toggle-btn:hover { background: var(--bg-subtle, #f8fafc); }
+    .poi-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .poi-cat-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .poi-cat-label-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      padding: 4px 2px;
+      border-radius: 4px;
+      user-select: none;
+    }
+    .poi-cat-label-wrap:hover { background: var(--bg-subtle, #f8fafc); }
+    .poi-cat-check {
+      accent-color: #3b82f6;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .poi-cat-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .poi-cat-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text, #1e293b);
+    }
+    .poi-cat-count {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted, #64748b);
+      background: var(--bg-subtle, #f1f5f9);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    .poi-cat-extra {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 0 2px 6px 24px; /* indent under the dot */
+    }
+    .poi-cat-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .poi-cat-opacity {
+      flex: 1;
+      height: 3px;
+      cursor: pointer;
+    }
+    .poi-cat-labels-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--text-muted, #64748b);
+      white-space: nowrap;
+      user-select: none;
+    }
+    .poi-cat-labels-wrap input { cursor: pointer; accent-color: #3b82f6; }
+    .poi-cat-bar {
+      height: 3px;
+      background: var(--bg-subtle, #f1f5f9);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .poi-cat-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      opacity: 0.55;
+    }
+    /* Etiqueta permanente sobre el mapa */
+    .leaflet-tooltip.poi-label {
+      background: rgba(255,255,255,0.96);
+      border: none;
+      border-radius: 999px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.13), 0 0 0 1px rgba(0,0,0,0.07);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      padding: 3px 9px 3px 6px;
+      color: #1e293b;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .leaflet-tooltip.poi-label::before { display: none; }
+    .poi-label-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <nav class="app-nav">
+    <a href="index.html"       class="nav-link">Venta</a>
+    <a href="renta.html"       class="nav-link">Renta</a>
+    <a href="multifamily.html" class="nav-link">Multifamily</a>
+    <a href="oficinas.html"    class="nav-link">Oficinas</a>
+    <a href="bodegas.html"     class="nav-link">Bodegas</a>
+    <a href="barrio.html"      class="nav-link active">Barrio</a>
+  </nav>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <h1>Análisis de Barrio</h1>
+    </div>
+  </header>
+
+  <div class="barrio-layout">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+    <aside class="barrio-sidebar">
+
+      <!-- Selector de mapa base -->
+      <div class="barrio-panel">
+        <div class="barrio-panel-title">Mapa base</div>
+        <select id="barrioBasemap" class="barrio-select">
+          <option value="streets">Calles (OSM)</option>
+          <option value="voyager">Voyager</option>
+          <option value="light">Claro</option>
+          <option value="dark">Oscuro</option>
+          <option value="satellite">Satélite</option>
+          <option value="hybrid">Satélite + calles</option>
+          <option value="topo">Topográfico</option>
+        </select>
+      </div>
+
+      <!-- Controles de dibujo -->
+      <div class="barrio-panel">
+        <div class="barrio-panel-title">Zona de análisis</div>
+
+        <div id="barrioInstruction" class="barrio-instruction">
+          <span class="barrio-instruction-icon">✏️</span>
+          <span id="barrioInstructionText">
+            Haz clic en <strong>Dibujar zona</strong> y luego marca los vértices en el mapa. Cierra el polígono haciendo clic sobre el primer punto.
+          </span>
+        </div>
+
+        <div class="barrio-btn-row">
+          <button id="btnDraw"   class="barrio-btn primary">Dibujar zona</button>
+          <button id="btnClear"  class="barrio-btn" disabled>Borrar</button>
+        </div>
+        <div class="barrio-btn-row">
+          <button id="btnClose"  class="barrio-btn" disabled>Cerrar polígono</button>
+          <button id="btnQuery"  class="barrio-btn primary" disabled>Consultar POIs</button>
+        </div>
+      </div>
+
+      <!-- Resultados -->
+      <div class="barrio-results" id="barrioResults">
+        <p class="barrio-results-empty">Los resultados de la API aparecerán aquí.</p>
+      </div>
+
+    </aside>
+
+    <!-- ── Mapa ─────────────────────────────────────────────────────────────── -->
+    <div class="barrio-map-wrap" id="barrioMapWrap">
+      <div id="barrioMap"></div>
+    </div>
+
+  </div>
+
+  <script type="module" src="js/barrio/main.js"></script>
+</body>
+</html>
