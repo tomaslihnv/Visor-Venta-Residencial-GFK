@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visor Bodegas</title>
+  <title>Visor Suelos</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
   <style>
@@ -38,21 +38,21 @@
 </head>
 <body>
   <nav class="app-nav">
-    <a href="index.html"            class="nav-link">Venta</a>
-    <a href="renta.html"            class="nav-link">Renta</a>
-    <a href="multifamily.html"      class="nav-link">Multifamily</a>
-    <a href="oficinas.html"         class="nav-link">Oficinas</a>
-    <a href="bodegas.html"             class="nav-link active">Bodegas</a>
+    <a href="index.html"                class="nav-link">Venta</a>
+    <a href="renta.html"                class="nav-link">Renta</a>
+    <a href="multifamily.html"          class="nav-link">Multifamily</a>
+    <a href="oficinas.html"             class="nav-link">Oficinas</a>
+    <a href="bodegas.html"              class="nav-link">Bodegas</a>
     <a href="parquesindustriales.html"  class="nav-link">Parques Ind.</a>
     <a href="stripcenters.html"         class="nav-link">Strip Centers</a>
-    <a href="suelos.html"               class="nav-link">Suelos</a>
+    <a href="suelos.html"               class="nav-link active">Suelos</a>
     <a href="barrio.html"               class="nav-link">Barrio</a>
   </nav>
 
   <header class="topbar">
     <div class="brand">
       <span class="logo-dot"></span>
-      <h1>Visor Bodegas</h1>
+      <h1>Visor Suelos</h1>
     </div>
     <div class="topbar-actions">
       <label class="file-btn">
@@ -78,7 +78,7 @@
         <div id="mpPanelBody" class="mp-panel-body">
           <div class="mp-field">
             <label class="mp-label">Proyecto</label>
-            <input type="text" id="mpNombre" class="mp-input" placeholder="Ej: Bodega Pudahuel" />
+            <input type="text" id="mpNombre" class="mp-input" placeholder="Ej: Suelo Las Condes" />
           </div>
           <div class="mp-field">
             <label class="mp-label">Dirección</label>
@@ -89,8 +89,8 @@
             <label class="mp-label">Métricas</label>
             <div class="mp-tipo-metrics">
               <label class="mp-metric-row">
-                <span>Área m²</span>
-                <input type="number" id="mpUtil" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
+                <span>Sup. m²</span>
+                <input type="number" id="mpSup" class="mp-metric-input mp-input" min="0" step="any" placeholder="—" />
               </label>
               <label class="mp-metric-row">
                 <span>UF/m²</span>
@@ -150,12 +150,12 @@
       <div id="incitiPreview" class="hidden" style="width:100%;height:100%;display:flex;flex-direction:column;background:#f8fafc;padding:20px;box-sizing:border-box;overflow-y:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;background:white;padding:16px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
           <div>
-            <h2 id="previewCountText" style="margin:0;font-size:18px;color:#1e3a5f;">Inciti encontró 0 bodegas</h2>
-            <p style="margin:4px 0 0 0;font-size:13px;color:#64748b;">Selecciona las bodegas que deseas cargar en el visor.</p>
+            <h2 id="previewCountText" style="margin:0;font-size:18px;color:#1e3a5f;">Inciti encontró 0 suelos</h2>
+            <p style="margin:4px 0 0 0;font-size:13px;color:#64748b;">Selecciona los suelos que deseas cargar en el visor.</p>
           </div>
           <div style="display:flex;gap:10px;align-items:center;">
             <button id="previewBtnCancel" class="area-btn cancel">Volver</button>
-            <button id="previewBtnLoad"   class="area-btn primary">Cargar Seleccionadas</button>
+            <button id="previewBtnLoad"   class="area-btn primary">Cargar Seleccionados</button>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;background:white;padding:14px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
@@ -220,7 +220,7 @@
                 <div class="heat-metric-pills hidden" id="heatMetricPills">
                   <span class="heat-metric-label">Métrica:</span>
                   <button class="heat-metric-btn active" data-metric="ufm2">UF/m²</button>
-                  <button class="heat-metric-btn" data-metric="vacancia">Vacancia %</button>
+                  <button class="heat-metric-btn" data-metric="total">Precio Total UF</button>
                 </div>
               </div>
               <div id="map" class="map"></div>
@@ -237,10 +237,9 @@
               <label>Métrica</label>
               <select id="proyMetrica">
                 <option value="ufm2">UF/m² prom.</option>
-                <option value="usdm2">USD/m² prom.</option>
-                <option value="vacancia">Vacancia % prom.</option>
-                <option value="util">Área total (m²)</option>
-                <option value="count">Bodegas</option>
+                <option value="total">Precio Total prom.</option>
+                <option value="sup">Superficie total (m²)</option>
+                <option value="count">Suelos</option>
               </select>
             </div>
             <div class="ctrl distrib-ratio-ctrl">
@@ -417,6 +416,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
-  <script type="module" src="js/bodegas/main.js"></script>
+  <script type="module" src="js/suelos/main.js"></script>
 </body>
 </html>
