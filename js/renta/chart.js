@@ -2,6 +2,11 @@ import { $, fmt, extractDormitorios, norm } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 
+function _fmtTipo(v) {
+  const s = String(v ?? '').trim();
+  return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
+}
+
 function _parseAxisVal(s) {
   if (s == null || s === '') return null;
   const v = parseFloat(s);
@@ -664,10 +669,6 @@ export function renderSupVsRenta() {
   }
 
   const compDatasets = [];
-  const fmtTipo = v => {
-    const s = String(v ?? '').trim();
-    return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
-  };
 
   if (tipoCol && !tipoFilter) {
     const tipoGroups = {};
@@ -675,7 +676,7 @@ export function renderSupVsRenta() {
       const sup = Number(r[supCol.name]);
       const yv  = Number(r[yCol.name]);
       if (isNaN(sup) || isNaN(yv) || sup <= 0 || yv <= 0) continue;
-      const tipo = fmtTipo(r[tipoCol.name]) || '—';
+      const tipo = _fmtTipo(r[tipoCol.name]) || '—';
       const proy = proyCol ? String(r[proyCol.name] ?? '—') : '—';
       if (!tipoGroups[tipo]) tipoGroups[tipo] = [];
       tipoGroups[tipo].push({ x: sup, y: yv, label: proy });
@@ -701,7 +702,7 @@ export function renderSupVsRenta() {
       const proy = proyCol ? String(r[proyCol.name] ?? '—') : '—';
       pts.push({ x: sup, y: yv, label: proy });
     }
-    const tipo = tipoFilter ? fmtTipo(tipoFilter) : '';
+    const tipo = tipoFilter ? _fmtTipo(tipoFilter) : '';
     compDatasets.push({
       label: tipo ? `Comparables ${tipo}` : 'Comparables',
       data: pts,
@@ -1218,14 +1219,10 @@ export function renderDistrib() {
     const isRenta  = !isUfm2 && (nc.includes('renta') || nc.includes('precio'));
 
     const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)));
-    const fmtTipo = v => {
-      const s = String(v ?? '').trim();
-      return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
-    };
     let mpTipos = mp.tipologias.filter(t => t.nombre);
     if (tipoColObj) {
-      const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
-      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)) || (t.nombre === 'S' && activeTipos.has('1D')));
+      const activeTipos = new Set(state.filtered.map(r => _fmtTipo(r[tipoColObj.name])).filter(Boolean));
+      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(_fmtTipo(t.nombre)) || (t.nombre === 'S' && activeTipos.has('1D')));
     }
 
     const mpColor = '#ef4444';
@@ -1497,11 +1494,10 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
     const isUfm2  = nc.includes('uf/m') || nc.includes('uf / m');
     const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('precio'));
     const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)));
-    const fmtTipo = v => { const s = String(v ?? '').trim(); return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase(); };
     let mpTipos = mp.tipologias.filter(t => t.nombre);
     if (tipoColObj) {
-      const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
-      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
+      const activeTipos = new Set(state.filtered.map(r => _fmtTipo(r[tipoColObj.name])).filter(Boolean));
+      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(_fmtTipo(t.nombre)));
     }
     const mpColor = '#ef4444';
     const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
@@ -1682,11 +1678,10 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
     const isUfm2  = nc.includes('uf/m') || nc.includes('uf / m');
     const isRenta = !isUfm2 && (nc.includes('renta') || nc.includes('precio'));
     const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => norm(c.name).includes(k)));
-    const fmtTipo = v => { const s = String(v ?? '').trim(); return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase(); };
     let mpTipos = mp.tipologias.filter(t => t.nombre);
     if (tipoColObj) {
-      const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
-      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
+      const activeTipos = new Set(state.filtered.map(r => _fmtTipo(r[tipoColObj.name])).filter(Boolean));
+      if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(_fmtTipo(t.nombre)));
     }
     const mpColor = '#ef4444';
     const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });

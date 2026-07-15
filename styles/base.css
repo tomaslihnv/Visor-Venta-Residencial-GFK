@@ -41,6 +41,7 @@ code { background: #eef2ff; padding: 1px 5px; border-radius: 4px; font-size: 0.9
   border-radius: 6px; font-size: 12px;
 }
 .ghost-btn:hover { background: #1e293b; color: #fff; }
+.ghost-btn:disabled { opacity: 0.38; cursor: not-allowed; pointer-events: auto; }
 .source-pills {
   display: flex; gap: 2px;
   background: #1e293b; padding: 3px; border-radius: 7px;

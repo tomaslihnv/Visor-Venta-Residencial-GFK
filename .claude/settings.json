@@ -11,5 +11,27 @@
       "Skill(run:*)",
       "Bash(xargs -I{} grep -Hm1 '^description:' {})"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Cynthia Castro\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\graphify.EXE\" hook-guard search"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\Cynthia Castro\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\graphify.EXE\" hook-guard read"
+          }
+        ]
+      }
+    ]
   }
 }

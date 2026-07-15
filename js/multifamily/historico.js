@@ -16,12 +16,15 @@ const EVOL_URL = {
 const PORTFOLIO_COLORS = { IRR: '#2563eb', ECH: '#16a34a' };
 
 const PROGRAMAS_ORDER = ['ESTUDIO', 'LOFT', '1D1B', '1D2B', '2D1B', '2D2B', '3D1B', '3D2B', '3D3B', '4D4B'];
+// Paleta categórica validada (validate_palette.js): banda de luminosidad OK, piso de
+// croma OK, separación CVD en banda 8-12 (piso legal con etiquetas directas — ver
+// _endLabelsPlugin) y contraste >=3:1 contra fondo blanco.
 const PROGRAM_COLORS  = {
-  'ESTUDIO': '#6366f1', 'LOFT': '#8b5cf6',
-  '1D1B':    '#3b82f6', '1D2B': '#06b6d4',
-  '2D1B':    '#10b981', '2D2B': '#f59e0b',
-  '3D1B':    '#ef4444', '3D2B': '#f97316',
-  '3D3B':    '#ec4899', '4D4B': '#64748b',
+  'ESTUDIO': '#6d28d9', 'LOFT': '#db2777',
+  '1D1B':    '#2563eb', '1D2B': '#0891b2',
+  '2D1B':    '#059669', '2D2B': '#65a30d',
+  '3D1B':    '#d97706', '3D2B': '#dc2626',
+  '3D3B':    '#f43f5e', '4D4B': '#92400e',
 };
 
 const AVG_COLOR = '#0f172a';
@@ -36,7 +39,7 @@ const MONTH_TO_Q = {
 
 const _st = { rows: [], progFilt: new Set(), proyFilt: null };
 const _selected = new Set();
-let _chartRent = null, _chartVac = null;
+let _chartRent = null, _chartVac = null, _chartStock = null;
 let _initialized = false;
 let _showAvg = false;
 let _internalRows = [];
@@ -53,6 +56,11 @@ const $ = id => document.getElementById(id);
 function _avg(arr) {
   const v = arr.filter(x => x != null && !isNaN(x));
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+}
+
+function _sum(arr) {
+  const v = arr.filter(x => x != null && !isNaN(x));
+  return v.length ? v.reduce((a, b) => a + b, 0) : null;
 }
 
 // ── Parser CSV mínimo ──────────────────────────────────────────────────────
@@ -297,7 +305,7 @@ function _populateXSelectors(allPeriodos) {
   if (_xTo   && allPeriodos.includes(_xTo))   toSel.value   = _xTo;
 }
 
-function _buildSeries(rows, metrica) {
+function _buildSeries(rows, metrica, agg = _avg) {
   const allPeriodos = [...new Set(rows.map(r => r['Período Key']))].sort();
   // Aplicar rango X
   const periodos = allPeriodos.filter(p =>
@@ -312,7 +320,7 @@ function _buildSeries(rows, metrica) {
       const vals = rows
         .filter(r => r['Período Key'] === per && r['Programa'] === prog)
         .map(r => r[metrica]);
-      return _avg(vals);
+      return agg(vals);
     });
     return {
       label: prog, data,
@@ -324,10 +332,10 @@ function _buildSeries(rows, metrica) {
   if (_showAvg) {
     const avgData = periodos.map(per => {
       const vals = rows.filter(r => r['Período Key'] === per).map(r => r[metrica]);
-      return _avg(vals);
+      return agg(vals);
     });
     datasets.push({
-      label: 'Promedio mercado',
+      label: agg === _sum ? 'Total mercado' : 'Promedio mercado',
       data: avgData,
       borderColor: AVG_COLOR,
       backgroundColor: AVG_COLOR + '11',
@@ -340,8 +348,9 @@ function _buildSeries(rows, metrica) {
     });
   }
 
-  // Serie propia (JSON cargado manualmente)
-  if (_internalRows.length) {
+  // Serie propia (JSON cargado manualmente) — solo aplica a Arriendo/Vacancia,
+  // el formato de JSON manual no trae stock.
+  if (_internalRows.length && (metrica === 'Arriendo UF' || metrica === 'Vacancia (%)')) {
     const internalKey = metrica === 'Arriendo UF' ? 'arriendo_uf' : 'vacancia_pct';
     const internalData = periodos.map(per => {
       const match = _internalRows.find(r => r.periodo === per);
@@ -386,35 +395,162 @@ function _buildSeries(rows, metrica) {
   return { periodos, datasets };
 }
 
+// Etiqueta directa al final de cada línea — solo cuando hay ≤4 series visibles
+// (mitigación requerida para la banda de separación CVD 8-12 de PROGRAM_COLORS).
+const _endLabelsPlugin = {
+  id: 'histEndLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx, chartArea } = chart;
+    const datasets = chart.data.datasets;
+    if (!datasets.length || datasets.length > 4) return;
+    ctx.save();
+    ctx.font = '600 11px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.textBaseline = 'middle';
+    datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.hidden) return;
+      let lastIdx = -1;
+      for (let j = ds.data.length - 1; j >= 0; j--) {
+        if (ds.data[j] != null) { lastIdx = j; break; }
+      }
+      if (lastIdx < 0) return;
+      const point = meta.data[lastIdx];
+      if (!point) return;
+      const x = Math.min(point.x + 6, chartArea.right - 2);
+      ctx.fillStyle = ds.borderColor;
+      ctx.textAlign = 'left';
+      ctx.fillText(ds.label, x, point.y);
+    });
+    ctx.restore();
+  },
+};
+
 function _renderCharts(rows) {
-  const opts = yLabel => ({
+  const opts = (yLabel, unit) => ({
     responsive: true, maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
+    layout: { padding: { right: 54 } },
+    elements: { line: { borderCapStyle: 'round', borderJoinStyle: 'round' } },
     plugins: {
-      legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-      tooltip: { callbacks: { label: ctx =>
-        `${ctx.dataset.label}: ${ctx.parsed.y != null
-          ? ctx.parsed.y.toLocaleString('es-CL', { maximumFractionDigits: 2 }) : '—'}`
-      }},
+      legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: '#475569' } },
+      tooltip: {
+        backgroundColor: '#1e293b', padding: 10, cornerRadius: 8,
+        titleFont: { size: 12, weight: '600' }, bodyFont: { size: 12 },
+        callbacks: { label: ctx =>
+          `${ctx.dataset.label}: ${ctx.parsed.y != null
+            ? ctx.parsed.y.toLocaleString('es-CL', { maximumFractionDigits: 2 }) + unit : '—'}`
+        },
+      },
     },
     scales: {
-      x: { ticks: { font: { size: 10 } } },
-      y: { title: { display: true, text: yLabel }, ticks: { font: { size: 10 } } },
+      x: { grid: { color: '#f1f5f9' }, border: { color: '#e2e8f0' }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+      y: {
+        grid: { color: '#f1f5f9' }, border: { display: false },
+        title: { display: true, text: yLabel, font: { size: 11, weight: '600' }, color: '#64748b' },
+        ticks: { font: { size: 10 }, color: '#94a3b8' },
+      },
     },
   });
 
   const { periodos: p1, datasets: ds1 } = _buildSeries(rows, 'Arriendo UF');
   const { periodos: p2, datasets: ds2 } = _buildSeries(rows, 'Vacancia (%)');
+  const { periodos: p3, datasets: ds3 } = _buildSeries(rows, 'Stock', _sum);
+
+  const subtitle = periodos => periodos.length
+    ? `${periodos[0]} – ${periodos[periodos.length - 1]}`
+    : '';
+  const subRent  = $('histSubRent');  if (subRent)  subRent.textContent  = subtitle(p1);
+  const subVac   = $('histSubVac');   if (subVac)   subVac.textContent   = subtitle(p2);
+  const subStock = $('histSubStock'); if (subStock) subStock.textContent = subtitle(p3);
 
   if (_chartRent) _chartRent.destroy();
   _chartRent = new Chart($('histChartRent'), {
-    type: 'line', data: { labels: p1, datasets: ds1 }, options: opts('Arriendo UF'),
+    type: 'line', data: { labels: p1, datasets: ds1 }, options: opts('Arriendo UF', ' UF'),
+    plugins: [_endLabelsPlugin],
   });
 
   if (_chartVac) _chartVac.destroy();
   _chartVac = new Chart($('histChartVac'), {
-    type: 'line', data: { labels: p2, datasets: ds2 }, options: opts('Vacancia (%)'),
+    type: 'line', data: { labels: p2, datasets: ds2 }, options: opts('Vacancia (%)', '%'),
+    plugins: [_endLabelsPlugin],
   });
+
+  if (_chartStock) _chartStock.destroy();
+  _chartStock = new Chart($('histChartStock'), {
+    type: 'line', data: { labels: p3, datasets: ds3 }, options: opts('Stock (unidades)', ' unid.'),
+    plugins: [_endLabelsPlugin],
+  });
+}
+
+// ── KPIs resumen ────────────────────────────────────────────────────────────
+
+// goodUp: true/false colorea la variación como buena/mala (verde/rojo);
+// null la deja neutra (gris) — usar cuando subir o bajar no es en sí bueno
+// ni malo (ej. Stock: más unidades no es "mejor", solo informativo).
+function _deltaHtml(curr, prevVal, goodUp) {
+  if (curr == null || prevVal == null || prevVal === 0) return '';
+  const diff = curr - prevVal;
+  const pct  = (diff / Math.abs(prevVal)) * 100;
+  const isPos = diff > 0;
+  const cls   = goodUp === null ? 'vs-zero'
+    : diff === 0 ? 'vs-zero' : ((isPos === goodUp) ? 'vs-pos' : 'vs-neg');
+  const arrow = diff === 0 ? '·' : (isPos ? '▲' : '▼');
+  return `<span class="hist-kpi-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
+}
+
+function _renderKpis(rows) {
+  const cont = $('histKpis');
+  if (!cont) return;
+
+  const periodos = [...new Set(rows.map(r => r['Período Key']))].sort();
+  if (!periodos.length) { cont.style.display = 'none'; return; }
+
+  const last = periodos[periodos.length - 1];
+  const prev = periodos.length > 1 ? periodos[periodos.length - 2] : null;
+  const avgFor = (per, metrica) => _avg(rows.filter(r => r['Período Key'] === per).map(r => r[metrica]));
+
+  const sumFor = (per, metrica) => _sum(rows.filter(r => r['Período Key'] === per).map(r => r[metrica]));
+
+  const rentLast = avgFor(last, 'Arriendo UF');
+  const rentPrev = prev ? avgFor(prev, 'Arriendo UF') : null;
+  const vacLast  = avgFor(last, 'Vacancia (%)');
+  const vacPrev  = prev ? avgFor(prev, 'Vacancia (%)') : null;
+  const stockLast = sumFor(last, 'Stock');
+  const stockPrev = prev ? sumFor(prev, 'Stock') : null;
+  const proyectos = new Set(rows.map(r => r['Proyecto'])).size;
+
+  const fmtUF  = v => v != null ? v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) : '—';
+  const fmtPct = v => v != null ? v.toFixed(1) : '—';
+  const fmtInt = v => v != null ? Math.round(v).toLocaleString('es-CL') : '—';
+
+  cont.style.display = 'grid';
+  cont.innerHTML = `
+    <div class="hist-kpi-card" style="--hist-kpi-accent:#2563eb;">
+      <span class="hist-kpi-label">Arriendo UF prom.</span>
+      <span class="hist-kpi-value">${fmtUF(rentLast)} ${_deltaHtml(rentLast, rentPrev, true)}</span>
+      <span class="hist-kpi-sub">Último período: ${last}</span>
+    </div>
+    <div class="hist-kpi-card" style="--hist-kpi-accent:#dc2626;">
+      <span class="hist-kpi-label">Vacancia</span>
+      <span class="hist-kpi-value">${fmtPct(vacLast)}% ${_deltaHtml(vacLast, vacPrev, false)}</span>
+      <span class="hist-kpi-sub">Último período: ${last}</span>
+    </div>
+    <div class="hist-kpi-card" style="--hist-kpi-accent:#d97706;">
+      <span class="hist-kpi-label">Stock total</span>
+      <span class="hist-kpi-value">${fmtInt(stockLast)} ${_deltaHtml(stockLast, stockPrev, null)}</span>
+      <span class="hist-kpi-sub">Unidades · último período</span>
+    </div>
+    <div class="hist-kpi-card" style="--hist-kpi-accent:#059669;">
+      <span class="hist-kpi-label">Proyectos</span>
+      <span class="hist-kpi-value">${proyectos}</span>
+      <span class="hist-kpi-sub">En comunas seleccionadas</span>
+    </div>
+    <div class="hist-kpi-card" style="--hist-kpi-accent:#6d28d9;">
+      <span class="hist-kpi-label">Comunas</span>
+      <span class="hist-kpi-value">${_selected.size}</span>
+      <span class="hist-kpi-sub">${periodos.length} períodos de histórico</span>
+    </div>
+  `;
 }
 
 function _render() {
@@ -424,8 +560,9 @@ function _render() {
   $('histEmpty').style.display   = hasData ? 'none'  : '';
   $('histCharts').style.display  = hasData ? 'grid'  : 'none';
   $('histFiltros').style.display = hasData ? 'flex'  : 'none';
+  $('histKpis').style.display    = hasData ? 'grid'  : 'none';
 
-  if (hasData) _renderCharts(rows);
+  if (hasData) { _renderCharts(rows); _renderKpis(rows); }
 }
 
 // ── Carga serie interna (JSON manual) ─────────────────────────────────────
@@ -462,9 +599,9 @@ function _clearInternal() {
 function _initComunaChips() {
   const cont = $('histComunaChips');
   cont.innerHTML = COMUNAS.map((c, i) =>
-    `<button class="saved-dataset-btn" data-idx="${i}">${c.label}</button>`
+    `<button class="hist-comuna-chip" data-idx="${i}"><span class="hist-chip-dot"></span>${c.label}</button>`
   ).join('');
-  cont.querySelectorAll('.saved-dataset-btn').forEach(btn => {
+  cont.querySelectorAll('.hist-comuna-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       const idx = +btn.dataset.idx;
       _selected.has(idx) ? _selected.delete(idx) : _selected.add(idx);
@@ -509,6 +646,8 @@ function _initComunaChips() {
     _copyChart(_chartRent, $('histWrapRent'), $('histCopyRent')));
   $('histCopyVac')?.addEventListener('click', () =>
     _copyChart(_chartVac, $('histWrapVac'), $('histCopyVac')));
+  $('histCopyStock')?.addEventListener('click', () =>
+    _copyChart(_chartStock, $('histWrapStock'), $('histCopyStock')));
 }
 
 export function renderHistorico() {

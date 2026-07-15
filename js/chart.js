@@ -269,15 +269,11 @@ export function renderProyectos() {
   let mpName = null;
   let mpVal  = null;
   if (mp.inProy && mp.edificio && mp.tipologias.length > 0) {
-    const fmtTipo = v => {
-      const s = String(v ?? '').trim();
-      return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
-    };
     const tipoCol = state.columns.find(c =>
       ['tipolog', 'dormitor'].some(k => normStr(c.name).includes(k))
     );
     const activeTipos = tipoCol
-      ? new Set(state.filtered.map(r => fmtTipo(r[tipoCol.name])).filter(Boolean))
+      ? new Set(state.filtered.map(r => _fmtTipo(r[tipoCol.name])).filter(Boolean))
       : null;
 
     const tipos = mp.tipologias.filter(t => t.nombre && _mpTipoVisible(t.nombre, activeTipos));
@@ -616,16 +612,11 @@ export function renderSupVsPrecio() {
   if (state.chart) { state.chart.destroy(); state.chart = null; }
   const ctx = $('#svpChart').getContext('2d');
 
-  const fmtTipo = v => {
-    const s = String(v ?? '').trim();
-    return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
-  };
-
   const rows = state.filtered;
 
   // Tipologías activas según state.filtered (respeta el filtro del sidebar)
   const activeTipos = tipoCol
-    ? new Set(rows.map(r => fmtTipo(r[tipoCol.name])).filter(Boolean))
+    ? new Set(rows.map(r => _fmtTipo(r[tipoCol.name])).filter(Boolean))
     : null;
 
   // Mi Proyecto dataset (se construye primero para que aparezca primero en la leyenda)
@@ -640,7 +631,7 @@ export function renderSupVsPrecio() {
     if (mpFiltered.length > 0) {
       mpDatasets.push({
         label: mpName,
-        data: mpFiltered.map(t => ({ x: t.sup, y: t.ufm2, label: `${mpName} ${fmtTipo(t.nombre)}` })),
+        data: mpFiltered.map(t => ({ x: t.sup, y: t.ufm2, label: `${mpName} ${_fmtTipo(t.nombre)}` })),
         backgroundColor: mpColor,
         borderColor: mpColor,
         borderWidth: 2,
@@ -658,7 +649,7 @@ export function renderSupVsPrecio() {
       const sup  = Number(r[supCol.name]);
       const ufm2 = Number(r[ufm2Col.name]);
       if (isNaN(sup) || isNaN(ufm2) || sup <= 0 || ufm2 <= 0) continue;
-      const tipo = fmtTipo(r[tipoCol.name]) || '—';
+      const tipo = _fmtTipo(r[tipoCol.name]) || '—';
       const edif = edifCol ? String(r[edifCol.name] ?? '—') : '—';
       if (!tipoGroups[tipo]) tipoGroups[tipo] = [];
       tipoGroups[tipo].push({ x: sup, y: ufm2, label: edif });
@@ -762,7 +753,7 @@ export function renderSupVsPrecio() {
         c.stroke();
 
         // Caja con el valor predicho
-        const label = `${fmtTipo(t.nombre)}: ${predY.toLocaleString('es-CL', { maximumFractionDigits: 0 })} UF/m²`;
+        const label = `${_fmtTipo(t.nombre)}: ${predY.toLocaleString('es-CL', { maximumFractionDigits: 0 })} UF/m²`;
         c.font = `bold ${fs}px system-ui, sans-serif`;
         const tw = c.measureText(label).width;
         const pad = 5, bh = fs + pad * 2;
@@ -1520,13 +1511,9 @@ export function renderDistrib() {
     const isTicket = !isUfm2 && nc.includes('ticket');
 
     const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normFn(c.name).includes(k)));
-    const fmtTipo = v => {
-      const s = String(v ?? '').trim();
-      return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
-    };
     let mpTipos = mp.tipologias.filter(t => t.nombre);
     if (tipoColObj) {
-      const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
+      const activeTipos = new Set(state.filtered.map(r => _fmtTipo(r[tipoColObj.name])).filter(Boolean));
       if (activeTipos.size > 0) {
         mpTipos = mpTipos.filter(t => _mpTipoVisible(t.nombre, activeTipos));
       }

@@ -548,10 +548,13 @@
             <div class="hist-toolbar">
               <div class="hist-toolbar-group">
                 <span class="hist-label">Comunas</span>
-                <div id="histComunaChips" class="hist-chips"></div>
+                <div id="histComunaChips" class="hist-chips hist-comuna-chips"></div>
               </div>
-              <span id="histLoadingMsg" class="hist-loading">Cargando…</span>
+              <span id="histLoadingMsg" class="hist-loading"><span class="hist-spinner"></span>Cargando…</span>
             </div>
+
+            <!-- KPIs -->
+            <div id="histKpis" class="hist-kpis" style="display:none;"></div>
 
             <!-- Filtros -->
             <div id="histFiltros" class="hist-filtros" style="display:none;">
@@ -605,7 +608,10 @@
 
               <div class="hist-chart-card">
                 <div class="hist-chart-header">
-                  <span class="hist-chart-title">Arriendo UF promedio</span>
+                  <div>
+                    <span class="hist-chart-title">Arriendo UF promedio</span>
+                    <span class="hist-chart-subtitle" id="histSubRent"></span>
+                  </div>
                   <button id="histCopyRent" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
                 </div>
                 <div class="hist-chart-wrap" id="histWrapRent">
@@ -615,7 +621,10 @@
 
               <div class="hist-chart-card">
                 <div class="hist-chart-header">
-                  <span class="hist-chart-title">Vacancia %</span>
+                  <div>
+                    <span class="hist-chart-title">Vacancia %</span>
+                    <span class="hist-chart-subtitle" id="histSubVac"></span>
+                  </div>
                   <button id="histCopyVac" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
                 </div>
                 <div class="hist-chart-wrap" id="histWrapVac">
@@ -623,11 +632,25 @@
                 </div>
               </div>
 
+              <div class="hist-chart-card">
+                <div class="hist-chart-header">
+                  <div>
+                    <span class="hist-chart-title">Stock total</span>
+                    <span class="hist-chart-subtitle" id="histSubStock"></span>
+                  </div>
+                  <button id="histCopyStock" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
+                </div>
+                <div class="hist-chart-wrap" id="histWrapStock">
+                  <canvas id="histChartStock"></canvas>
+                </div>
+              </div>
+
             </div>
 
-            <p id="histEmpty" style="text-align:center;color:#94a3b8;padding:40px 0;">
-              Seleccioná una o más comunas para ver el histórico.
-            </p>
+            <div id="histEmpty" class="hist-empty">
+              <div class="hist-empty-icon">📊</div>
+              <p>Seleccioná una o más comunas para ver el histórico.</p>
+            </div>
           </div>
         </div>
 
