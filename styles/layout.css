@@ -9,7 +9,10 @@
   position: sticky;
   top: 0;
   z-index: 200;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.app-nav::-webkit-scrollbar { display: none; }
 
 .nav-link {
   color: #94a3b8;

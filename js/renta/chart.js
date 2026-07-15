@@ -1503,7 +1503,7 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
       const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
       if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
     }
-    const mpColor = '#96323C';
+    const mpColor = '#ef4444';
     const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     mpTipos.forEach(t => {
       let val = null;
@@ -1688,7 +1688,7 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
       const activeTipos = new Set(state.filtered.map(r => fmtTipo(r[tipoColObj.name])).filter(Boolean));
       if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(fmtTipo(t.nombre)));
     }
-    const mpColor = '#96323C';
+    const mpColor = '#ef4444';
     const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     mpTipos.forEach(t => {
       let val = null;

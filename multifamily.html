@@ -7,36 +7,6 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
   <style>
-    /* ── Consulta por área: mapa inline ─────────────────────────────────────── */
-    #areaDrawContainer { width: 100%; height: 100%; position: relative; }
-    #areaDrawContainer.drawing-active { cursor: crosshair; }
-    #areaDrawMap { width: 100%; height: 100%; }
-    .area-draw-bar {
-      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-      z-index: 1000; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      background: rgba(255,255,255,0.96); backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      border-radius: 10px; padding: 9px 14px;
-      box-shadow: 0 2px 14px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.06);
-      max-width: min(700px, 90%);
-    }
-    .area-draw-status {
-      font-size: 12px; color: #64748b; white-space: nowrap;
-    }
-    .area-draw-status.error   { color: #ef4444; }
-    .area-draw-status.loading { color: #3b82f6; }
-    .area-draw-divider { width: 1px; height: 18px; background: #e2e8f0; }
-    .area-btn {
-      padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
-      border: 1px solid #d1d5db; background: #fff; color: #374151; cursor: pointer;
-      white-space: nowrap; transition: background 0.1s;
-    }
-    .area-btn:hover:not(:disabled) { background: #f1f5f9; }
-    .area-btn:disabled { opacity: 0.4; cursor: default; }
-    .area-btn.primary { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
-    .area-btn.primary:hover:not(:disabled) { background: #1e293b; }
-    .area-btn.cancel { color: #94a3b8; border-color: transparent; background: transparent; }
-    .area-btn.cancel:hover:not(:disabled) { background: #f1f5f9; color: #374151; }
     /* ── Preview de resultados ──────────────────────────────────────────────── */
     #incitiPreview { width: 100%; height: 100%; display: flex; flex-direction: column; background: #fff; }
     .preview-header {
