@@ -1293,12 +1293,28 @@ export function renderDistrib() {
 
   // ── Modo histograma ──
   if (isHist) {
-    const xMinV = _parseAxisVal($('#distribXMin')?.value);
-    const xMaxV = _parseAxisVal($('#distribXMax')?.value);
+    let xMinV = _parseAxisVal($('#distribXMin')?.value);
+    let xMaxV = _parseAxisVal($('#distribXMax')?.value);
+    // Si el usuario invierte min/max (o escribe el mismo valor en ambos),
+    // se normaliza en vez de producir un rango vacío silencioso.
+    if (xMinV !== null && xMaxV !== null && xMinV > xMaxV) {
+      [xMinV, xMaxV] = [xMaxV, xMinV];
+    }
     const histVals = sortedVals.filter(v =>
       (xMinV === null || v >= xMinV) && (xMaxV === null || v <= xMaxV)
     );
-    if (histVals.length < 2) return;
+    if (histVals.length < 2) {
+      const c2 = ctx;
+      c2.save();
+      c2.clearRect(0, 0, c2.canvas.width, c2.canvas.height);
+      c2.font = '13px system-ui, sans-serif';
+      c2.fillStyle = '#9ca3af';
+      c2.textAlign = 'center';
+      c2.textBaseline = 'middle';
+      c2.fillText('Sin datos suficientes en el rango X seleccionado', c2.canvas.width / 2, c2.canvas.height / 2);
+      c2.restore();
+      return;
+    }
 
     const n = histVals.length;
     const x0 = histVals[0];
@@ -1316,8 +1332,11 @@ export function renderDistrib() {
 
     const binData = counts.map((count, i) => ({ x: x0 + (i + 0.5) * binW, y: count }));
 
-    const yMinV = _parseAxisVal($('#distribYMin')?.value);
-    const yMaxV = _parseAxisVal($('#distribYMax')?.value);
+    let yMinV = _parseAxisVal($('#distribYMin')?.value);
+    let yMaxV = _parseAxisVal($('#distribYMax')?.value);
+    if (yMinV !== null && yMaxV !== null && yMinV > yMaxV) {
+      [yMinV, yMaxV] = [yMaxV, yMinV];
+    }
 
     // Plugin que dibuja el ratio/tamaño en la esquina
     const distribSettingsPlugin = {
@@ -1344,14 +1363,65 @@ export function renderDistrib() {
       id: 'histEdgeTicks',
       afterBuildTicks(chart, args) {
         if (args?.scale?.id !== 'x') return;
-        // Máximo ~12 ticks visibles; saltar bins si hay demasiados
-        const edgeCount = nBins + 1;
-        const step     = Math.max(1, Math.ceil(edgeCount / 12));
-        args.scale.ticks = Array.from({ length: edgeCount }, (_, i) => ({
-          value: x0 + i * binW,
-        })).filter((_, i) => i % step === 0);
+        // Usar el rango real de datos (o el min/max escrito por el usuario),
+        // NO scale.min/max — el eje se extiende medio bin más allá de x0/x1
+        // para que las barras extremas no se corten visualmente, pero esa
+        // extensión no debe aparecer como tick (mostraría un valor "fantasma"
+        // más allá del mínimo/máximo real de los datos).
+        const lo = xMinV ?? x0;
+        const hi = xMaxV ?? x1;
+        const kStart = Math.floor((lo - x0) / binW);
+        const kEnd   = Math.ceil((hi - x0) / binW);
+        const allTicks = [];
+        for (let k = kStart; k <= kEnd; k++) allTicks.push(x0 + k * binW);
+        const step = Math.max(1, Math.ceil(allTicks.length / 12));
+        args.scale.ticks = allTicks
+          .filter((_, i) => i % step === 0 || i === allTicks.length - 1)
+          .map(value => ({ value }));
       },
     };
+
+    // Mi Proyecto — línea vertical en el valor de cada tipología (antes esta
+    // sección no existía en modo histograma: se pasaba `annotations: {}` fijo).
+    // Proporcionalidad del eje X: por defecto arranca en 0 (no en x0 - medio bin)
+    // para que la distancia entre el origen y la primera barra sea proporcional
+    // al valor real (bin de ancho N que empieza en V ⇒ espacio = V/N anchos de bin).
+    // Si el usuario fija un mínimo manual > 0, el eje queda truncado a propósito
+    // y se marca visualmente (distribSettingsPlugin) en vez de dejarlo implícito.
+    const histAxisMin = xMinV ?? (x0 >= 0 ? 0 : x0 - binW * 0.5);
+    const histAxisMax = xMaxV ?? (x1 + binW * 0.5);
+    const histAnnotations = {};
+    const showMpDistribH = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
+    if (showMpDistribH && mp.inDistrib && mp.tipologias.length > 0) {
+      const normFn   = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+      const nc       = normFn(col);
+      const isUfm2   = nc.includes('uf/m') || nc.includes('uf / m');
+      const isTicket = !isUfm2 && nc.includes('ticket');
+      const tipoColObj = state.columns.find(c => ['tipolog', 'dormitor'].some(k => normFn(c.name).includes(k)));
+      let mpTipos = mp.tipologias.filter(t => t.nombre);
+      if (tipoColObj) {
+        const activeTipos = new Set(state.filtered.map(r => _fmtTipo(r[tipoColObj.name])).filter(Boolean));
+        if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => _mpTipoVisible(t.nombre, activeTipos));
+      }
+      const mpColor = '#ef4444';
+      mpTipos.forEach(t => {
+        let val = null;
+        if (isUfm2)        val = t.ufm2;
+        else if (isTicket) val = (t.sup != null && t.ufm2 != null) ? t.sup * t.ufm2 : null;
+        else               val = t.sup;
+        if (val == null || val < histAxisMin || val > histAxisMax) return;
+        histAnnotations[`mp_${t.id}`] = {
+          type: 'line', xMin: val, xMax: val,
+          borderColor: mpColor, borderWidth: 2, borderDash: [6, 4],
+          label: {
+            content: `${t.nombre}: ${val.toLocaleString('es-CL', { maximumFractionDigits: 0 })} ${distribUnit}`,
+            display: true, position: 'start',
+            color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
+            padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
+          },
+        };
+      });
+    }
 
     distribChart = new Chart(ctx, {
       type: 'bar',
@@ -1386,15 +1456,18 @@ export function renderDistrib() {
               label: item => ` ${item.parsed.y} unidades`,
             },
           },
-          annotation: { annotations: {} },
+          annotation: { annotations: histAnnotations },
         },
         scales: {
           x: {
-            type: 'linear',
-            // Medio bin de margen a cada lado: el eje Y queda a la izquierda
-            // de la primera barra (no encima de su borde), y hay espacio al final.
-            min: x0 - binW * 0.5,
-            max: x1 + binW * 0.5,
+            type: 'linear', bounds: 'data',
+            // xMinV/xMaxV ya se usaron arriba para filtrar qué valores entran al
+            // histograma — acá se usan de nuevo para fijar el rango del eje, así
+            // el mínimo/máximo que el usuario escribe se respeta tal cual (aunque
+            // deje un espacio vacío antes de la primera barra), en vez de
+            // recalcularse siempre desde el borde real de los datos filtrados.
+            min: histAxisMin,
+            max: histAxisMax,
             offset: false,
             title: { display: true, text: col, font: { size: fs } },
             ticks: {
@@ -1414,6 +1487,7 @@ export function renderDistrib() {
         },
       },
     });
+    _enableAnnotationLabelDrag(distribChart);
     return;
   }
 
