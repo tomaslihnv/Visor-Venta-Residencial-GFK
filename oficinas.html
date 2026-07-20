@@ -6,7 +6,6 @@
   <title>Visor Oficinas</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
-
 </head>
 <body>
   <nav class="app-nav">
@@ -111,6 +110,61 @@
         <div class="dropzone-inner">
           <h2>Arrastra tu Excel aquí</h2>
           <p id="dropzoneHint">o usa el botón <strong>Cargar Excel</strong>. El archivo debe tener columnas de Latitud/Longitud (listado de ofertas de arriendo/venta de oficinas).</p>
+        </div>
+      </div>
+
+      <div id="areaDrawContainer" class="hidden">
+        <div id="areaDrawMap"></div>
+        <div class="area-draw-bar">
+          <span id="areaDrawStatus" class="area-draw-status">Haz clic en <strong>Dibujar zona</strong> para comenzar.</span>
+          <div class="area-draw-divider"></div>
+          <button id="areaBtnDraw"      class="area-btn primary">Dibujar zona</button>
+          <button id="areaBtnClear"     class="area-btn" disabled>Borrar</button>
+          <button id="areaBtnClosePoly" class="area-btn" disabled>Cerrar polígono</button>
+          <button id="areaBtnQuery"     class="area-btn primary" disabled>Consultar Inciti</button>
+          <button id="areaBtnCancel"    class="area-btn cancel">Cancelar</button>
+        </div>
+      </div>
+
+      <div id="incitiPreview" class="hidden" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: #f8fafc; padding: 20px; box-sizing: border-box; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <div>
+            <h2 id="previewCountText" style="margin: 0; font-size: 18px; color: #1e3a5f;">Inciti encontró 0 proyectos</h2>
+            <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">Selecciona los proyectos que deseas cargar en el visor.</p>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button id="previewBtnCancel" class="area-btn cancel">Volver</button>
+            <button id="previewBtnLoad" class="area-btn primary">Cargar Seleccionados</button>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; background: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <input type="text" id="prevFilterName" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing:border-box;" placeholder="🔍 Filtrar por nombre..." />
+          <select id="prevFilterCommune" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todas las comunas</option></select>
+          <select id="prevFilterOwner" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todos los corredores</option></select>
+        </div>
+        <div style="flex: 1; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: auto; border: 1px solid #e2e8f0;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th width="40" style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;"><input type="checkbox" id="prevSelectAll" checked /></th>
+                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Nombre</th>
+                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Comuna</th>
+                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Corredor</th>
+              </tr>
+            </thead>
+            <tbody id="previewTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="comunaQueryContainer" class="hidden" style="position: absolute; top: 20px; left: 20px; z-index: 1000; background: rgba(255,255,255,0.96); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 14px; border-radius: 8px; width: 260px; box-shadow: 0 4px 14px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);">
+        <div style="font-size: 13px; font-weight: 700; color: #1e3a5f; margin-bottom: 8px;">Consultar por Comuna (RM)</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <select id="comunaSelectInput"><option value="">-- Selecciona una comuna --</option></select>
+          <div style="display:flex; gap:6px;">
+            <button id="comunaBtnQuery" class="area-btn primary" style="flex:1;" disabled>Consultar</button>
+            <button id="comunaBtnCancel" class="area-btn cancel">Cerrar</button>
+          </div>
         </div>
       </div>
 

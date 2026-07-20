@@ -1,12 +1,8 @@
 import { INCITI_PROXY_URL } from '../config.js';
 
-// ── Inciti API — Multifamily ───────────────────────────────────────────────
-
-// Path del endpoint. Completar con el path correcto (ej: 'search', 'query', etc.).
 const ENDPOINT_PATH = 'get_insights_pro';
+const MAX_AREA_KM2  = 25;
 
-// Polígono(s) por defecto a consultar cuando no se recibe uno externo.
-// Reemplazar con el polígono real de interés (ej: Gran Santiago).
 const DEFAULT_POLYGONS = [
   [
     { lat: -33.3489, lng: -70.7432 },
@@ -16,21 +12,70 @@ const DEFAULT_POLYGONS = [
   ],
 ];
 
-// ── Normalización de respuesta → filas planas ──────────────────────────────
-//
-// Estructura real de la API:
-//   payload.projects.entities[]          → proyectos
-//     .id, .name, .developer, .status, .location{lat,lng,commune}
-//     .periods[]                         → series temporales
-//       .key, .label (ej: "2024-10", "Oct 2024")
-//       .stages[]                        → etapas del proyecto
-//         .totalStock, .availableUnits
-//         .programs[]                    → tipologías (3D2B, 2D2B, etc.)
-//           .program, .stock, .available
-//           .priceUF, .ufPerM2, .avgUsefulM2
-//
-// Se toma el último período disponible de cada entidad y se genera
-// una fila por (entidad × stage × programa).
+// ── Área ───────────────────────────────────────────────────────────────────
+
+export function calcAreaKm2(polygon) {
+  if (!polygon || polygon.length < 3) return 0;
+  const n = polygon.length;
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area += polygon[i].lng * polygon[j].lat;
+    area -= polygon[j].lng * polygon[i].lat;
+  }
+  const centerLat = polygon.reduce((s, v) => s + v.lat, 0) / n;
+  return Math.abs(area) / 2 * 111 * 111 * Math.cos(centerLat * Math.PI / 180);
+}
+
+function _gridPartition(polygon) {
+  const lats   = polygon.map(v => v.lat);
+  const lngs   = polygon.map(v => v.lng);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+
+  // 1. Calcular el centro de latitud para la distorsión de la Tierra
+  const centerLat = (minLat + maxLat) / 2;
+  const latToKm = 111;
+  const lngToKm = 111 * Math.cos(centerLat * Math.PI / 180);
+
+  // 2. Calcular los kilómetros reales del ancho y alto de la caja completa (Bounding Box)
+  const boxHeightKm = Math.abs(maxLat - minLat) * latToKm;
+  const boxWidthKm  = Math.abs(maxLng - minLng) * lngToKm;
+  const boxAreaKm2  = boxHeightKm * boxWidthKm;
+
+  // Si toda la caja envolvente ya mide menos de 25 km², pasamos directo
+  if (boxAreaKm2 <= MAX_AREA_KM2) return [polygon];
+
+  // 3. Forzar un tamaño máximo de lado por celda de 4.5 km para ir súper seguros por debajo de los 5 km (25 km²)
+  const MAX_CELL_SIDE_KM = 4.5;
+
+  // 4. Calcular cuántas columnas y filas necesitamos para que ningún lado supere el límite geográfico
+  const cols = Math.ceil(boxWidthKm / MAX_CELL_SIDE_KM);
+  const rows = Math.ceil(boxHeightKm / MAX_CELL_SIDE_KM);
+
+  const dLat = (maxLat - minLat) / rows;
+  const dLng = (maxLng - minLng) / cols;
+
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      // Re-armamos el rectángulo perfecto para cada cuadrante
+      cells.push([
+        { lat: minLat + r * dLat,       lng: minLng + c * dLng       },
+        { lat: minLat + r * dLat,       lng: minLng + (c + 1) * dLng },
+        { lat: minLat + (r + 1) * dLat, lng: minLng + (c + 1) * dLng },
+        { lat: minLat + (r + 1) * dLat, lng: minLng + c * dLng       },
+      ]);
+    }
+  }
+
+  console.log(`[Grilla BBox] Caja total: ${boxWidthKm.toFixed(1)}x${boxHeightKm.toFixed(1)} km (~${boxAreaKm2.toFixed(1)} km²).`);
+  console.log(`[Grilla BBox] Dividido de forma segura en una matriz de ${rows}x${cols} (${cells.length} sub-zonas).`);
+  
+  return cells;
+}
+
+// ── Normalización ──────────────────────────────────────────────────────────
 
 function _lastPeriod(periods) {
   if (!Array.isArray(periods) || !periods.length) return null;
@@ -58,16 +103,13 @@ function _flattenProject(entity) {
   }
 
   for (const prog of (period.programs ?? [])) {
-    const stock = _num(prog.stock);
-    const avail = _num(prog.available);
-    const vac   = _num(prog.vacancy);
+    const vac    = _num(prog.vacancy);
     const vacPct = vac != null ? Math.round(vac * 100 * 10) / 10 : null;
-
     rows.push({
       ...base,
       'Programa':       prog.program ?? '',
-      'Stock':          stock,
-      'Disponibilidad': avail,
+      'Stock':          _num(prog.stock),
+      'Disponibilidad': _num(prog.available),
       'Vacancia (%)':   vacPct,
       'Ocupación (%)':  vacPct != null ? Math.round((100 - vacPct) * 10) / 10 : null,
       'Útil (m²)':      _num(prog.usefulM2),
@@ -76,8 +118,25 @@ function _flattenProject(entity) {
       'Estado Prog.':   prog.status ?? '',
     });
   }
-
   return rows;
+}
+
+export function flattenEntities(entities) {
+  return entities.flatMap(_flattenProject).filter(r => {
+    const v = r['Arriendo UF'];
+    return v != null && !isNaN(v) && v > 0;
+  });
+}
+
+function _pointInPolygon(lat, lng, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].lng, yi = poly[i].lat;
+    const xj = poly[j].lng, yj = poly[j].lat;
+    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
 }
 
 function _num(v) {
@@ -88,57 +147,65 @@ function _num(v) {
 
 // ── Fetch ──────────────────────────────────────────────────────────────────
 
-export async function fetchMultifamily({ polygons, onProgress } = {}) {
+async function _fetchPolygon(polygon) {
+  const url = INCITI_PROXY_URL.replace(/\/$/, '') + '/' + ENDPOINT_PATH;
+  const res = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ market: 'multifamily', polygons: [polygon] }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Error ${res.status}${text ? ': ' + text : ''}`);
+  }
+  return res.json();
+}
+
+export async function queryArea({ polygons, onProgress } = {}) {
   if (!INCITI_PROXY_URL) {
     throw new Error('Falta configurar INCITI_PROXY_URL en js/config.js.');
   }
 
-  const url  = INCITI_PROXY_URL.replace(/\/$/, '') + '/' + ENDPOINT_PATH;
-  const body = { market: 'multifamily', polygons: polygons ?? DEFAULT_POLYGONS };
+  const srcPolygon  = (polygons ?? DEFAULT_POLYGONS)[0];
+  const cells       = _gridPartition(srcPolygon);
+  const total       = cells.length;
 
-  onProgress?.('Conectando con Inciti…');
+  if (total > 1) {
+    onProgress?.(`Área grande — dividida en ${total} zonas. Consultando…`);
+  } else {
+    onProgress?.('Conectando con Inciti…');
+  }
 
-  const res = await fetch(url, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+  const seen    = new Map();
+  let   fetched = 0;
+
+  for (const cell of cells) {
+    if (total > 1) onProgress?.(`Consultando zona ${++fetched} de ${total}…`);
+    let payload;
+    try {
+      payload = await _fetchPolygon(cell);
+    } catch (err) {
+      if (total === 1) throw err;
+      console.warn('[Inciti] Error en sub-zona, continuando:', err.message);
+      continue;
+    }
+
+    if (payload.modulesAvailable?.projects === false || payload.projects == null) continue;
+    for (const entity of (payload.projects?.entities ?? [])) {
+      const key = entity.id ?? entity.name ?? String(seen.size);
+      if (!seen.has(key)) seen.set(key, entity);
+    }
+  }
+
+  if (!seen.size) {
+    throw new Error('El área seleccionada no contiene proyectos multifamily en Inciti.');
+  }
+
+  const all = [...seen.values()];
+  if (srcPolygon.length < 3) return all;
+
+  return all.filter(e => {
+    const lat = e.location?.lat, lng = e.location?.lng;
+    return lat != null && lng != null && _pointInPolygon(lat, lng, srcPolygon);
   });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Error ${res.status} ${res.statusText}${text ? ': ' + text : ''}`);
-  }
-
-  const payload = await res.json();
-
-  // ── Exploración: imprimir estructura cruda en consola ──────────────────
-  // Esto ayuda a confirmar los nombres exactos de los campos.
-  // Quitar (o dejar) una vez que el mapeo esté validado.
-  console.group('[Inciti API] Respuesta multifamily');
-  console.log('Módulos disponibles:', payload.modulesAvailable);
-  console.log('Total proyectos:', payload.projects?.length ?? 0);
-  if (payload.projects?.length > 0) {
-    console.log('Primer proyecto (estructura):', payload.projects[0]);
-  }
-  console.groupEnd();
-
-  const entities = payload.projects?.entities ?? [];
-  if (!entities.length) {
-    throw new Error('La API devolvió 0 proyectos. Verifica el polígono y el endpoint.');
-  }
-
-  onProgress?.(`${entities.length} proyectos recibidos. Normalizando…`);
-
-  const rows = entities.flatMap(_flattenProject).filter(r => {
-    const v = r['Arriendo UF'];
-    return v != null && !isNaN(v) && v > 0;
-  });
-
-  if (!rows.length) {
-    throw new Error(
-      'No se encontraron filas con arriendo válido. Revisa la consola para ver la estructura de la respuesta y ajusta _buildRow en api.js.'
-    );
-  }
-
-  return rows;
 }

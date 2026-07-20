@@ -1300,10 +1300,19 @@ export function renderDistrib() {
     if (xMinV !== null && xMaxV !== null && xMinV > xMaxV) {
       [xMinV, xMaxV] = [xMaxV, xMinV];
     }
-    const histVals = sortedVals.filter(v =>
-      (xMinV === null || v >= xMinV) && (xMaxV === null || v <= xMaxV)
-    );
-    if (histVals.length < 2) {
+
+    // Ponderar por Disponibles cuando la columna analizada no es ella misma,
+    // ya que cada fila representa un programa/tipología con N unidades.
+    const useWeight = col !== 'Disponibles' && state.columns.some(c => c.name === 'Disponibles');
+    const histPairs = state.filtered
+      .map(r => ({
+        v: Number(r[col]),
+        w: useWeight ? Math.max(1, Math.round(Number(r['Disponibles']) || 0)) : 1,
+      }))
+      .filter(p => !isNaN(p.v) &&
+        (xMinV === null || p.v >= xMinV) && (xMaxV === null || p.v <= xMaxV)
+      );
+    if (histPairs.length < 2) {
       const c2 = ctx;
       c2.save();
       c2.clearRect(0, 0, c2.canvas.width, c2.canvas.height);
@@ -1316,9 +1325,10 @@ export function renderDistrib() {
       return;
     }
 
-    const n = histVals.length;
-    const x0 = histVals[0];
-    const x1 = histVals[n - 1];
+    const histVals = histPairs.map(p => p.v);
+    const n  = histVals.length;
+    const x0 = histVals.reduce((m, v) => Math.min(m, v), Infinity);
+    const x1 = histVals.reduce((m, v) => Math.max(m, v), -Infinity);
     const binsInput = parseInt($('#histBins')?.value ?? '0');
     const nBins = binsInput > 0
       ? Math.min(Math.max(binsInput, 2), 80)
@@ -1326,8 +1336,8 @@ export function renderDistrib() {
     const binW = (x1 - x0) / nBins || 1;
 
     const counts = new Array(nBins).fill(0);
-    for (const v of histVals) {
-      counts[Math.min(Math.floor((v - x0) / binW), nBins - 1)]++;
+    for (const { v, w } of histPairs) {
+      counts[Math.min(Math.floor((v - x0) / binW), nBins - 1)] += w;
     }
 
     const binData = counts.map((count, i) => ({ x: x0 + (i + 0.5) * binW, y: count }));

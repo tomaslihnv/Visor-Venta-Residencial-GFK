@@ -57,11 +57,11 @@ export function flattenEntities(entities) {
 
     const lat = loc.lat ?? null, lng = loc.lng ?? null;
     const base = {
-      'Nombre':    entity.name      ?? entity.id ?? '',
-      'Corredor':  entity.owner     ?? entity.developer ?? '',
-      'Comuna':    loc.commune      ?? loc.comuna ?? '',
-      'Operación': 'Arriendo',
-      'Tipo':      'Oficina',
+      'Proyecto':     entity.name ?? entity.id ?? '',
+      'Inmobiliaria': entity.developer ?? entity.owner ?? '',
+      'Comuna':       loc.commune ?? loc.comuna ?? '',
+      'Operación':    'Arriendo',
+      'Tipo':         'Departamento',
     };
     if (lat != null && lng != null) { base['__lat'] = Number(lat); base['__lng'] = Number(lng); }
 
@@ -69,10 +69,11 @@ export function flattenEntities(entities) {
     return stages.flatMap(stage =>
       (stage.programs ?? []).map(prog => ({
         ...base,
-        'Precio UF': _num(prog.priceUF ?? prog.rentUF),
-        'UF/m²':     _num(prog.ufPerM2 ?? prog.priceUfPerM2 ?? prog.rentUfPerM2),
-        'Útil (m²)': _num(prog.avgUsefulM2 ?? prog.sellableM2 ?? prog.usefulM2),
-      })).filter(r => r['Precio UF'] != null && r['Precio UF'] > 0)
+        'Tipología': prog.program ?? '',
+        'Renta UF':  _num(prog.rentUF ?? prog.priceUF),
+        'UF/m²':     _num(prog.ufPerM2 ?? prog.rentUfPerM2 ?? prog.priceUfPerM2),
+        'Útil (m²)': _num(prog.avgUsefulM2 ?? prog.usefulM2),
+      })).filter(r => r['Renta UF'] != null && r['Renta UF'] > 0)
     );
   });
 }
@@ -101,7 +102,7 @@ async function _fetchPolygon(polygon) {
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ market: 'oficinas', polygons: [polygon] }),
+    body:    JSON.stringify({ market: 'residencial', polygons: [polygon] }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -130,7 +131,7 @@ export async function queryArea({ polygons, onProgress } = {}) {
     try { payload = await _fetchPolygon(cell); }
     catch (err) {
       if (total === 1) throw err;
-      console.warn('[Inciti/oficinas] Error en sub-zona:', err.message);
+      console.warn('[Inciti/renta] Error en sub-zona:', err.message);
       continue;
     }
 
@@ -142,7 +143,7 @@ export async function queryArea({ polygons, onProgress } = {}) {
   }
 
   if (!seen.size) {
-    throw new Error('El área seleccionada no contiene proyectos de oficinas en Inciti.');
+    throw new Error('El área seleccionada no contiene proyectos residenciales en Inciti.');
   }
 
   const originalPolygon = (polygons ?? [])[0] ?? [];
