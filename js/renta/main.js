@@ -1,6 +1,7 @@
 import { $, $$ } from '../utils.js';
 import { resetFilters } from './filters.js';
 import { initFilterIO } from '../core/filter-io.js';
+import { initTiposIO } from '../core/tipos-io.js';
 
 // Re-renderizar la pestaña activa cuando cambia Mi Proyecto
 document.addEventListener('mpchange', () => {
@@ -71,6 +72,17 @@ import('./filters.js').then(({ getFilterState, applyFilterState }) => {
     getState:   getFilterState,
     applyState: applyFilterState,
     panelEl:    document.getElementById('filtrosPanelBody'),
+  });
+});
+
+// ============== Tipos IO ==============
+import('./miProyecto.js').then(({ getTiposState, applyTiposState }) => {
+  initTiposIO({
+    visorId:    'renta',
+    visorLabel: 'Renta',
+    getState:   getTiposState,
+    applyState: applyTiposState,
+    panelEl:    document.getElementById('mpPanelBody'),
   });
 });
 

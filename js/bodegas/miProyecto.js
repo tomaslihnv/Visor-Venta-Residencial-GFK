@@ -72,6 +72,26 @@ async function _geocode(addr) {
 
 const _debouncedGeocode = debounce(_geocode, 1200);
 
+// ── Unidades tipo import/export ─────────────────────────────────────────────
+// Bodegas es un visor "flat" (una sola métrica por proyecto, no tarjetas de
+// tipología). Exportamos/importamos igual mp.tipologias (síntesis automática
+// vía _syncTipologias) para reusar el mismo formato de archivo que el resto.
+export function getTiposState() {
+  return { proyecto: mp.proyecto, tipologias: mp.tipologias };
+}
+
+export function applyTiposState(tipologias) {
+  const t = (tipologias ?? [])[0] ?? null;
+  mp.util = t?.sup  ?? null;
+  mp.ufm2 = t?.ufm2 ?? null;
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+  set('mpUtil', mp.util);
+  set('mpUfm2', mp.ufm2);
+
+  _save();
+}
+
 export function initMpPanel() {
   if (_initialized) {
     document.getElementById('miProyectoSection')?.classList.remove('hidden');

@@ -1,6 +1,7 @@
 import { $, $$ } from './utils.js';
 import { resetFilters } from './filters.js';
 import { initFilterIO } from './core/filter-io.js';
+import { initTiposIO } from './core/tipos-io.js';
 import { queryArea, flattenEntities, calcAreaKm2 } from './api.js';
 import { state, onDataLoaded } from './data.js';
 
@@ -76,6 +77,17 @@ import('./filters.js').then(({ getFilterState, applyFilterState }) => {
     getState:   getFilterState,
     applyState: applyFilterState,
     panelEl:    document.getElementById('filtrosPanelBody'),
+  });
+});
+
+// ============== Tipos IO ==============
+import('./miProyecto.js').then(({ getTiposState, applyTiposState }) => {
+  initTiposIO({
+    visorId:    'venta',
+    visorLabel: 'Venta',
+    getState:   getTiposState,
+    applyState: applyTiposState,
+    panelEl:    document.getElementById('mpPanelBody'),
   });
 });
 

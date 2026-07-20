@@ -2,6 +2,7 @@ import { $, $$ } from '../core/utils.js';
 import { resetFilters } from '../core/filters.js';
 import { exportCsv } from '../core/export.js';
 import { initFilterIO } from '../core/filter-io.js';
+import { initTiposIO } from '../core/tipos-io.js';
 import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, onDataLoaded } from './data.js';
 import { initMpPanel } from './miProyecto.js';
 import { queryArea, flattenEntities, calcAreaKm2 } from './api.js';
@@ -83,6 +84,16 @@ import('../core/filters.js').then(({ getFilterState, applyFilterState }) => {
     getState:   () => getFilterState(state),
     applyState: (data) => applyFilterState(data, state),
     panelEl:    document.getElementById('filtrosPanelBody'),
+  });
+});
+
+import('./miProyecto.js').then(({ getTiposState, applyTiposState }) => {
+  initTiposIO({
+    visorId:    'bodegas',
+    visorLabel: 'Bodegas',
+    getState:   getTiposState,
+    applyState: applyTiposState,
+    panelEl:    document.getElementById('mpPanelBody'),
   });
 });
 

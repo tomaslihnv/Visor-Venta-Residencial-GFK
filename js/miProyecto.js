@@ -151,6 +151,18 @@ function _renderTipos() {
   }
 }
 
+// ── Unidades tipo import/export ─────────────────────────────────────────────
+export function getTiposState() {
+  return { proyecto: mp.edificio, tipologias: mp.tipologias };
+}
+
+export function applyTiposState(tipologias) {
+  // Regenerar ids: evita colisiones con las tipologías ya cargadas en el panel.
+  mp.tipologias = (tipologias ?? []).map(t => ({ ...t, id: _nextId() }));
+  _renderTipos();
+  _save();
+}
+
 // ── Public init (called once after data loads) ─────────────────────────────
 export function initMpPanel() {
   if (_initialized) {
