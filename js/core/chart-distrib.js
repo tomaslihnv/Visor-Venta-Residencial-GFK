@@ -1013,14 +1013,29 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
 
   const _minV  = sortedVals[0];
   const _nBins = bins.length;
+  // Genera ticks alineados a los bordes de barra (_minV + k*bw) pero cubriendo
+  // el rango REAL del eje (scale.min/max, ya resueltos con el override del
+  // usuario) — no solo [_minV, _minV + _nBins*bw]. Antes esto ignoraba
+  // distribXMin/Max: el primer tick era siempre _minV, y como bounds:'ticks'
+  // ajusta el rango visible a los ticks, el eje arrancaba ahí sin importar lo
+  // que el usuario pusiera, y el filtro de paso podía truncar el último tick
+  // antes del borde real, cortando visualmente el extremo derecho (incluida
+  // la marca de Mi Proyecto si su valor caía en esa zona recortada).
   const _histEdgeTicks = {
     id: 'histEdgeTicks',
     afterBuildTicks(chart, args) {
       if (args?.scale?.id !== 'x') return;
-      const step = Math.max(1, Math.ceil((_nBins + 1) / 12));
-      args.scale.ticks = Array.from({ length: _nBins + 1 }, (_, i) => ({
-        value: _minV + i * bw,
-      })).filter((_, i) => i % step === 0);
+      const scale = args.scale;
+      const lo = scale.min ?? _minV;
+      const hi = scale.max ?? (_minV + _nBins * bw);
+      const kStart = Math.floor((lo - _minV) / bw);
+      const kEnd   = Math.ceil((hi - _minV) / bw);
+      const allTicks = [];
+      for (let k = kStart; k <= kEnd; k++) allTicks.push(_minV + k * bw);
+      const step = Math.max(1, Math.ceil(allTicks.length / 12));
+      args.scale.ticks = allTicks
+        .filter((_, i) => i % step === 0 || i === allTicks.length - 1)
+        .map(value => ({ value }));
     },
   };
 
@@ -1049,12 +1064,12 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
         annotation: { annotations },
       },
       scales: {
-        x: { type: 'linear',
+        x: { type: 'linear', bounds: 'data',
           min: _parseAxisVal(_$('distribXMin')?.value) ?? x0,
           max: _parseAxisVal(_$('distribXMax')?.value) ?? x1,
           title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => _fmtVal(v), font: { size: fs } } },
-        y: { beginAtZero: true,
+        y: { beginAtZero: true, bounds: 'data',
           title: { display: true, text: '% de datos', font: { size: fs } },
           ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } },
           ...(_parseAxisVal(_$('distribYMin')?.value) !== null ? { min: _parseAxisVal(_$('distribYMin').value) } : {}),

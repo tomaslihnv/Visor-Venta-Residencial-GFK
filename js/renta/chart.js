@@ -1563,15 +1563,21 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
   };
 
   const _minVR  = sortedVals[0];
-  const _nBinsR = bins.length;
   const _histEdgeTicksR = {
     id: 'histEdgeTicks',
     afterBuildTicks(chart, args) {
       if (args?.scale?.id !== 'x') return;
-      const step = Math.max(1, Math.ceil((_nBinsR + 1) / 12));
-      args.scale.ticks = Array.from({ length: _nBinsR + 1 }, (_, i) => ({
-        value: _minVR + i * bw,
-      })).filter((_, i) => i % step === 0);
+      const scale = args.scale;
+      const lo = scale.min ?? _minVR;
+      const hi = scale.max ?? (_minVR + bins.length * bw);
+      const kStart = Math.floor((lo - _minVR) / bw);
+      const kEnd   = Math.ceil((hi - _minVR) / bw);
+      const allTicks = [];
+      for (let k = kStart; k <= kEnd; k++) allTicks.push(_minVR + k * bw);
+      const step = Math.max(1, Math.ceil(allTicks.length / 12));
+      args.scale.ticks = allTicks
+        .filter((_, i) => i % step === 0 || i === allTicks.length - 1)
+        .map(value => ({ value }));
     },
   };
 
@@ -1591,12 +1597,12 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
         annotation: { annotations },
       },
       scales: {
-        x: { type: 'linear',
+        x: { type: 'linear', bounds: 'data',
           min: _parseAxisVal($('#distribXMin')?.value) ?? x0,
           max: _parseAxisVal($('#distribXMax')?.value) ?? x1,
           title: { display: true, text: col, font: { size: fs } },
           ticks: { callback: v => fmtVal(v), font: { size: fs } } },
-        y: { beginAtZero: true,
+        y: { beginAtZero: true, bounds: 'data',
           title: { display: true, text: '% de datos', font: { size: fs } },
           ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } },
           ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
