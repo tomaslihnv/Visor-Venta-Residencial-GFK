@@ -1,0 +1,48 @@
+name: Sync MF Star Ratings
+
+# Copia data/metrics.json desde el repo privado JosepVargasf/MF-Star-Scrapper
+# (que corre su propio scraper mensual) hacia data/multifamily/estrellas/,
+# para que el visor Multifamily de este repo siempre lea el rating actualizado
+# sin depender de una copia manual.
+#
+# Requiere el secret SCRAPER_SOURCE_PAT: un Personal Access Token (fine-grained,
+# solo "Contents: Read-only") con acceso al repo JosepVargasf/MF-Star-Scrapper.
+
+on:
+  schedule:
+    - cron: "0 8 1 * *"   # Día 1 de cada mes, 08:00 UTC (2h después del scraper origen)
+  workflow_dispatch:        # Permite ejecución manual desde GitHub UI
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Develop
+        uses: actions/checkout@v4
+        with:
+          ref: Develop
+
+      - name: Descargar metrics.json del scraper
+        env:
+          GH_TOKEN: ${{ secrets.SCRAPER_SOURCE_PAT }}
+        run: |
+          gh api repos/JosepVargasf/MF-Star-Scrapper/contents/data/metrics.json \
+            --jq '.content' | base64 -d > /tmp/metrics.json
+          python3 -m json.tool /tmp/metrics.json > /dev/null  # valida que sea JSON bien formado
+
+      - name: Actualizar y commitear si cambió
+        run: |
+          mkdir -p data/multifamily/estrellas
+          if ! diff -q /tmp/metrics.json data/multifamily/estrellas/metrics.json > /dev/null 2>&1; then
+            cp /tmp/metrics.json data/multifamily/estrellas/metrics.json
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add data/multifamily/estrellas/metrics.json
+            git commit -m "data: sincroniza ratings Multifamily desde MF-Star-Scrapper $(date +'%Y-%m')"
+            git push origin Develop
+          else
+            echo "Sin cambios en metrics.json — nada que commitear."
+          fi
