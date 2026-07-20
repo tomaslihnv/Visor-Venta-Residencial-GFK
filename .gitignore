@@ -35,3 +35,6 @@ memory/
 # graphify (grafo de conocimiento generado, no versionar)
 graphify-out/
 
+# Archivos temporales de testeo
+test.json
+restaurantes.json
