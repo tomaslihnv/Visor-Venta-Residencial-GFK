@@ -302,7 +302,7 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
 
 // ── Guardar JSON (para data/multifamily/) ──────────────────────────────────
 $('#saveJsonBtn')?.addEventListener('click', () => {
-  if (!state.raw.length) { alert('Cargá un Excel primero.'); return; }
+  if (!state.raw.length) { alert('Carga un Excel primero.'); return; }
   const name = prompt('Nombre del archivo (sin extensión):', CSV_FILENAME);
   if (!name) return;
   const safeName = name.trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
