@@ -75,6 +75,12 @@ function _esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function _fmtTicket(tipo) {
+  if (tipo.sup == null || tipo.ufm2 == null) return '—';
+  const ticket = tipo.sup * tipo.ufm2;
+  return `${ticket.toLocaleString('es-CL', { maximumFractionDigits: 0 })} UF`;
+}
+
 function _renderTipos() {
   const container = $('#mpTiposContainer');
   if (!container) return;
@@ -111,6 +117,10 @@ function _renderTipos() {
           <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
             data-id="${tipo.id}" data-metric="ufm2" value="${tipo.ufm2 ?? ''}" />
         </label>
+        <div class="mp-metric-row">
+          <span>Ticket UF</span>
+          <span class="mp-metric-computed" data-ticket-id="${tipo.id}">${_fmtTicket(tipo)}</span>
+        </div>
       </div>`;
 
     card.querySelector('.mp-tipo-name').addEventListener('change', e => {
@@ -131,6 +141,8 @@ function _renderTipos() {
           const v = e.target.value.trim();
           t[e.target.dataset.metric] = v === '' ? null : Number(v);
           _save();
+          const ticketEl = card.querySelector(`[data-ticket-id="${tipo.id}"]`);
+          if (ticketEl) ticketEl.textContent = _fmtTicket(t);
         }
       });
     });
