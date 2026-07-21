@@ -81,7 +81,12 @@ let polygon       = null;
 let snapMarker    = null; // indicador visual de "puedes cerrar aquí"
 
 // ── Inicializar mapa ──────────────────────────────────────────────────────
-const map = L.map('barrioMap', { doubleClickZoom: false }).setView([-33.45, -70.65], 13);
+const map = L.map('barrioMap', {
+  doubleClickZoom:     false,
+  zoomSnap:             0.1,
+  zoomDelta:            0.1,
+  wheelPxPerZoomLevel:  400,
+}).setView([-33.45, -70.65], 13);
 
 _setBasemap('streets');
 

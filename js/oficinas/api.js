@@ -52,28 +52,34 @@ function _gridPartition(polygon) {
 export function flattenEntities(entities) {
   return entities.flatMap(entity => {
     const loc    = entity.location ?? {};
-    const period = entity.periods?.[entity.periods.length - 1];
-    if (!period) return [];
+    const period = entity.periods?.[entity.periods.length - 1]; // Toma el último período (ej. Q2 2026)
 
     const lat = loc.lat ?? null, lng = loc.lng ?? null;
-    const base = {
-      'Nombre':    entity.name      ?? entity.id ?? '',
-      'Corredor':  entity.owner     ?? entity.developer ?? '',
-      'Comuna':    loc.commune      ?? loc.comuna ?? '',
-      'Operación': 'Arriendo',
-      'Tipo':      'Oficina',
-    };
-    if (lat != null && lng != null) { base['__lat'] = Number(lat); base['__lng'] = Number(lng); }
+    
+    // Si la entidad no tiene coordenadas, la descartamos
+    if (lat == null || lng == null) return [];
 
-    const stages = period.stages ?? [];
-    return stages.flatMap(stage =>
-      (stage.programs ?? []).map(prog => ({
-        ...base,
-        'Precio UF': _num(prog.priceUF ?? prog.rentUF),
-        'UF/m²':     _num(prog.ufPerM2 ?? prog.priceUfPerM2 ?? prog.rentUfPerM2),
-        'Útil (m²)': _num(prog.avgUsefulM2 ?? prog.sellableM2 ?? prog.usefulM2),
-      })).filter(r => r['Precio UF'] != null && r['Precio UF'] > 0)
-    );
+    const usableM2 = _num(entity.usableM2 ?? entity.characteristics?.usableM2);
+    // En oficinas el precio viene en el período o se infiere de la estructura
+    const rentUF   = _num(period?.rentUF ?? period?.priceUF);
+    const ufPerM2  = _num(period?.ufPerM2 ?? period?.rentUfPerM2) ?? 
+                     (rentUF && usableM2 ? Number((rentUF / usableM2).toFixed(2)) : null);
+
+    const row = {
+      'Nombre':     entity.name ?? entity.address ?? String(entity.id ?? ''),
+      'Corredor':   entity.corridor ?? entity.owner ?? '',
+      'Comuna':     loc.commune ?? loc.comuna ?? '',
+      'Operación':  'Arriendo',
+      'Tipo':       'Oficina',
+      'Clase':      entity.class ?? '',
+      'Útil (m²)':  usableM2,
+      'Precio UF':  rentUF,
+      'UF/m²':      ufPerM2,
+      '__lat':      Number(lat),
+      '__lng':      Number(lng),
+    };
+
+    return [row];
   });
 }
 
