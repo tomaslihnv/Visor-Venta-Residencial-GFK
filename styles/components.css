@@ -433,12 +433,32 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .pct-tag   { background: #f3f4f6; color: #374151; }
 .price-tag { background: #f3f4f6; color: #374151; }
+.marker-add input[type="color"],
+.marker-tag input[type="color"] {
+  -webkit-appearance: none; appearance: none;
+  border: 1px solid #d1d5db; border-radius: 4px;
+  padding: 0; cursor: pointer; background: none;
+}
+.marker-add input[type="color"] { width: 26px; height: 26px; }
+.marker-tag input[type="color"] { width: 14px; height: 14px; border-radius: 3px; border: none; }
+.marker-add input[type="color"]::-webkit-color-swatch-wrapper,
+.marker-tag input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.marker-add input[type="color"]::-webkit-color-swatch,
+.marker-tag input[type="color"]::-webkit-color-swatch { border: none; border-radius: inherit; }
 
 /* ── Layout distribución ── */
 .distrib-controls { align-items: flex-end; }
 .distrib-controls .distrib-marker-group { min-width: unset; }
 .distrib-controls .marker-add input[type="number"] { flex: 1; width: 0; min-width: 90px; }
 .distrib-tags-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex: 1; padding-bottom: 2px; }
+.distrib-color-ctrl { min-width: unset; display: flex; flex-direction: column; gap: 4px; }
+.distrib-color-ctrl input[type="color"] {
+  -webkit-appearance: none; appearance: none;
+  width: 32px; height: 26px; padding: 0; cursor: pointer;
+  border: 1px solid #d1d5db; border-radius: 5px; background: none;
+}
+.distrib-color-ctrl input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.distrib-color-ctrl input[type="color"]::-webkit-color-swatch { border: none; border-radius: inherit; }
 .distrib-font-ctrl { min-width: unset; }
 .distrib-font-row { display: flex; align-items: center; gap: 6px; padding-bottom: 2px; }
 .distrib-font-row input[type="range"] { width: 80px; cursor: pointer; }
@@ -1209,3 +1229,103 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .area-btn.primary:hover:not(:disabled) { background: #1e293b; }
 .area-btn.cancel { color: #94a3b8; border-color: transparent; background: transparent; }
 .area-btn.cancel:hover:not(:disabled) { background: #f1f5f9; color: #374151; }
+
+/* ── Panel "Por comuna" / formulario de consultas recurrentes ────────────── */
+#comunaQueryContainer { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.comuna-query-panel {
+  display: flex; flex-direction: column; gap: 14px;
+  width: min(420px, 90%); padding: 28px 32px;
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.05);
+}
+.comuna-query-title { font-size: 15px; font-weight: 600; color: #1e293b; }
+.comuna-query-row { display: flex; gap: 8px; align-items: center; }
+.comuna-query-row select { flex: 1; padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 13px; color: #374151; }
+
+/* ── Consultas recurrentes (Multifamily) ──────────────────────────────────── */
+#recurringQueriesContainer {
+  width: 100%; height: 100%; overflow-y: auto;
+  padding: 28px 32px; box-sizing: border-box; background: #f8fafc;
+}
+.rq-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.rq-header h2 { margin: 0; font-size: 18px; color: #1e3a5f; }
+.rq-header-actions { display: flex; gap: 10px; }
+.rq-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.rq-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 16px; display: flex; flex-direction: column; gap: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.rq-card-type {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: #3b82f6; background: #eff6ff; border-radius: 4px;
+  padding: 2px 6px; width: fit-content;
+}
+.rq-card h3 { margin: 0; font-size: 14px; color: #1e293b; }
+.rq-card-meta { margin: 0; font-size: 11.5px; color: #64748b; }
+.rq-card-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.rq-card-actions .area-btn { padding: 5px 10px; font-size: 11.5px; }
+.rq-card-add {
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px dashed #cbd5e1; border-radius: 10px;
+  color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer;
+  min-height: 110px; background: transparent;
+}
+.rq-card-add:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+/* ── Loader "consultando Inciti" — skyline con radar de búsqueda ──────────── */
+.rq-loading-overlay {
+  position: fixed; inset: 0; z-index: 3000;
+  background: rgba(248,250,252,0.97);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+}
+.rq-loading-scene { position: relative; width: 240px; height: 130px; }
+.rq-skyline {
+  position: absolute; bottom: 0; left: 0; right: 0; top: 10px;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 7px;
+}
+.rq-skyline span {
+  flex: 1; border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, #60a5fa, #1e3a5f);
+  animation: rq-bar-bounce 1.3s ease-in-out infinite;
+  transform-origin: bottom;
+}
+.rq-skyline span:nth-child(1) { height: 38%; animation-delay: 0s; }
+.rq-skyline span:nth-child(2) { height: 62%; animation-delay: 0.1s; }
+.rq-skyline span:nth-child(3) { height: 48%; animation-delay: 0.2s; }
+.rq-skyline span:nth-child(4) { height: 82%; animation-delay: 0.3s; }
+.rq-skyline span:nth-child(5) { height: 54%; animation-delay: 0.4s; }
+.rq-skyline span:nth-child(6) { height: 68%; animation-delay: 0.5s; }
+.rq-skyline span:nth-child(7) { height: 42%; animation-delay: 0.6s; }
+@keyframes rq-bar-bounce {
+  0%, 100% { transform: scaleY(1); opacity: 0.85; }
+  50%      { transform: scaleY(1.14); opacity: 1; }
+}
+.rq-scanline {
+  position: absolute; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, transparent, #22c55e 30%, #22c55e 70%, transparent);
+  box-shadow: 0 0 14px 2px rgba(34,197,94,0.55);
+  animation: rq-scan 2s ease-in-out infinite;
+}
+@keyframes rq-scan {
+  0%, 100% { left: 0; }
+  50%      { left: calc(100% - 3px); }
+}
+.rq-pin {
+  position: absolute; top: -4px; left: 0; font-size: 22px;
+  animation: rq-pin-move 2s ease-in-out infinite;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.2));
+}
+@keyframes rq-pin-move {
+  0%, 100% { left: 0; transform: translateY(0) rotate(-8deg); }
+  25%      { transform: translateY(-6px) rotate(6deg); }
+  50%      { left: calc(100% - 22px); transform: translateY(0) rotate(-8deg); }
+  75%      { transform: translateY(-6px) rotate(6deg); }
+}
+.rq-loading-text { font-size: 13px; color: #475569; font-weight: 600; text-align: center; max-width: 320px; }

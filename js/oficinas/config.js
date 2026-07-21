@@ -30,12 +30,19 @@ export const COLUMN_MAP = {
 
 // ── Filtros ────────────────────────────────────────────────────────────────
 export const FILTERS = [
-  { key: 'comuna',    candidates: ['comuna'],                label: 'Comuna',      type: 'multi' },
-  { key: 'tipo',      candidates: ['tipo'],                  label: 'Tipo',        type: 'multi' },
-  { key: 'corredor',  candidates: ['corredor'],              label: 'Corredor',    type: 'multi' },
-  { key: 'precio',    candidates: ['precio uf', 'precio (uf'], label: 'Precio UF', type: 'slider', step: 1 },
-  { key: 'ufm2',      candidates: ['uf/m', 'precio por m'],  label: 'UF/m²',      type: 'slider', step: 0.01 },
-  { key: 'util',      candidates: ['util (m', 'útil (m'],   label: 'Útil (m²)',  type: 'slider', step: 1 },
+  { key: 'comuna',       candidates: ['comuna'],                  label: 'Comuna',              type: 'multi' },
+  { key: 'tipo',         candidates: ['tipo'],                    label: 'Tipo',                 type: 'multi' },
+  { key: 'submercado',   candidates: ['submercado'],              label: 'Submercado',          type: 'multi' },
+  { key: 'propietario',  candidates: ['propietario'],             label: 'Propietario',         type: 'multi' },
+  { key: 'clase',        candidates: ['clase'],                   label: 'Clase',                type: 'multi' },
+  { key: 'precio',       candidates: ['precio uf', 'precio (uf'], label: 'Precio UF',            type: 'slider', step: 1 },
+  { key: 'ufm2',         candidates: ['uf/m', 'precio por m'],    label: 'UF/m²',                type: 'slider', step: 0.01 },
+  { key: 'util',         candidates: ['util (m', 'útil (m'],      label: 'Útil (m²)',            type: 'slider', step: 1 },
+  { key: 'pisos',        candidates: ['pisos'],                   label: 'Pisos',                type: 'slider', step: 1 },
+  { key: 'antiguedad',   candidates: ['antiguedad'],              label: 'Antigüedad (años)',   type: 'slider', step: 1 },
+  { key: 'leed',         candidates: ['certificacion leed', 'leed'], label: 'Certificación LEED', type: 'multi' },
+  { key: 'multiprop',    candidates: ['multipropietario'],        label: 'Multipropietario',    type: 'multi' },
+  { key: 'corporativo',  candidates: ['corporativo'],             label: 'Corporativo',         type: 'multi' },
 ];
 
 // ── KPIs ───────────────────────────────────────────────────────────────────
@@ -46,7 +53,7 @@ export const KPIS = [
   { label: 'Útil (m²) prom.', col: 'Útil (m²)', agg: 'avg',    fmt: 'uf1' },
 ];
 
-// ── Gráfico Proyectos (por Corredor) ───────────────────────────────────────
+// ── Gráfico Proyectos (agrupable por submercado / propietario / edificio) ──
 export const PROYECTOS_METRICS = [
   {
     id: 'precio', label: 'Precio UF prom.', col: 'Precio UF', agg: 'avg',
@@ -111,7 +118,7 @@ export const SVP = {
       formatAvg:   v => `Prom.: ${v.toLocaleString('es-CL')} m²`,
     },
   ],
-  groupCandidates: ['tipo', 'corredor'],
+  groupCandidates: ['tipo', 'submercado'],
   projCandidates:  ['nombre'],
   getMpY: (t, mode) => {
     if (mode === 'ufm2')   return t.ufm2  ?? null;
@@ -143,20 +150,21 @@ export const MAP = {
     { value: 'precio', label: 'Precio UF', candidates: ['precio uf', 'precio (uf'] },
   ],
   popupFields: [
-    { label: 'Nombre',     keys: ['nombre'] },
-    { label: 'Comuna',     keys: ['comuna'] },
-    { label: 'Tipo',       keys: ['tipo'] },
-    { label: 'Precio UF',  keys: ['precio uf'] },
-    { label: 'UF/m²',      keys: ['uf/m'] },
-    { label: 'Útil (m²)',  keys: ['util'] },
-    { label: 'Piso',       keys: ['piso'] },
-    { label: 'Corredor',   keys: ['corredor'] },
+    { label: 'Nombre',       keys: ['nombre'] },
+    { label: 'Comuna',       keys: ['comuna'] },
+    { label: 'Tipo',         keys: ['tipo'] },
+    { label: 'Precio UF',    keys: ['precio uf'] },
+    { label: 'UF/m²',        keys: ['uf/m'] },
+    { label: 'Útil (m²)',    keys: ['util'] },
+    { label: 'Piso',         keys: ['piso'] },
+    { label: 'Submercado',   keys: ['submercado'] },
+    { label: 'Propietario',  keys: ['propietario'] },
   ],
 };
 
-// ── Tabla Comparativa (por Corredor) ───────────────────────────────────────
+// ── Tabla Comparativa (por Submercado) ──────────────────────────────────────
 export const COMPARATIVA = {
-  projectCandidates: ['corredor'],
+  projectCandidates: ['submercado'],
   infoColumns: [],
   metricColumns: [
     { label: 'Ofertas',     candidates: ['nombre'],                   fmt: 'int', agg: 'count' },

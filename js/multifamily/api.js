@@ -128,6 +128,67 @@ export function flattenEntities(entities) {
   });
 }
 
+// ── Histórico: a diferencia de flattenEntities (que solo toma el último
+// período), esta conserva TODOS los períodos de entity.periods — es la
+// serie trimestral completa que ya trae Inciti por proyecto, y con esto el
+// tab Histórico se arma sobre la consulta actual en vez de snapshots JSON
+// guardados aparte. Misma forma de fila que los JSON históricos previos
+// (Proyecto, Período Key, Programa, etc.) para no tocar historico.js.
+function _flattenProjectHistorico(entity) {
+  const rows = [];
+  const loc  = entity.location ?? {};
+  const base = {
+    'Proyecto':      entity.name          ?? entity.id ?? '',
+    'Propietario':   entity.owner         ?? '',
+    'Administrador': entity.administrator ?? '',
+    'Comuna':        loc.commune          ?? loc.comuna ?? '',
+  };
+  const lat = loc.lat ?? null;
+  const lng = loc.lng ?? null;
+  if (lat != null && lng != null) {
+    base['__lat'] = Number(lat);
+    base['__lng'] = Number(lng);
+  }
+
+  for (const period of (entity.periods ?? [])) {
+    const periodBase = {
+      ...base,
+      'Período':     period.label ?? period.key ?? '',
+      'Período Key': period.key   ?? '',
+      'Año':         period.year  ?? null,
+      'Trimestre':   period.n     ?? null,
+    };
+    for (const prog of (period.programs ?? [])) {
+      const vac    = _num(prog.vacancy);
+      const vacPct = vac != null ? Math.round(vac * 100 * 10) / 10 : null;
+      rows.push({
+        ...periodBase,
+        'Programa':       prog.program ?? '',
+        'Stock':          _num(prog.stock),
+        'Disponibilidad': _num(prog.available),
+        'Vacancia (%)':   vacPct,
+        'Ocupación (%)':  vacPct != null ? Math.round((100 - vacPct) * 10) / 10 : null,
+        'Útil (m²)':      _num(prog.usefulM2),
+        'Arriendo UF':    _num(prog.rentUF),
+        'UF/m²':          _num(prog.rentUfPerM2),
+        'Estado Prog.':   prog.status ?? '',
+      });
+    }
+  }
+  return rows;
+}
+
+// A diferencia de flattenEntities, NO filtramos por Arriendo UF > 0 acá:
+// un programa con 0 disponibilidad ese trimestre (nada arrendándose) reporta
+// rentUF=0, y si se descarta la fila completa se pierde también su aporte
+// al Stock — haciendo que el stock total "fluctúe" sin que el edificio haya
+// perdido unidades. Historico necesita el Stock/Disponibilidad de TODAS las
+// filas; el promedio de Arriendo UF excluye los ceros por su cuenta (ver
+// _avgPositive en historico.js).
+export function flattenEntitiesHistorico(entities) {
+  return entities.flatMap(_flattenProjectHistorico);
+}
+
 function _pointInPolygon(lat, lng, poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {

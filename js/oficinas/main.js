@@ -3,9 +3,10 @@ import { resetFilters } from '../core/filters.js';
 import { exportCsv } from '../core/export.js';
 import { initFilterIO } from '../core/filter-io.js';
 import { initTiposIO } from '../core/tipos-io.js';
-import { state, FILTERS, KPIS, MAP, PROYECTOS_METRICS, SVP, DISTRIB_COLS, COMPARATIVA, CSV_FILENAME, onDataLoaded } from './data.js';
+import { state, FILTERS, KPIS, MAP, PROYECTOS_METRICS, SVP, DISTRIB_COLS, COMPARATIVA, CSV_FILENAME, PROY_GROUP, onDataLoaded } from './data.js';
 import { mp, initMpPanel } from './miProyecto.js';
 import { queryArea, flattenEntities, calcAreaKm2 } from './api.js';
+import * as RQ from './recurringQueries.js';
 
 // Mostrar Mi Proyecto siempre, sin esperar datos
 initMpPanel();
@@ -46,7 +47,7 @@ $('#resetBtn')?.addEventListener('click', async () => {
     renderTable(_state, { hiddenCols: ['__lat', '__lng'] });
     const tab = document.querySelector('.tab.active')?.dataset.tab;
     if (tab === 'mapa')         renderMap(_state, MAP, mp);
-    if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, null, { projectCandidates: ['corredor'] });
+    if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, null, PROY_GROUP);
     if (tab === 'svp')          renderSvp(_state, SVP, mp);
     if (tab === 'distribucion') renderDistrib(_state, DISTRIB_COLS, mp);
     if (tab === 'comparativa')  renderComparativa(_state, COMPARATIVA, null);
@@ -69,11 +70,26 @@ $$('.tab').forEach(tab => {
 
     const t = tab.dataset.tab;
     if (t === 'mapa')         of.renderMap(state, MAP, mp);
-    if (t === 'proyectos')    of.renderProyectos(state, PROYECTOS_METRICS, null, { projectCandidates: ['corredor'] });
+    if (t === 'proyectos')    of.renderProyectos(state, PROYECTOS_METRICS, null, PROY_GROUP);
     if (t === 'svp')          of.renderSvp(state, SVP, mp);
     if (t === 'distribucion') of.renderDistrib(state, DISTRIB_COLS, mp);
     if (t === 'comparativa')  of.renderComparativa(state, COMPARATIVA, null);
   });
+});
+
+// ── Agrupar por (tab Proyectos) ─────────────────────────────────────────────
+const PROY_GROUPBY_CANDIDATES = {
+  submercado:  ['submercado'],
+  propietario: ['propietario'],
+  edificio:    ['nombre'],
+};
+document.getElementById('proyGroupBy')?.addEventListener('change', e => {
+  PROY_GROUP.projectCandidates = PROY_GROUPBY_CANDIDATES[e.target.value] ?? ['submercado'];
+  if (!state.filtered.length) return;
+  const of = window._of;
+  if (of && document.querySelector('.tab.active')?.dataset.tab === 'proyectos') {
+    of.renderProyectos(state, PROYECTOS_METRICS, null, PROY_GROUP);
+  }
 });
 
 // ── Visual options toggle panels ──────────────────────────────────────────
@@ -135,10 +151,21 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
   let areaMap = null, drawState = 'idle', vertices = [], currentRawEntities = [], lastScreen = 'dropzone';
   let vertexMarkers = [], edgePolyline = null, rubberLine = null, areaPoly = null;
 
+  // Consultas recurrentes: id de la consulta activa (si el flujo actual vino
+  // de un bloque de "Consultas Recurrentes"), y si estamos dibujando un
+  // polígono para guardarlo en una consulta (nueva o edición) en vez de
+  // solo para una consulta puntual.
+  let activeRQId  = null;
+  let drawForRQId = null; // id de la consulta cuyo polígono se está (re)dibujando
+
   const dropzone         = document.getElementById('dropzone');
   const drawContainer    = document.getElementById('areaDrawContainer');
   const previewContainer = document.getElementById('incitiPreview');
   const comunaContainer  = document.getElementById('comunaQueryContainer');
+  const rqContainer      = document.getElementById('recurringQueriesContainer');
+  const rqFormOverlay    = document.getElementById('rqFormOverlay');
+  const rqLoadingOverlay = document.getElementById('rqLoadingOverlay');
+  const rqLoadingStatus  = document.getElementById('rqLoadingStatus');
   const dashboard        = document.getElementById('dashboard');
   const statusEl         = document.getElementById('areaDrawStatus');
   const btnDraw          = document.getElementById('areaBtnDraw');
@@ -158,11 +185,21 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
     });
   }
 
+  function _showRQLoading(msg) {
+    rqLoadingOverlay?.classList.remove('hidden');
+    if (rqLoadingStatus) rqLoadingStatus.textContent = msg;
+  }
+  function _hideRQLoading() {
+    rqLoadingOverlay?.classList.add('hidden');
+  }
+
   function _showScreen(screen) {
-    [dropzone, drawContainer, previewContainer, dashboard].forEach(el => el?.classList.add('hidden'));
+    [dropzone, drawContainer, previewContainer, dashboard, rqContainer].forEach(el => el?.classList.add('hidden'));
     comunaContainer?.classList.add('hidden');
+    _hideRQLoading();
     if (screen === 'dropzone')  dropzone?.classList.remove('hidden');
     if (screen === 'dashboard') dashboard?.classList.remove('hidden');
+    if (screen === 'recurring') { rqContainer?.classList.remove('hidden'); _renderRecurringQueries(); }
     if (screen === 'draw') {
       drawContainer?.classList.remove('hidden');
       _initMapIfNeeded();
@@ -179,9 +216,13 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
   }
 
   function _setStatus(text, type = '') {
-    if (!statusEl) return;
-    statusEl.className = `area-draw-status${type ? ' ' + type : ''}`;
-    statusEl.innerHTML = text;
+    if (statusEl) {
+      statusEl.className = `area-draw-status${type ? ' ' + type : ''}`;
+      statusEl.innerHTML = text;
+    }
+    if (rqLoadingStatus && !rqLoadingOverlay?.classList.contains('hidden')) {
+      rqLoadingStatus.textContent = text.replace(/<[^>]+>/g, '');
+    }
   }
 
   function _setState(next) {
@@ -261,21 +302,38 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
   }
 
   async function _runQuery(polygonInciti) {
+    const wasRQFlow = !!(activeRQId || drawForRQId);
     _setStatus('Procesando área de consulta...', 'loading');
+    // Si este polígono se dibujó para guardarlo en una consulta recurrente
+    // (nueva o "redibujar área"), lo persistimos antes de consultar Inciti,
+    // para no perderlo si la consulta falla.
+    if (drawForRQId) {
+      RQ.updateQuery(drawForRQId, { polygon: polygonInciti });
+      activeRQId  = drawForRQId;
+      drawForRQId = null;
+    }
     try {
       const entities = await queryArea({ polygons: [polygonInciti], onProgress: msg => _setStatus(msg, 'loading') });
       currentRawEntities = entities;
-      _buildPreviewPanel(entities);
+      const rq = activeRQId ? RQ.getQuery(activeRQId) : null;
+      _buildPreviewPanel(entities, rq?.rememberedSelection ?? null);
       _showScreen('preview');
     } catch (err) {
       console.error('[Inciti/oficinas] Error:', err);
-      _setStatus(`Error: ${err.message}`, 'error');
-      if (btnQuery)      btnQuery.disabled      = false;
-      if (comunaBtnQuery) comunaBtnQuery.disabled = false;
+      if (wasRQFlow) {
+        _hideRQLoading();
+        alert(`Error consultando Inciti: ${err.message}`);
+        activeRQId = null; drawForRQId = null;
+        _showScreen('recurring');
+      } else {
+        _setStatus(`Error: ${err.message}`, 'error');
+        if (btnQuery)      btnQuery.disabled      = false;
+        if (comunaBtnQuery) comunaBtnQuery.disabled = false;
+      }
     }
   }
 
-  function _buildPreviewPanel(entities) {
+  function _buildPreviewPanel(entities, preselectedKeys = null) {
     const txtCount = document.getElementById('previewCountText');
     if (txtCount) txtCount.textContent = `Inciti encontró ${entities.length} proyecto${entities.length !== 1 ? 's' : ''} de oficinas`;
 
@@ -284,14 +342,18 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
     const fOwner   = document.getElementById('prevFilterOwner');
 
     const communes = [...new Set(entities.map(e => e.location?.commune || e.location?.comuna || ''))].filter(Boolean).sort();
-    const owners   = [...new Set(entities.map(e => e.corridor || e.owner || ''))].filter(Boolean).sort();
+    const submercados = [...new Set(entities.map(e => e.corridor || ''))].filter(Boolean).sort();
 
     if (fCommune) fCommune.innerHTML = '<option value="">Todas las comunas</option>' + communes.map(c => `<option value="${c}">${c}</option>`).join('');
-    if (fOwner)   fOwner.innerHTML   = '<option value="">Todos los corredores</option>' + owners.map(o => `<option value="${o}">${o}</option>`).join('');
+    if (fOwner)   fOwner.innerHTML   = '<option value="">Todos los submercados</option>' + submercados.map(o => `<option value="${o}">${o}</option>`).join('');
     if (fName)    fName.value = '';
 
+    const rememberedSet = preselectedKeys ? new Set(preselectedKeys) : null;
     const selectionMap = new Map();
-    entities.forEach(e => selectionMap.set(String(e.id || e.name), true));
+    entities.forEach(e => {
+      const key = String(e.id || e.name);
+      selectionMap.set(key, rememberedSet ? rememberedSet.has(key) : true);
+    });
 
     function _renderTableRows() {
       const tbody   = document.getElementById('previewTableBody');
@@ -302,7 +364,7 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
       const filtered = entities.filter(e => {
         const cName = (e.name || '').toLowerCase().includes(nameVal);
         const cComm = !commVal || (e.location?.commune || e.location?.comuna || '') === commVal;
-        const cOwn  = !ownVal  || (e.corridor || e.owner || '') === ownVal;
+        const cOwn  = !ownVal  || (e.corridor || '') === ownVal;
         return cName && cComm && cOwn;
       });
       tbody.innerHTML = filtered.map(e => {
@@ -312,7 +374,7 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
           <td><input type="checkbox" class="prev-item-check" data-id="${key}" ${chk} /></td>
           <td><strong>${e.name || 'Sin nombre'}</strong></td>
           <td>${e.location?.commune || e.location?.comuna || '—'}</td>
-          <td>${e.corridor || e.owner || '—'}</td>
+          <td>${e.corridor || '—'}</td>
         </tr>`;
       }).join('');
       tbody.querySelectorAll('.prev-item-check').forEach(chk => {
@@ -324,7 +386,7 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
 
     const selectAll = document.getElementById('prevSelectAll');
     if (selectAll) {
-      selectAll.checked = true;
+      selectAll.checked = [...selectionMap.values()].every(Boolean);
       selectAll.addEventListener('change', () => {
         document.querySelectorAll('.prev-item-check').forEach(chk => {
           chk.checked = selectAll.checked;
@@ -348,6 +410,15 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
         }
         const fileNameEl = document.getElementById('fileName');
         if (fileNameEl) fileNameEl.textContent = `Inciti · ${selected.length} oficinas (${rows.length} registros)`;
+
+        // Si el flujo vino de una consulta recurrente, recordar qué quedó
+        // marcado esta vez para preseleccionarlo la próxima (modificable).
+        if (activeRQId) {
+          const checkedKeys = [...selectionMap.entries()].filter(([, v]) => v).map(([k]) => k);
+          RQ.updateQuery(activeRQId, { rememberedSelection: checkedKeys, lastRunAt: new Date().toISOString() });
+          activeRQId = null;
+        }
+
         _showScreen('dashboard');
         _clearAll();
         onDataLoaded(rows);
@@ -355,10 +426,17 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
     }
   }
 
-  document.getElementById('btnAreaQuery')?.addEventListener('click',  () => { lastScreen = 'draw';   _showScreen('draw');   });
-  document.getElementById('btnComunaQuery')?.addEventListener('click', () => { lastScreen = 'comuna'; _showScreen('comuna'); });
-  btnCancel?.addEventListener('click',           () => _showScreen('dropzone'));
-  document.getElementById('previewBtnCancel')?.addEventListener('click', () => _showScreen(lastScreen));
+  document.getElementById('btnAreaQuery')?.addEventListener('click',  () => { activeRQId = null; drawForRQId = null; lastScreen = 'draw';   _showScreen('draw');   });
+  document.getElementById('btnComunaQuery')?.addEventListener('click', () => { activeRQId = null; drawForRQId = null; lastScreen = 'comuna'; _showScreen('comuna'); });
+  btnCancel?.addEventListener('click', () => {
+    const target = (activeRQId || drawForRQId) ? 'recurring' : 'dropzone';
+    activeRQId = null; drawForRQId = null;
+    _showScreen(target);
+  });
+  document.getElementById('previewBtnCancel')?.addEventListener('click', () => {
+    activeRQId = null; drawForRQId = null;
+    _showScreen(lastScreen);
+  });
   btnDraw?.addEventListener('click',      () => { _clearAll(); _setState('drawing'); });
   btnClear?.addEventListener('click',     _clearAll);
   btnClosePoly?.addEventListener('click', _closePoly);
@@ -372,7 +450,42 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
   comunaSelect?.addEventListener('change', () => {
     if (comunaBtnQuery) comunaBtnQuery.disabled = !comunaSelect.value;
   });
-  comunaBtnCancel?.addEventListener('click', () => _showScreen('dropzone'));
+  comunaBtnCancel?.addEventListener('click', () => {
+    const target = activeRQId ? 'recurring' : 'dropzone';
+    activeRQId = null;
+    _showScreen(target);
+  });
+
+  async function _resolveComunaPolygon(comuna) {
+    const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Región+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=1`;
+    const res  = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+    if (!res.ok) throw new Error('No se pudo conectar con el servicio geográfico.');
+    const data = await res.json();
+    if (!data?.length || !data[0].geojson) throw new Error(`No se encontró el contorno de ${comuna}.`);
+    const geojson = data[0].geojson;
+    let rawCoords = [];
+    if (geojson.type === 'Polygon') {
+      rawCoords = geojson.coordinates[0];
+    } else if (geojson.type === 'MultiPolygon') {
+      let maxLen = 0;
+      geojson.coordinates.forEach(poly => { if (poly[0].length > maxLen) { maxLen = poly[0].length; rawCoords = poly[0]; } });
+    } else {
+      throw new Error('Formato geográfico no compatible.');
+    }
+    let polygon_inciti = rawCoords.map(coord => ({ lat: coord[1], lng: coord[0] }));
+    if (polygon_inciti.length > 0) {
+      const first = polygon_inciti[0], last = polygon_inciti[polygon_inciti.length - 1];
+      if (first.lat !== last.lat || first.lng !== last.lng) polygon_inciti.push({ ...first });
+    }
+    if (polygon_inciti.length > 80) {
+      const step = Math.ceil(polygon_inciti.length / 80);
+      const simplified = [];
+      for (let i = 0; i < polygon_inciti.length - 1; i += step) simplified.push(polygon_inciti[i]);
+      simplified.push(polygon_inciti[polygon_inciti.length - 1]);
+      polygon_inciti = simplified;
+    }
+    return polygon_inciti;
+  }
 
   comunaBtnQuery?.addEventListener('click', async () => {
     const comuna = comunaSelect.value;
@@ -380,33 +493,7 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
     comunaBtnQuery.disabled = true;
     _setStatus(`Buscando límites geográficos de ${comuna}…`, 'loading');
     try {
-      const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Región+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=1`;
-      const res  = await fetch(url, { headers: { 'Accept-Language': 'es' } });
-      if (!res.ok) throw new Error('No se pudo conectar con el servicio geográfico.');
-      const data = await res.json();
-      if (!data?.length || !data[0].geojson) throw new Error(`No se encontró el contorno de ${comuna}.`);
-      const geojson = data[0].geojson;
-      let rawCoords = [];
-      if (geojson.type === 'Polygon') {
-        rawCoords = geojson.coordinates[0];
-      } else if (geojson.type === 'MultiPolygon') {
-        let maxLen = 0;
-        geojson.coordinates.forEach(poly => { if (poly[0].length > maxLen) { maxLen = poly[0].length; rawCoords = poly[0]; } });
-      } else {
-        throw new Error('Formato geográfico no compatible.');
-      }
-      let polygon_inciti = rawCoords.map(coord => ({ lat: coord[1], lng: coord[0] }));
-      if (polygon_inciti.length > 0) {
-        const first = polygon_inciti[0], last = polygon_inciti[polygon_inciti.length - 1];
-        if (first.lat !== last.lat || first.lng !== last.lng) polygon_inciti.push({ ...first });
-      }
-      if (polygon_inciti.length > 80) {
-        const step = Math.ceil(polygon_inciti.length / 80);
-        const simplified = [];
-        for (let i = 0; i < polygon_inciti.length - 1; i += step) simplified.push(polygon_inciti[i]);
-        simplified.push(polygon_inciti[polygon_inciti.length - 1]);
-        polygon_inciti = simplified;
-      }
+      const polygon_inciti = await _resolveComunaPolygon(comuna);
       _clearAll();
       vertices = polygon_inciti.map(v => [v.lat, v.lng]);
       areaPoly = L.polygon(vertices, STYLE_POLYGON).addTo(areaMap);
@@ -418,4 +505,166 @@ $('#exportCsvBtn')?.addEventListener('click', () => {
       comunaBtnQuery.disabled = false;
     }
   });
+
+  // ── Consultas Recurrentes ──────────────────────────────────────────────
+  async function _runComunaRQ(rq) {
+    activeRQId = rq.id;
+    _showRQLoading(`Buscando límites geográficos de ${rq.comuna}…`);
+    try {
+      const polygon_inciti = await _resolveComunaPolygon(rq.comuna);
+      await _runQuery(polygon_inciti);
+    } catch (err) {
+      console.error('[RQ Comuna] Error:', err);
+      _hideRQLoading();
+      alert(`Error consultando ${rq.comuna}: ${err.message}`);
+      activeRQId = null;
+      _showScreen('recurring');
+    }
+  }
+
+  function _runPolygonRQ(rq) {
+    if (rq.polygon?.length >= 3) {
+      activeRQId = rq.id;
+      _showRQLoading(`Consultando ${rq.label}…`);
+      _runQuery(rq.polygon);
+    } else {
+      drawForRQId = rq.id;
+      lastScreen = 'recurring';
+      _showScreen('draw');
+      _clearAll();
+      _setState('drawing');
+    }
+  }
+
+  function _fmtRQDate(iso) {
+    if (!iso) return 'Nunca consultada';
+    const d = new Date(iso);
+    return `Última consulta: ${d.toLocaleDateString('es-CL')}`;
+  }
+
+  function _renderRecurringQueries() {
+    const grid = document.getElementById('rqGrid');
+    if (!grid) return;
+    const queries = RQ.getQueries();
+    grid.innerHTML = queries.map(rq => {
+      const typeLabel = rq.type === 'comuna' ? 'Comuna' : 'Área propia';
+      const needsDraw = rq.type === 'polygon' && !(rq.polygon?.length >= 3);
+      const remembered = rq.rememberedSelection?.length
+        ? ` · ${rq.rememberedSelection.length} recordados`
+        : '';
+      return `
+        <div class="rq-card" data-id="${rq.id}">
+          <span class="rq-card-type">${typeLabel}</span>
+          <h3>${rq.label}</h3>
+          <p class="rq-card-meta">${_fmtRQDate(rq.lastRunAt)}${remembered}</p>
+          <div class="rq-card-actions">
+            <button type="button" class="area-btn primary rq-btn-run">${needsDraw ? 'Dibujar área' : 'Consultar'}</button>
+            ${rq.type === 'polygon' && !needsDraw ? '<button type="button" class="area-btn rq-btn-redraw">Redibujar área</button>' : ''}
+            <button type="button" class="area-btn rq-btn-edit">Editar</button>
+            <button type="button" class="area-btn cancel rq-btn-delete">Eliminar</button>
+          </div>
+        </div>
+      `;
+    }).join('') + `<button type="button" class="rq-card-add" id="rqAddCard">+ Nueva consulta</button>`;
+
+    grid.querySelectorAll('.rq-card').forEach(card => {
+      const id = card.dataset.id;
+      const rq = RQ.getQuery(id);
+      if (!rq) return;
+      card.querySelector('.rq-btn-run')?.addEventListener('click', () => {
+        if (rq.type === 'comuna') _runComunaRQ(rq);
+        else _runPolygonRQ(rq);
+      });
+      card.querySelector('.rq-btn-redraw')?.addEventListener('click', () => {
+        drawForRQId = rq.id;
+        lastScreen = 'recurring';
+        _showScreen('draw');
+        _clearAll();
+        _setState('drawing');
+      });
+      card.querySelector('.rq-btn-edit')?.addEventListener('click', () => _openRQForm(rq));
+      card.querySelector('.rq-btn-delete')?.addEventListener('click', () => {
+        if (!confirm(`¿Eliminar la consulta recurrente "${rq.label}"?`)) return;
+        RQ.deleteQuery(id);
+        _renderRecurringQueries();
+      });
+    });
+    grid.querySelector('#rqAddCard')?.addEventListener('click', () => _openRQForm(null));
+  }
+
+  // ── Formulario alta/edición de consultas recurrentes ──
+  const rqFormLabel        = document.getElementById('rqFormLabel');
+  const rqFormType         = () => document.querySelector('input[name="rqFormType"]:checked')?.value ?? 'comuna';
+  const rqFormComunaRow    = document.getElementById('rqFormComunaRow');
+  const rqFormPolygonRow   = document.getElementById('rqFormPolygonRow');
+  const rqFormComunaSelect = document.getElementById('rqFormComunaSelect');
+  let _editingRQId = null;
+
+  if (rqFormComunaSelect && rqFormComunaSelect.children.length <= 1) {
+    COMUNAS_RM.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      rqFormComunaSelect.appendChild(opt);
+    });
+  }
+
+  function _syncRQFormTypeUI() {
+    const isComuna = rqFormType() === 'comuna';
+    rqFormComunaRow?.classList.toggle('hidden', !isComuna);
+    rqFormPolygonRow?.classList.toggle('hidden', isComuna);
+  }
+  document.querySelectorAll('input[name="rqFormType"]').forEach(r => r.addEventListener('change', _syncRQFormTypeUI));
+
+  function _openRQForm(rq) {
+    _editingRQId = rq?.id ?? null;
+    document.getElementById('rqFormTitle').textContent = rq ? 'Editar consulta recurrente' : 'Nueva consulta recurrente';
+    rqFormLabel.value = rq?.label ?? '';
+    const type = rq?.type ?? 'comuna';
+    document.querySelector(`input[name="rqFormType"][value="${type}"]`).checked = true;
+    rqFormComunaSelect.value = rq?.comuna ?? '';
+    _syncRQFormTypeUI();
+    rqFormOverlay?.classList.remove('hidden');
+  }
+
+  function _closeRQForm() {
+    rqFormOverlay?.classList.add('hidden');
+    _editingRQId = null;
+  }
+
+  document.getElementById('rqFormCancel')?.addEventListener('click', _closeRQForm);
+
+  document.getElementById('rqFormSave')?.addEventListener('click', () => {
+    const label = rqFormLabel.value.trim();
+    if (!label) { alert('Ponle un nombre a la consulta.'); return; }
+    const type = rqFormType();
+    if (type === 'comuna' && !rqFormComunaSelect.value) { alert('Selecciona una comuna.'); return; }
+
+    if (_editingRQId) {
+      const patch = { label, type };
+      if (type === 'comuna') { patch.comuna = rqFormComunaSelect.value; patch.polygon = null; }
+      else { patch.comuna = null; }
+      RQ.updateQuery(_editingRQId, patch);
+      _closeRQForm();
+      _showScreen('recurring');
+    } else {
+      const entry = RQ.addQuery({
+        label, type,
+        comuna:  type === 'comuna'  ? rqFormComunaSelect.value : null,
+        polygon: null,
+      });
+      _closeRQForm();
+      if (type === 'polygon') {
+        _runPolygonRQ(entry);
+      } else {
+        _showScreen('recurring');
+      }
+    }
+  });
+
+  document.getElementById('btnRecurringQuery')?.addEventListener('click', () => {
+    lastScreen = 'recurring';
+    _showScreen('recurring');
+  });
+  document.getElementById('rqAddBtn')?.addEventListener('click', () => _openRQForm(null));
+  document.getElementById('rqBackBtn')?.addEventListener('click', () => _showScreen(state.raw.length ? 'dashboard' : 'dropzone'));
 }

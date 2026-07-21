@@ -9,6 +9,17 @@ function _parseAxisVal(s) {
 
 function _$(id) { return document.getElementById(id); }
 
+// ── Personalización de la curva (color de línea / relleno) ────────────────
+function _distribLineColor() { return _$('distribLineColor')?.value || '#3b82f6'; }
+function _distribFillOn() { return _$('distribFillToggle')?.checked ?? true; }
+function _distribGridOn() { return _$('distribGridToggle')?.checked ?? true; }
+function _hexToRgba(hex, alpha) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex ?? '');
+  if (!m) return `rgba(59,130,246,${alpha})`;
+  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // ── Normal / density helpers ──────────────────────────────────────────────
 
 function _probit(p) {
@@ -75,6 +86,53 @@ function _computeHistogram(sortedVals, binCount) {
   return { bins, bw };
 }
 
+// Aproximación Abramowitz-Stegun 7.1.26 (error < 1.5e-7)
+function _erf(x) {
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const t = 1 / (1 + p * x);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return sign * y;
+}
+function _normCdf(z) { return 0.5 * (1 + _erf(z / Math.SQRT2)); }
+
+// CDF suavizada por kernel gaussiano, anclada a los bordes reales.
+// Por debajo del mínimo observado el acumulado es exactamente 0% (nadie
+// tiene ese precio) y desde el máximo observado en adelante es 100% — eso
+// es matemáticamente correcto, no una aproximación. Lo único "suavizado" es
+// el tramo INTERIOR entre el mínimo y el máximo real: ahí se usa un kernel
+// gaussiano para no conectar los cuantiles empíricos con líneas rectas
+// quebradas, pero reescalado (renormalizado) para que toque exactamente
+// (xMin, 0%) y (xMax, 100%) en vez de quedar corto o inventar porcentaje
+// fuera del rango observado.
+function _computeSmoothCDF(sortedVals, nPoints = 200) {
+  const n = sortedVals.length;
+  const mean  = sortedVals.reduce((a, b) => a + b, 0) / n;
+  const sigma = Math.sqrt(sortedVals.reduce((s, v) => s + (v - mean) ** 2, 0) / n);
+  const h = Math.max(1.06 * sigma * Math.pow(n, -0.2), 1e-6);
+  const xMin = sortedVals[0], xMax = sortedVals[n - 1];
+
+  const rawCdf = x => {
+    let sum = 0;
+    for (const xi of sortedVals) sum += _normCdf((x - xi) / h);
+    return sum / n;
+  };
+  const rawMin = rawCdf(xMin), rawMax = rawCdf(xMax);
+  const span = rawMax - rawMin || 1;
+
+  const pts = [{ x: 0, y: 0 }];
+  if (xMin > 0) pts.push({ x: xMin, y: 0 });
+
+  const step = (xMax - xMin) / nPoints;
+  for (let i = 0; i <= nPoints; i++) {
+    const x = xMin + i * step;
+    const y = Math.min(100, Math.max(0, ((rawCdf(x) - rawMin) / span) * 100));
+    pts.push({ x, y });
+  }
+  return pts;
+}
+
 function _computeKDE(sortedVals, sigma, histBw, evalPoints = 120) {
   const n  = sortedVals.length;
   const h  = Math.max(1.06 * sigma * Math.pow(n, -0.2), histBw * 0.1);
@@ -103,7 +161,16 @@ function _normalPDFcurve(mu, sigma, histBw, x0, x1, points = 120) {
 
 let _distribChart = null;
 let _distribReady = false;
-const distribMarkers = { percentiles: new Set(), prices: new Set() };
+// Mapa en vez de Set: cada marcador (percentil o valor) guarda su propio
+// color, editable desde el tag o al momento de agregarlo.
+const distribMarkers = { percentiles: new Map(), prices: new Map() };
+const _MARKER_PALETTE = ['#6b7280', '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+let _markerColorIdx = 0;
+function _nextMarkerColor() {
+  const c = _MARKER_PALETTE[_markerColorIdx % _MARKER_PALETTE.length];
+  _markerColorIdx++;
+  return c;
+}
 let _distribUnit  = 'UF';
 let _distribState = null;
 let _distribCols  = null;
@@ -124,6 +191,9 @@ export function initDistribListeners(state, distribCols, mp) {
   _$('distribXMax')?.addEventListener('input', rerender);
   _$('distribYMin')?.addEventListener('input', rerender);
   _$('distribYMax')?.addEventListener('input', rerender);
+  _$('distribLineColor')?.addEventListener('input', rerender);
+  _$('distribFillToggle')?.addEventListener('change', rerender);
+  _$('distribGridToggle')?.addEventListener('change', rerender);
   document.querySelector('.distrib-mp-btn')?.addEventListener('click', () => {
     document.querySelector('.distrib-mp-btn').classList.toggle('active');
     rerender();
@@ -178,8 +248,10 @@ export function initDistribListeners(state, distribCols, mp) {
   const addPct = () => {
     const v = parseInt(document.getElementById('distribPctInput')?.value ?? '');
     if (isNaN(v) || v < 1 || v > 99) return;
-    distribMarkers.percentiles.add(v);
+    const colorInput = document.getElementById('distribPctColor');
+    distribMarkers.percentiles.set(v, colorInput?.value || _nextMarkerColor());
     document.getElementById('distribPctInput').value = '';
+    if (colorInput) colorInput.value = _nextMarkerColor();
     _refreshMarkerTags(); rerender();
   };
   document.getElementById('distribAddPct')?.addEventListener('click', addPct);
@@ -188,8 +260,10 @@ export function initDistribListeners(state, distribCols, mp) {
   const addPrice = () => {
     const v = parseFloat(document.getElementById('distribPriceInput')?.value ?? '');
     if (isNaN(v) || v <= 0) return;
-    distribMarkers.prices.add(v);
+    const colorInput = document.getElementById('distribPriceColor');
+    distribMarkers.prices.set(v, colorInput?.value || _nextMarkerColor());
     document.getElementById('distribPriceInput').value = '';
+    if (colorInput) colorInput.value = _nextMarkerColor();
     _refreshMarkerTags(); rerender();
   };
   document.getElementById('distribAddPrice')?.addEventListener('click', addPrice);
@@ -227,10 +301,14 @@ function _refreshMarkerTags() {
   const priceCont = document.getElementById('distribPriceTags');
   if (!pctCont) return;
   pctCont.innerHTML = '';
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(v => {
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([v, color]) => {
     const tag = document.createElement('span');
     tag.className = 'marker-tag pct-tag';
-    tag.innerHTML = `P${v} <button data-val="${v}" class="rm-pct">×</button>`;
+    tag.innerHTML = `<input type="color" class="marker-color-input" value="${color}" title="Color del marcador"> P${v} <button data-val="${v}" class="rm-pct">×</button>`;
+    tag.querySelector('.marker-color-input').addEventListener('input', e => {
+      distribMarkers.percentiles.set(v, e.target.value);
+      renderDistrib(_distribState, _distribCols, _distribMp);
+    });
     tag.querySelector('.rm-pct').addEventListener('click', () => {
       distribMarkers.percentiles.delete(v); _refreshMarkerTags();
       renderDistrib(_distribState, _distribCols, _distribMp);
@@ -239,10 +317,14 @@ function _refreshMarkerTags() {
   });
   if (!priceCont) return;
   priceCont.innerHTML = '';
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(v => {
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([v, color]) => {
     const tag = document.createElement('span');
     tag.className = 'marker-tag price-tag';
-    tag.innerHTML = `${v.toLocaleString('es-CL')} ${_distribUnit} <button data-val="${v}" class="rm-price">×</button>`;
+    tag.innerHTML = `<input type="color" class="marker-color-input" value="${color}" title="Color del marcador"> ${v.toLocaleString('es-CL')} ${_distribUnit} <button data-val="${v}" class="rm-price">×</button>`;
+    tag.querySelector('.marker-color-input').addEventListener('input', e => {
+      distribMarkers.prices.set(v, e.target.value);
+      renderDistrib(_distribState, _distribCols, _distribMp);
+    });
     tag.querySelector('.rm-price').addEventListener('click', () => {
       distribMarkers.prices.delete(v); _refreshMarkerTags();
       renderDistrib(_distribState, _distribCols, _distribMp);
@@ -513,19 +595,22 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
     return sortedVals[lo] + (h - lo) * (sortedVals[hi] - sortedVals[lo]);
   };
 
-  // CDF: x = valor, y = percentil acumulado (0–100)
-  const refDataClean = Array.from({ length: 101 }, (_, pct) => ({ x: valAtPct(pct), y: pct }));
-  const xMin = sortedVals[0], xMax = sortedVals[n - 1];
+  // CDF: x = valor, y = percentil acumulado (0–100). Los marcadores/tooltips
+  // se ubican leyendo smoothCurve (la curva realmente dibujada) en vez del
+  // cuantil empírico crudo — si no, la cruz del marcador queda flotando
+  // fuera de la línea visible, porque el suavizado y el reescalado a los
+  // bordes (ver _computeSmoothCDF) hacen que ya no coincidan punto a punto.
+  const smoothCurve = _computeSmoothCDF(sortedVals);
+  const x0 = smoothCurve[0].x, x1 = smoothCurve[smoothCurve.length - 1].x;
 
   const normalFit = showNormal ? _computeNormalFitCDF(sortedVals) : null;
 
-  // cubicInterpolationMode:'monotone' evita overshoot — sin esto el bezier sube/baja
-  // más allá del rango 0-100 y Chart.js recorta la línea, creando "cortes" visibles.
+  const lineColor = _distribLineColor();
   const datasets = [{
     label: label,
-    data: refDataClean,
-    borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)',
-    pointRadius: 0, borderWidth: 2, cubicInterpolationMode: 'monotone', fill: true,
+    data: smoothCurve,
+    borderColor: lineColor, backgroundColor: _hexToRgba(lineColor, 0.12),
+    pointRadius: 0, borderWidth: 2, tension: 0.25, fill: _distribFillOn(),
   }];
 
   if (normalFit) {
@@ -539,40 +624,40 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
 
   const ANN_COLOR = '#6b7280';
   const annotations = {};
-  const annLabel = (content) => ({
+  const annLabel = (content, color = ANN_COLOR) => ({
     content, display: true, position: 'start',
-    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
   // Marcadores de percentil → encuentra el valor y dibuja la cruz
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
-    const price = valAtPct(pct);
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([pct, color]) => {
+    const price = _lerpAtY(smoothCurve, pct) ?? valAtPct(pct);
     annotations[`pv_${pct}`] = {
       type: 'line', xMin: price, xMax: price, yMax: pct,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`P${pct}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}`, color),
     };
     annotations[`ph_${pct}`] = {
       type: 'line', yMin: pct, yMax: pct, xMax: price,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`, color),
     };
   });
 
   // Marcadores de valor → encuentra el percentil y dibuja la cruz
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
-    const pct = _lerpAtX(refDataClean, price);
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([price, color]) => {
+    const pct = _lerpAtX(smoothCurve, price);
     annotations[`prv_${price}`] = {
       type: 'line', xMin: price, xMax: price, yMax: pct ?? 100,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`, color),
     };
     if (pct !== null) {
       annotations[`prh_${price}`] = {
         type: 'line', yMin: pct, yMax: pct, xMax: price,
-        borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-        label: annLabel(`P${pct.toFixed(1)}`),
+        borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`P${pct.toFixed(1)}`, color),
       };
     }
   });
@@ -584,7 +669,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
       if (val == null) return;
-      const pct = _lerpAtX(refDataClean, val);
+      const pct = _lerpAtX(smoothCurve, val);
       if (pct === null) return;
       annotations[`mp_v_${t.id}`] = {
         type: 'line', xMin: val, xMax: val, yMax: pct,
@@ -627,15 +712,17 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
       scales: {
         x: {
           type: 'linear',
-          min: _parseAxisVal(_$('distribXMin')?.value) ?? xMin,
-          max: _parseAxisVal(_$('distribXMax')?.value) ?? xMax,
+          min: _parseAxisVal(_$('distribXMin')?.value) ?? x0,
+          max: _parseAxisVal(_$('distribXMax')?.value) ?? x1,
           title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+          grid: { display: _distribGridOn() },
         },
         y: {
           type: 'linear', min: 0, max: 100,
           title: { display: true, text: 'Acumulado (%)', font: { size: fs } },
           ticks: { callback: v => v + '%', font: { size: fs } },
+          grid: { display: _distribGridOn() },
         },
       },
     },
@@ -663,11 +750,12 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
 
   const normalFit = showNormal ? _computeNormalFit(sortedVals, refDataClean) : null;
 
+  const lineColor = _distribLineColor();
   const datasets = [{
     label: label,
     data: refDataClean,
-    borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)',
-    pointRadius: 0, borderWidth: 2, tension, fill: true,
+    borderColor: lineColor, backgroundColor: _hexToRgba(lineColor, 0.12),
+    pointRadius: 0, borderWidth: 2, tension, fill: _distribFillOn(),
   }];
 
   if (normalFit) {
@@ -681,39 +769,39 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
 
   const ANN_COLOR = '#6b7280';
   const annotations = {};
-  const annLabel = (content) => ({
+  const annLabel = (content, color = ANN_COLOR) => ({
     content, display: true, position: 'start',
-    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([pct, color]) => {
     const price = _lerpAtX(refDataClean, pct);
     if (!price) return;
     annotations[`pv_${pct}`] = {
       type: 'line', xMin: pct, xMax: pct, yMax: price,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`P${pct}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}`, color),
     };
     annotations[`ph_${pct}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`, color),
     };
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([price, color]) => {
     const pct = _lerpAtY(refDataClean, price);
     annotations[`prh_${price}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct ?? 100,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}`, color),
     };
     if (pct !== null) {
       annotations[`prv_${price}`] = {
         type: 'line', xMin: pct, xMax: pct, yMax: price,
-        borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-        label: annLabel(`P${pct.toFixed(1)}`),
+        borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`P${pct.toFixed(1)}`, color),
       };
     }
   });
@@ -768,9 +856,11 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
       scales: {
         x: { type: 'linear', min: 0, max: 100,
           title: { display: true, text: 'Percentil (%)', font: { size: fs } },
-          ticks: { callback: v => v + '%', font: { size: fs } } },
+          ticks: { callback: v => v + '%', font: { size: fs } },
+          grid: { display: _distribGridOn() } },
         y: { title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+          grid: { display: _distribGridOn() },
           ...(_parseAxisVal(_$('distribXMin')?.value) !== null ? { min: _parseAxisVal(_$('distribXMin').value) } : {}),
           ...(_parseAxisVal(_$('distribXMax')?.value) !== null ? { max: _parseAxisVal(_$('distribXMax').value) } : {}),
         },
@@ -814,31 +904,31 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
   const valAtPct = pct => sortedVals[Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1)];
 
   const ANN_COLOR = '#6b7280';
-  const annLabel = (content) => ({
+  const annLabel = (content, color = ANN_COLOR) => ({
     content, display: true, position: 'start',
-    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
   const annotations = {};
 
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([pct, color]) => {
     const val = valAtPct(pct);
     if (val == null) return;
     annotations[`dpv_${pct}`] = {
       type: 'line', xMin: val, xMax: val, yMax: _lerpAtX(lnData, val) ?? undefined,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`P${pct}: ${_fmtVal(val)} ${_distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}: ${_fmtVal(val)} ${_distribUnit}`, color),
     };
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([price, color]) => {
     const pct = _lerpAtY(refData, price);
     const pctStr = pct !== null ? ` (P${pct.toFixed(1)})` : '';
     annotations[`dprv_${price}`] = {
       type: 'line', xMin: price, xMax: price, yMax: _lerpAtX(lnData, price) ?? undefined,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${_fmtVal(price)} ${_distribUnit}${pctStr}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${_fmtVal(price)} ${_distribUnit}${pctStr}`, color),
     };
   });
 
@@ -865,12 +955,12 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
       datasets: [{
         label: label,
         data: lnData,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59,130,246,0.08)',
+        borderColor: _distribLineColor(),
+        backgroundColor: _hexToRgba(_distribLineColor(), 0.12),
         pointRadius: 0,
         borderWidth: 2,
         tension: 0.3,
-        fill: true,
+        fill: _distribFillOn(),
       }],
     },
     options: {
@@ -896,6 +986,7 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
           ...(_parseAxisVal(_$('distribXMax')?.value) !== null ? { max: _parseAxisVal(_$('distribXMax').value) } : {}),
           title: { display: true, text: label, font: { size: fs } },
           ticks: { callback: v => _fmtVal(v), font: { size: fs } },
+          grid: { display: _distribGridOn() },
         },
         y: {
           title: { display: true, text: 'Densidad', font: { size: fs } },
@@ -938,17 +1029,21 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
   const kdeData    = _computeKDE(sortedVals, sigma, bw);
   const normalData = showNormal && normalFit ? _normalPDFcurve(mu, sigma, bw, x0, x1) : null;
 
+  // El toggle "Área bajo la curva" no aplica acá — las barras del histograma
+  // YA son el área, y la línea de densidad va encima sin relleno propio
+  // (rellenarla se vería redundante/raro superpuesta a las barras).
+  const distribLineColor = _distribLineColor();
   const datasets = [
     {
       type: 'bar', label: 'Frecuencia',
       data: bins,
-      backgroundColor: 'rgba(59,130,246,0.55)', borderColor: 'rgba(59,130,246,0.85)', borderWidth: 1,
+      backgroundColor: _hexToRgba(distribLineColor, 0.55), borderColor: _hexToRgba(distribLineColor, 0.85), borderWidth: 1,
       barPercentage: 1.0, categoryPercentage: 1.0, order: 3,
     },
     {
       type: 'line', label: 'Densidad',
       data: kdeData,
-      borderColor: '#3b82f6', backgroundColor: 'transparent',
+      borderColor: distribLineColor, backgroundColor: 'transparent',
       borderWidth: 2, pointRadius: 0, tension: 0.4, fill: false, order: 2,
     },
   ];
@@ -966,31 +1061,31 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
   const valAtPct = pct => sortedVals[Math.min(Math.round((pct / 100) * (sortedVals.length - 1)), sortedVals.length - 1)];
 
   const ANN_COLOR_D = '#6b7280';
-  const annLabelD = (content) => ({
+  const annLabelD = (content, color = ANN_COLOR_D) => ({
     content, display: true, position: 'start',
-    color: ANN_COLOR_D, backgroundColor: 'rgba(255,255,255,0.9)',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
   const annotations = {};
 
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([pct, color]) => {
     const val = valAtPct(pct);
     if (val == null) return;
     annotations[`dpv_${pct}`] = {
       type: 'line', xMin: val, xMax: val, yMax: _lerpAtX(kdeData, val) ?? undefined,
-      borderColor: ANN_COLOR_D, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabelD(`P${pct}: ${_fmtVal(val)} ${_distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabelD(`P${pct}: ${_fmtVal(val)} ${_distribUnit}`, color),
     };
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([price, color]) => {
     const pct = _lerpAtY(refData, price);
     const pctStr = pct !== null ? ` (P${pct.toFixed(1)})` : '';
     annotations[`dprv_${price}`] = {
       type: 'line', xMin: price, xMax: price, yMax: _lerpAtX(kdeData, price) ?? undefined,
-      borderColor: ANN_COLOR_D, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabelD(`${_fmtVal(price)} ${_distribUnit}${pctStr}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabelD(`${_fmtVal(price)} ${_distribUnit}${pctStr}`, color),
     };
   });
 
@@ -1068,10 +1163,12 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
           min: _parseAxisVal(_$('distribXMin')?.value) ?? x0,
           max: _parseAxisVal(_$('distribXMax')?.value) ?? x1,
           title: { display: true, text: label, font: { size: fs } },
-          ticks: { callback: v => _fmtVal(v), font: { size: fs } } },
+          ticks: { callback: v => _fmtVal(v), font: { size: fs } },
+          grid: { display: _distribGridOn() } },
         y: { beginAtZero: true, bounds: 'data',
           title: { display: true, text: '% de datos', font: { size: fs } },
           ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } },
+          grid: { display: _distribGridOn() },
           ...(_parseAxisVal(_$('distribYMin')?.value) !== null ? { min: _parseAxisVal(_$('distribYMin').value) } : {}),
           ...(_parseAxisVal(_$('distribYMax')?.value) !== null ? { max: _parseAxisVal(_$('distribYMax').value) } : {}),
         },

@@ -6,6 +6,13 @@
   <title>Visor Multifamily</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+
+  <!-- Panel de filtros moderno (piloto Multifamily): Shoelace + noUiSlider vía CDN, sin build step -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/light.css" />
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace-autoloader.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nouislider@15.7.1/dist/nouislider.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/nouislider@15.7.1/dist/nouislider.min.js"></script>
+  <link rel="stylesheet" href="styles/filters-modern.css" />
   <style>
     /* ── Preview de resultados ──────────────────────────────────────────────── */
     #incitiPreview { width: 100%; height: 100%; display: flex; flex-direction: column; background: #fff; }
@@ -78,6 +85,7 @@
       <!-- <button id="btnAreaQuery" class="ghost-btn" title="Consultar Inciti por área dibujada en el mapa">&#128205; Área Inciti</button> -->
       <button id="btnAreaQuery" class="ghost-btn" title="Dibujar un polígono en el mapa">&#128205; Dibujar Área</button>
       <button id="btnComunaQuery" class="ghost-btn" title="Consultar por límites de una comuna entera">&#127969; Por Comuna</button>
+      <button id="btnRecurringQuery" class="ghost-btn" title="Consultas guardadas a Inciti (comunas y proyecto propio)">&#128257; Consultas Recurrentes</button>
       <button id="saveJsonBtn" class="ghost-btn" title="Descargar los datos cargados como JSON para guardarlos en data/multifamily/">Guardar JSON</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
@@ -151,7 +159,11 @@
           <span class="mp-chevron" id="filtrosChevron">▾</span>
         </div>
         <div id="filtrosPanelBody" class="mp-panel-body">
-          <div id="filtersContainer" class="filters">
+          <div id="activeFiltersBar" class="active-filters-bar hidden">
+            <div id="activeFiltersChips" class="active-filters-chips"></div>
+            <sl-button id="clearAllFiltersBtn" size="small" variant="text">Limpiar todo</sl-button>
+          </div>
+          <div id="filtersContainer" class="filters-modern">
             <p class="hint">Carga un Excel para empezar.</p>
           </div>
           <div class="filter-io-row">
@@ -173,11 +185,17 @@
       </div>
     </aside>
 
+    <button id="mobileFiltersBtn" class="mobile-filters-btn" type="button">
+      &#x2263; Filtros
+      <sl-badge id="mobileFiltersBadge" variant="primary" pill class="hidden">0</sl-badge>
+    </button>
+    <sl-drawer id="filtrosDrawer" label="Filtros" placement="start" class="filtros-drawer"></sl-drawer>
+
     <section class="content">
       <div id="dropzone" class="dropzone">
         <div class="dropzone-inner">
           <h2>Arrastra tu Excel aquí</h2>
-          <p id="dropzoneHint">o usa el botón <strong>Cargar Excel</strong> o selecciona un dataset guardado.</p>
+          <p id="dropzoneHint"> Usa el botón <strong>Cargar Excel</strong> o selecciona un dataset guardado.</p>
         </div>
       </div>
 
@@ -241,6 +259,58 @@
     </div>
   </div>
 </div>
+
+      <div id="recurringQueriesContainer" class="hidden">
+        <div class="rq-header">
+          <h2>Consultas Recurrentes</h2>
+          <div class="rq-header-actions">
+            <button id="rqAddBtn" class="area-btn primary">+ Nueva consulta</button>
+            <button id="rqBackBtn" class="area-btn cancel">Volver</button>
+          </div>
+        </div>
+        <div id="rqGrid" class="rq-grid"></div>
+      </div>
+
+      <div id="rqFormOverlay" class="hidden" style="position: fixed; inset: 0; z-index: 2000; background: rgba(15,23,42,0.45); display: flex; align-items: center; justify-content: center;">
+        <div class="comuna-query-panel" style="width: min(420px, 92%);">
+          <div class="comuna-query-title" id="rqFormTitle">Nueva consulta recurrente</div>
+          <div style="display:flex; flex-direction:column; gap: 10px;">
+            <label class="mp-label" style="font-size:12px;">Nombre</label>
+            <input type="text" id="rqFormLabel" class="mp-input" placeholder="Ej: Las Condes, o Torre Norte + comparables" />
+
+            <label class="mp-label" style="font-size:12px;">Tipo</label>
+            <div style="display:flex; gap:14px; font-size:13px; color:#374151;">
+              <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="rqFormType" value="comuna" checked /> Comuna</label>
+              <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="rqFormType" value="polygon" /> Área dibujada</label>
+            </div>
+
+            <div id="rqFormComunaRow">
+              <select id="rqFormComunaSelect" style="width:100%; padding:7px 10px; border:1px solid #d1d5db; border-radius:7px; font-size:13px; color:#374151;">
+                <option value="">-- Selecciona una comuna --</option>
+              </select>
+            </div>
+            <div id="rqFormPolygonRow" class="hidden">
+              <p class="hint" style="margin:0 0 8px 0;">Al guardar, te vamos a pedir dibujar el área en el mapa.</p>
+            </div>
+
+            <div class="comuna-query-row" style="justify-content:flex-end; margin-top:6px;">
+              <button id="rqFormCancel" class="area-btn cancel">Cancelar</button>
+              <button id="rqFormSave" class="area-btn primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="rqLoadingOverlay" class="hidden rq-loading-overlay">
+        <div class="rq-loading-scene">
+          <div class="rq-skyline">
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="rq-scanline"></div>
+          <div class="rq-pin">📍</div>
+        </div>
+        <p id="rqLoadingStatus" class="rq-loading-text">Consultando Inciti…</p>
+      </div>
 
       <div id="dashboard" class="dashboard hidden">
         <div id="starDataWarning" class="filter-io-fb-warn star-data-warning hidden"></div>
@@ -480,6 +550,7 @@
               <label>Marcar percentil</label>
               <div class="marker-add">
                 <input type="number" id="distribPctInput" min="1" max="99" step="1" placeholder="ej: 50">
+                <input type="color" id="distribPctColor" value="#6b7280" title="Color del próximo marcador">
                 <button id="distribAddPct" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -487,6 +558,7 @@
               <label id="distribMarkLabel">Marcar valor</label>
               <div class="marker-add">
                 <input type="number" id="distribPriceInput" min="0" step="1" placeholder="ej: 20">
+                <input type="color" id="distribPriceColor" value="#ef4444" title="Color del próximo marcador">
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -512,6 +584,18 @@
                   <span id="distribFontSizeVal">11px</span>
                 </div>
               </div>
+              <div class="ctrl distrib-color-ctrl">
+                <label>Color de línea</label>
+                <input type="color" id="distribLineColor" value="#3b82f6">
+              </div>
+              <label class="toggle-check">
+                <input type="checkbox" id="distribFillToggle" checked />
+                <span>Área bajo la curva</span>
+              </label>
+              <label class="toggle-check">
+                <input type="checkbox" id="distribGridToggle" checked />
+                <span>Cuadrícula</span>
+              </label>
               <div class="ctrl distrib-ratio-ctrl">
                 <label>Proporción</label>
                 <div class="distrib-ratio-row">
@@ -548,13 +632,12 @@
         <div class="tab-panel" data-panel="historico">
           <div id="histPanel" class="hist-panel">
 
-            <!-- Selector de comunas -->
+            <!-- Fuente: la consulta a Inciti actualmente cargada -->
             <div class="hist-toolbar">
               <div class="hist-toolbar-group">
-                <span class="hist-label">Comunas</span>
-                <div id="histComunaChips" class="hist-chips hist-comuna-chips"></div>
+                <span class="hist-label">Consulta activa</span>
+                <span id="histSourceLabel" class="hist-file-name"></span>
               </div>
-              <span id="histLoadingMsg" class="hist-loading"><span class="hist-spinner"></span>Cargando…</span>
             </div>
 
             <!-- KPIs -->
@@ -649,11 +732,25 @@
                 </div>
               </div>
 
+              <div class="hist-chart-card">
+                <div class="hist-chart-header">
+                  <div>
+                    <span class="hist-chart-title">Stock + Vacancia</span>
+                    <span class="hist-chart-subtitle" id="histSubStockVac"></span>
+                  </div>
+                  <button id="histCopyStockVac" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
+                </div>
+                <div id="histStockVacChips" class="hist-chips" style="margin-bottom:4px;"></div>
+                <div class="hist-chart-wrap" id="histWrapStockVac">
+                  <canvas id="histChartStockVac"></canvas>
+                </div>
+              </div>
+
             </div>
 
             <div id="histEmpty" class="hist-empty">
               <div class="hist-empty-icon">📊</div>
-              <p>Selecciona una o más comunas para ver el histórico.</p>
+              <p>Corre una consulta a Inciti (Consultas Recurrentes, Dibujar Área o Por Comuna) para ver su histórico trimestral.</p>
             </div>
           </div>
         </div>

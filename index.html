@@ -403,6 +403,7 @@
               <label>Marcar percentil</label>
               <div class="marker-add">
                 <input type="number" id="distribPctInput" min="1" max="99" step="1" placeholder="ej: 50">
+                <input type="color" id="distribPctColor" value="#6b7280" title="Color del próximo marcador">
                 <button id="distribAddPct" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -410,6 +411,7 @@
               <label>Marcar precio</label>
               <div class="marker-add">
                 <input type="number" id="distribPriceInput" min="0" step="100" placeholder="ej: 4500">
+                <input type="color" id="distribPriceColor" value="#ef4444" title="Color del próximo marcador">
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -435,6 +437,18 @@
                   <span id="distribFontSizeVal">11px</span>
                 </div>
               </div>
+              <div class="ctrl distrib-color-ctrl">
+                <label>Color de línea</label>
+                <input type="color" id="distribLineColor" value="#3b82f6">
+              </div>
+              <label class="toggle-check">
+                <input type="checkbox" id="distribFillToggle" checked />
+                <span>Área bajo la curva</span>
+              </label>
+              <label class="toggle-check">
+                <input type="checkbox" id="distribGridToggle" checked />
+                <span>Cuadrícula</span>
+              </label>
               <div class="ctrl distrib-ratio-ctrl">
                 <label>Proporción</label>
                 <div class="distrib-ratio-row">

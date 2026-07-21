@@ -1,11 +1,4 @@
-const COMUNAS = [
-  { label: 'Santiago',         file: 'data/multifamily/multifamily_santiago_historico_20260702.json' },
-  { label: 'Estación Central', file: 'data/multifamily/multifamily_estacion_central_historico_20260702.json' },
-  { label: 'Las Condes',       file: 'data/multifamily/multifamily_las_condes_historico_20260702.json' },
-  { label: 'Lo Barnechea',     file: 'data/multifamily/multifamily_lo_barnechea_historico_20260702.json' },
-  { label: 'Providencia',      file: 'data/multifamily/multifamily_providencia_historico_20260702.json' },
-  { label: 'Ñuñoa',            file: 'data/multifamily/multifamily_nunoa_historico_20260702.json' },
-];
+import { flattenEntitiesHistorico } from './api.js';
 
 // Tab 2 (evolución/absorción mensual) de cada portfolio
 const EVOL_URL = {
@@ -15,16 +8,26 @@ const EVOL_URL = {
 
 const PORTFOLIO_COLORS = { IRR: '#2563eb', ECH: '#16a34a' };
 
-const PROGRAMAS_ORDER = ['ESTUDIO', 'LOFT', '1D1B', '1D2B', '2D1B', '2D2B', '3D1B', '3D2B', '3D3B', '4D4B'];
-// Paleta categórica validada (validate_palette.js): banda de luminosidad OK, piso de
-// croma OK, separación CVD en banda 8-12 (piso legal con etiquetas directas — ver
-// _endLabelsPlugin) y contraste >=3:1 contra fondo blanco.
+// Máximo 8 slots categóricos (regla del skill de dataviz: nunca ciclar más
+// hues, o un 9no color se vuelve indistinguible bajo CVD). Las 3 tipologías
+// más grandes/infrecuentes (3D2B, 3D3B, 4D4B) se pliegan en "OTROS" — ver
+// _foldPrograma() — en vez de generar más colores.
+const PROGRAMAS_ORDER = ['ESTUDIO', 'LOFT', '1D1B', '1D2B', '2D1B', '2D2B', '3D1B', 'OTROS'];
+const FOLDED_PROGRAMS = new Set(['3D2B', '3D3B', '4D4B']);
+function _foldPrograma(p) { return FOLDED_PROGRAMS.has(p) ? 'OTROS' : p; }
+
+// Paleta categórica validada con scripts/validate_palette.js del skill de
+// dataviz (7 hues + gris neutro para "OTROS", que no es una identidad sino
+// un residual). Corrida real: PASS en banda de luminosidad, piso de croma,
+// separación CVD (peor par ΔE 9.1) y piso de visión normal (peor par ΔE
+// 19.6). El contraste vs. superficie da WARN por debajo de 3:1 en 3 slots —
+// esperado para hues claros, cubierto por la leyenda (arriba, siempre
+// visible), no por el color solo.
 const PROGRAM_COLORS  = {
-  'ESTUDIO': '#6d28d9', 'LOFT': '#db2777',
-  '1D1B':    '#2563eb', '1D2B': '#0891b2',
-  '2D1B':    '#059669', '2D2B': '#65a30d',
-  '3D1B':    '#d97706', '3D2B': '#dc2626',
-  '3D3B':    '#f43f5e', '4D4B': '#92400e',
+  'ESTUDIO': '#2a78d6', 'LOFT': '#008300',
+  '1D1B':    '#e87ba4', '1D2B': '#eda100',
+  '2D1B':    '#1baf7a', '2D2B': '#eb6834',
+  '3D1B':    '#4a3aa7', 'OTROS': '#64748b',
 };
 
 const AVG_COLOR = '#0f172a';
@@ -38,8 +41,8 @@ const MONTH_TO_Q = {
 };
 
 const _st = { rows: [], progFilt: new Set(), proyFilt: null };
-const _selected = new Set();
-let _chartRent = null, _chartVac = null, _chartStock = null;
+let _chartRent = null, _chartVac = null, _chartStock = null, _chartStockVac = null;
+const _stockVacProgFilt = new Set(); // vacío = TODOS (una sola barra de stock total)
 let _initialized = false;
 let _showAvg = false;
 let _internalRows = [];
@@ -61,6 +64,33 @@ function _avg(arr) {
 function _sum(arr) {
   const v = arr.filter(x => x != null && !isNaN(x));
   return v.length ? v.reduce((a, b) => a + b, 0) : null;
+}
+
+// Vacancia ponderada: sum(Disponibilidad) / sum(Stock) — NO el promedio
+// simple de la columna "Vacancia (%)" ya calculada por fila. Promediar esa
+// columna sin ponderar hace que un proyecto de 2 unidades pese lo mismo que
+// uno de 500, y por eso la vacancia de mercado no se movía en línea con el
+// stock disponible real. Solo se consideran filas con AMBOS campos
+// presentes, para que numerador y denominador cuenten exactamente las
+// mismas filas.
+function _weightedVacancia(rows) {
+  const valid = rows.filter(r =>
+    r['Stock'] != null && !isNaN(r['Stock']) &&
+    r['Disponibilidad'] != null && !isNaN(r['Disponibilidad'])
+  );
+  if (!valid.length) return null;
+  const totalStock = valid.reduce((s, r) => s + r['Stock'], 0);
+  const totalDispo = valid.reduce((s, r) => s + r['Disponibilidad'], 0);
+  if (!totalStock) return null;
+  return Math.round((totalDispo / totalStock) * 100 * 10) / 10;
+}
+
+// Promedio que ignora 0 — en Arriendo UF, 0 significa "nada disponible ese
+// trimestre para ese programa" (no un precio real), y promediarlo tal cual
+// arrastra el promedio de mercado hacia abajo sin motivo.
+function _avgPositive(arr) {
+  const v = arr.filter(x => x != null && !isNaN(x) && x > 0);
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
 }
 
 // ── Parser CSV mínimo ──────────────────────────────────────────────────────
@@ -198,22 +228,31 @@ function _clearPortfolio() {
 }
 
 // ── Carga de datos de mercado ──────────────────────────────────────────────
+// El histórico se arma sobre la consulta a Inciti activa (main.js deja las
+// entidades en window._mfHistoricoSource al confirmar una carga), no sobre
+// snapshots JSON guardados: entity.periods ya trae la serie trimestral
+// completa por proyecto.
 
-async function _loadSelected() {
-  if (!_selected.size) {
+function _loadFromCurrentQuery() {
+  const source = window._mfHistoricoSource;
+  const sourceLabel = $('histSourceLabel');
+
+  if (!source?.entities?.length) {
     _st.rows = [];
+    if (sourceLabel) sourceLabel.textContent = '';
     _render();
     return;
   }
-  $('histLoadingMsg').style.display = '';
-  const results = await Promise.all(
-    [..._selected].map(i => fetch(COMUNAS[i].file).then(r => r.json()))
-  );
-  _st.rows     = results.flat();
+
+  // Plegar tipologías raras en "OTROS" acá, en el único punto de entrada de
+  // datos — así chips, series y KPIs ya ven máximo 8 programas sin tener
+  // que repetir el fold en cada función que agrupa por 'Programa'.
+  _st.rows = flattenEntitiesHistorico(source.entities)
+    .map(r => ({ ...r, Programa: _foldPrograma(r['Programa']) }));
   _st.progFilt = new Set();
   _st.proyFilt = null;
   _xFrom = ''; _xTo = '';
-  $('histLoadingMsg').style.display = 'none';
+  if (sourceLabel) sourceLabel.textContent = source.label ?? '';
   _populateFiltros();
   const allPeriodos = [...new Set(_st.rows.map(r => r['Período Key']))].sort();
   _populateXSelectors(allPeriodos);
@@ -252,6 +291,47 @@ function _populateFiltros() {
     proyectos.map(p => `<option value="${p}">${p}</option>`).join('');
   sel.value   = '';
   sel.onchange = () => { _st.proyFilt = sel.value || null; _render(); };
+
+  _populateStockVacChips(programas);
+}
+
+// Chips de tipología propios del gráfico Stock + Vacancia: multi-selección
+// (ESTUDIO, 1D1B, 2D1B, ...) más un chip "TODOS" que agrupa todo en una
+// sola barra. Vacío = TODOS.
+function _populateStockVacChips(programas) {
+  const cont = $('histStockVacChips');
+  if (!cont) return;
+  _stockVacProgFilt.clear();
+
+  const todosChip = `<button class="prog-chip active" data-prog="__todos__" style="background:#1e3a5f;color:#fff;">TODOS</button>`;
+  const progChips = programas.map(p => {
+    const c = PROGRAM_COLORS[p] ?? '#94a3b8';
+    return `<button class="prog-chip" data-prog="${p}" style="border-color:${c}">${p}</button>`;
+  }).join('');
+  cont.innerHTML = todosChip + progChips;
+
+  const paint = (btn, active, prog) => {
+    btn.classList.toggle('active', active);
+    btn.style.background = active ? (PROGRAM_COLORS[prog] ?? '#1e3a5f') : '';
+    btn.style.color      = active ? '#fff' : '';
+  };
+
+  cont.querySelectorAll('.prog-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prog = btn.dataset.prog;
+      if (prog === '__todos__') {
+        _stockVacProgFilt.clear();
+        cont.querySelectorAll('.prog-chip').forEach(b => paint(b, b.dataset.prog === '__todos__', null));
+      } else {
+        _stockVacProgFilt.has(prog) ? _stockVacProgFilt.delete(prog) : _stockVacProgFilt.add(prog);
+        paint(btn, _stockVacProgFilt.has(prog), prog);
+        // "TODOS" queda activo solo cuando no hay tipologías elegidas a mano.
+        const todosBtn = cont.querySelector('[data-prog="__todos__"]');
+        if (todosBtn) paint(todosBtn, _stockVacProgFilt.size === 0, null);
+      }
+      _render();
+    });
+  });
 }
 
 // ── Series ────────────────────────────────────────────────────────────────
@@ -314,26 +394,30 @@ function _buildSeries(rows, metrica, agg = _avg) {
   const programas = [...new Set(rows.map(r => r['Programa']))]
     .sort((a, b) => PROGRAMAS_ORDER.indexOf(a) - PROGRAMAS_ORDER.indexOf(b));
 
+  const isVacancia = metrica === 'Vacancia (%)';
+  const isArriendo = metrica === 'Arriendo UF';
+  const _aggFor = subset => {
+    if (isVacancia) return _weightedVacancia(subset);
+    if (isArriendo) return _avgPositive(subset.map(r => r[metrica]));
+    return agg(subset.map(r => r[metrica]));
+  };
+
   const datasets = _showAvg ? [] : programas.map(prog => {
     const color = PROGRAM_COLORS[prog] ?? '#94a3b8';
-    const data  = periodos.map(per => {
-      const vals = rows
-        .filter(r => r['Período Key'] === per && r['Programa'] === prog)
-        .map(r => r[metrica]);
-      return agg(vals);
-    });
+    const data  = periodos.map(per =>
+      _aggFor(rows.filter(r => r['Período Key'] === per && r['Programa'] === prog))
+    );
     return {
       label: prog, data,
-      borderColor: color, backgroundColor: color + '22',
-      borderWidth: 2, pointRadius: 3, tension: 0.3, spanGaps: true,
+      borderColor: color, backgroundColor: color + '1a',
+      borderWidth: 2, pointRadius: 4, tension: 0.3, spanGaps: true,
     };
   });
 
   if (_showAvg) {
-    const avgData = periodos.map(per => {
-      const vals = rows.filter(r => r['Período Key'] === per).map(r => r[metrica]);
-      return agg(vals);
-    });
+    const avgData = periodos.map(per =>
+      _aggFor(rows.filter(r => r['Período Key'] === per))
+    );
     datasets.push({
       label: agg === _sum ? 'Total mercado' : 'Promedio mercado',
       data: avgData,
@@ -395,35 +479,64 @@ function _buildSeries(rows, metrica, agg = _avg) {
   return { periodos, datasets };
 }
 
-// Etiqueta directa al final de cada línea — solo cuando hay ≤4 series visibles
-// (mitigación requerida para la banda de separación CVD 8-12 de PROGRAM_COLORS).
-const _endLabelsPlugin = {
-  id: 'histEndLabels',
-  afterDatasetsDraw(chart) {
-    const { ctx, chartArea } = chart;
-    const datasets = chart.data.datasets;
-    if (!datasets.length || datasets.length > 4) return;
-    ctx.save();
-    ctx.font = '600 11px system-ui, -apple-system, "Segoe UI", sans-serif';
-    ctx.textBaseline = 'middle';
-    datasets.forEach((ds, i) => {
-      const meta = chart.getDatasetMeta(i);
-      if (meta.hidden) return;
-      let lastIdx = -1;
-      for (let j = ds.data.length - 1; j >= 0; j--) {
-        if (ds.data[j] != null) { lastIdx = j; break; }
-      }
-      if (lastIdx < 0) return;
-      const point = meta.data[lastIdx];
-      if (!point) return;
-      const x = Math.min(point.x + 6, chartArea.right - 2);
-      ctx.fillStyle = ds.borderColor;
-      ctx.textAlign = 'left';
-      ctx.fillText(ds.label, x, point.y);
+// Stock (barras, TODOS o por tipología) + Vacancia (línea, eje secundario).
+// Es un gráfico de eje dual a propósito — la gracia de esta tarjeta es ver
+// ambas series juntas. Ambos ejes parten en 0 (beginAtZero) para no
+// exagerar la correlación visual estirando/recortando alguno de los dos.
+function _buildStockVacSeries(rows) {
+  const allPeriodos = [...new Set(rows.map(r => r['Período Key']))].sort();
+  const periodos = allPeriodos.filter(p =>
+    (!_xFrom || p >= _xFrom) && (!_xTo || p <= _xTo)
+  );
+
+  const datasets = [];
+  // Filas a considerar para la línea de vacancia: si hay tipologías elegidas,
+  // la vacancia también se acota a esas (para que ambas series hablen de lo
+  // mismo); con TODOS, es la vacancia de mercado completa.
+  const vacRows = _stockVacProgFilt.size
+    ? rows.filter(r => _stockVacProgFilt.has(r['Programa']))
+    : rows;
+
+  if (_stockVacProgFilt.size) {
+    const programas = [...new Set(rows.map(r => r['Programa']))]
+      .filter(p => _stockVacProgFilt.has(p))
+      .sort((a, b) => PROGRAMAS_ORDER.indexOf(a) - PROGRAMAS_ORDER.indexOf(b));
+    programas.forEach(prog => {
+      const color = PROGRAM_COLORS[prog] ?? '#94a3b8';
+      const data = periodos.map(per => _sum(
+        rows.filter(r => r['Período Key'] === per && r['Programa'] === prog).map(r => r['Stock'])
+      ));
+      datasets.push({
+        type: 'bar', label: prog, data,
+        backgroundColor: color, borderColor: color, borderWidth: 1,
+        borderRadius: 4, maxBarThickness: 24,
+        stack: 'stock', order: 2, yAxisID: 'y',
+      });
     });
-    ctx.restore();
-  },
-};
+  } else {
+    const data = periodos.map(per => _sum(
+      rows.filter(r => r['Período Key'] === per).map(r => r['Stock'])
+    ));
+    datasets.push({
+      type: 'bar', label: 'Stock total', data,
+      backgroundColor: '#2a78d6', borderColor: '#2a78d6', borderWidth: 1,
+      borderRadius: 4, maxBarThickness: 24,
+      stack: 'stock', order: 2, yAxisID: 'y',
+    });
+  }
+
+  const vacData = periodos.map(per =>
+    _weightedVacancia(vacRows.filter(r => r['Período Key'] === per))
+  );
+  datasets.push({
+    type: 'line', label: 'Vacancia (%)', data: vacData,
+    borderColor: '#e34948', backgroundColor: '#e3494819',
+    borderWidth: 2, pointRadius: 4, pointStyle: 'circle', tension: 0.3,
+    spanGaps: true, fill: true, order: 0, yAxisID: 'y1',
+  });
+
+  return { periodos, datasets };
+}
 
 function _renderCharts(rows) {
   const opts = (yLabel, unit) => ({
@@ -432,7 +545,7 @@ function _renderCharts(rows) {
     layout: { padding: { right: 54 } },
     elements: { line: { borderCapStyle: 'round', borderJoinStyle: 'round' } },
     plugins: {
-      legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: '#475569' } },
+      legend: { position: 'top', align: 'center', labels: { boxWidth: 12, font: { size: 11 }, color: '#475569' } },
       tooltip: {
         backgroundColor: '#1e293b', padding: 10, cornerRadius: 8,
         titleFont: { size: 12, weight: '600' }, bodyFont: { size: 12 },
@@ -445,6 +558,7 @@ function _renderCharts(rows) {
     scales: {
       x: { grid: { color: '#f1f5f9' }, border: { color: '#e2e8f0' }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
       y: {
+        beginAtZero: true,
         grid: { color: '#f1f5f9' }, border: { display: false },
         title: { display: true, text: yLabel, font: { size: 11, weight: '600' }, color: '#64748b' },
         ticks: { font: { size: 10 }, color: '#94a3b8' },
@@ -466,19 +580,66 @@ function _renderCharts(rows) {
   if (_chartRent) _chartRent.destroy();
   _chartRent = new Chart($('histChartRent'), {
     type: 'line', data: { labels: p1, datasets: ds1 }, options: opts('Arriendo UF', ' UF'),
-    plugins: [_endLabelsPlugin],
   });
 
   if (_chartVac) _chartVac.destroy();
   _chartVac = new Chart($('histChartVac'), {
     type: 'line', data: { labels: p2, datasets: ds2 }, options: opts('Vacancia (%)', '%'),
-    plugins: [_endLabelsPlugin],
   });
 
   if (_chartStock) _chartStock.destroy();
   _chartStock = new Chart($('histChartStock'), {
     type: 'line', data: { labels: p3, datasets: ds3 }, options: opts('Stock (unidades)', ' unid.'),
-    plugins: [_endLabelsPlugin],
+  });
+
+  // Stock (barras, por tipología o TODOS) + Vacancia (línea, eje secundario)
+  // en un solo gráfico — a propósito: la gracia es verlos juntos. Mitigado
+  // con ambos ejes en beginAtZero (nada de recortar el 0 para "estirar" la
+  // correlación) y encodings bien distintos (relleno sólido vs. línea).
+  const { periodos: p4, datasets: ds4 } = _buildStockVacSeries(rows);
+  const subStockVac = $('histSubStockVac');
+  if (subStockVac) subStockVac.textContent = subtitle(p4);
+
+  if (_chartStockVac) _chartStockVac.destroy();
+  _chartStockVac = new Chart($('histChartStockVac'), {
+    type: 'bar',
+    data: { labels: p4, datasets: ds4 },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { right: 12 } },
+      plugins: {
+        legend: { position: 'top', align: 'center', labels: { boxWidth: 12, font: { size: 11 }, color: '#475569' } },
+        tooltip: {
+          backgroundColor: '#1e293b', padding: 10, cornerRadius: 8,
+          titleFont: { size: 12, weight: '600' }, bodyFont: { size: 12 },
+          callbacks: { label: ctx => {
+            const unit = ctx.dataset.yAxisID === 'y1' ? '%' : ' unid.';
+            return ` ${ctx.dataset.label}: ${ctx.parsed.y != null
+              ? ctx.parsed.y.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + unit : '—'}`;
+          } },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { color: '#f1f5f9' }, border: { color: '#e2e8f0' },
+          ticks: { font: { size: 10 }, color: '#94a3b8' },
+        },
+        y: {
+          stacked: true, beginAtZero: true,
+          grid: { color: '#f1f5f9' }, border: { display: false },
+          title: { display: true, text: 'Stock (unidades)', font: { size: 11, weight: '600' }, color: '#64748b' },
+          ticks: { font: { size: 10 }, color: '#94a3b8' },
+        },
+        y1: {
+          beginAtZero: true, position: 'right',
+          grid: { drawOnChartArea: false }, border: { display: false },
+          title: { display: true, text: 'Vacancia (%)', font: { size: 11, weight: '600' }, color: '#64748b' },
+          ticks: { font: { size: 10 }, color: '#94a3b8' },
+        },
+      },
+    },
   });
 }
 
@@ -507,17 +668,18 @@ function _renderKpis(rows) {
 
   const last = periodos[periodos.length - 1];
   const prev = periodos.length > 1 ? periodos[periodos.length - 2] : null;
-  const avgFor = (per, metrica) => _avg(rows.filter(r => r['Período Key'] === per).map(r => r[metrica]));
+  const avgFor = (per, metrica) => _avgPositive(rows.filter(r => r['Período Key'] === per).map(r => r[metrica]));
 
   const sumFor = (per, metrica) => _sum(rows.filter(r => r['Período Key'] === per).map(r => r[metrica]));
 
   const rentLast = avgFor(last, 'Arriendo UF');
   const rentPrev = prev ? avgFor(prev, 'Arriendo UF') : null;
-  const vacLast  = avgFor(last, 'Vacancia (%)');
-  const vacPrev  = prev ? avgFor(prev, 'Vacancia (%)') : null;
+  const vacLast  = _weightedVacancia(rows.filter(r => r['Período Key'] === last));
+  const vacPrev  = prev ? _weightedVacancia(rows.filter(r => r['Período Key'] === prev)) : null;
   const stockLast = sumFor(last, 'Stock');
   const stockPrev = prev ? sumFor(prev, 'Stock') : null;
   const proyectos = new Set(rows.map(r => r['Proyecto'])).size;
+  const comunas   = new Set(rows.map(r => r['Comuna']).filter(Boolean)).size;
 
   const fmtUF  = v => v != null ? v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) : '—';
   const fmtPct = v => v != null ? v.toFixed(1) : '—';
@@ -543,11 +705,11 @@ function _renderKpis(rows) {
     <div class="hist-kpi-card" style="--hist-kpi-accent:#059669;">
       <span class="hist-kpi-label">Proyectos</span>
       <span class="hist-kpi-value">${proyectos}</span>
-      <span class="hist-kpi-sub">En comunas seleccionadas</span>
+      <span class="hist-kpi-sub">En la consulta actual</span>
     </div>
     <div class="hist-kpi-card" style="--hist-kpi-accent:#6d28d9;">
       <span class="hist-kpi-label">Comunas</span>
-      <span class="hist-kpi-value">${_selected.size}</span>
+      <span class="hist-kpi-value">${comunas}</span>
       <span class="hist-kpi-sub">${periodos.length} períodos de histórico</span>
     </div>
   `;
@@ -596,20 +758,7 @@ function _clearInternal() {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
-function _initComunaChips() {
-  const cont = $('histComunaChips');
-  cont.innerHTML = COMUNAS.map((c, i) =>
-    `<button class="hist-comuna-chip" data-idx="${i}"><span class="hist-chip-dot"></span>${c.label}</button>`
-  ).join('');
-  cont.querySelectorAll('.hist-comuna-chip').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = +btn.dataset.idx;
-      _selected.has(idx) ? _selected.delete(idx) : _selected.add(idx);
-      btn.classList.toggle('active', _selected.has(idx));
-      _loadSelected();
-    });
-  });
-
+function _initListeners() {
   const avgBtn = $('histAvgBtn');
   if (avgBtn) {
     avgBtn.addEventListener('click', () => {
@@ -648,12 +797,24 @@ function _initComunaChips() {
     _copyChart(_chartVac, $('histWrapVac'), $('histCopyVac')));
   $('histCopyStock')?.addEventListener('click', () =>
     _copyChart(_chartStock, $('histWrapStock'), $('histCopyStock')));
+  $('histCopyStockVac')?.addEventListener('click', () =>
+    _copyChart(_chartStockVac, $('histWrapStockVac'), $('histCopyStockVac')));
 }
+
+// Referencia del último window._mfHistoricoSource ya cargado en _st.rows,
+// para no re-procesar (y no perder los filtros que el usuario haya tocado)
+// cada vez que se reabre el tab si la consulta activa no cambió.
+let _loadedSourceRef = null;
 
 export function renderHistorico() {
   if (!_initialized) {
-    _initComunaChips();
+    _initListeners();
     _initialized = true;
   }
-  if (_st.rows.length) _render();
+  if (window._mfHistoricoSource !== _loadedSourceRef) {
+    _loadedSourceRef = window._mfHistoricoSource;
+    _loadFromCurrentQuery();
+  } else {
+    _render();
+  }
 }

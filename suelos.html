@@ -310,6 +310,7 @@
               <label>Marcar percentil</label>
               <div class="marker-add">
                 <input type="number" id="distribPctInput" min="1" max="99" step="1" placeholder="ej: 50">
+                <input type="color" id="distribPctColor" value="#6b7280" title="Color del próximo marcador">
                 <button id="distribAddPct" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -317,6 +318,7 @@
               <label id="distribMarkLabel">Marcar valor</label>
               <div class="marker-add">
                 <input type="number" id="distribPriceInput" min="0" step="0.01" placeholder="ej: 0.15">
+                <input type="color" id="distribPriceColor" value="#ef4444" title="Color del próximo marcador">
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -334,6 +336,18 @@
                   <span id="distribFontSizeVal">11px</span>
                 </div>
               </div>
+              <div class="ctrl distrib-color-ctrl">
+                <label>Color de línea</label>
+                <input type="color" id="distribLineColor" value="#3b82f6">
+              </div>
+              <label class="toggle-check">
+                <input type="checkbox" id="distribFillToggle" checked />
+                <span>Área bajo la curva</span>
+              </label>
+              <label class="toggle-check">
+                <input type="checkbox" id="distribGridToggle" checked />
+                <span>Cuadrícula</span>
+              </label>
               <div class="ctrl distrib-ratio-ctrl">
                 <label>Proporción</label>
                 <div class="distrib-ratio-row">
@@ -341,6 +355,22 @@
                   <button class="ratio-btn" data-ratio="1.78">16:9</button>
                   <button class="ratio-btn" data-ratio="1.33">4:3</button>
                   <button class="ratio-btn" data-ratio="1">1:1</button>
+                </div>
+              </div>
+              <div class="ctrl axis-range-ctrl">
+                <label>Eje X</label>
+                <div class="axis-range-row">
+                  <input type="number" id="distribXMin" class="axis-range-input" placeholder="mín">
+                  <span>–</span>
+                  <input type="number" id="distribXMax" class="axis-range-input" placeholder="máx">
+                </div>
+              </div>
+              <div class="ctrl axis-range-ctrl">
+                <label>Eje Y</label>
+                <div class="axis-range-row">
+                  <input type="number" id="distribYMin" class="axis-range-input" placeholder="mín">
+                  <span>–</span>
+                  <input type="number" id="distribYMax" class="axis-range-input" placeholder="máx">
                 </div>
               </div>
             </div>

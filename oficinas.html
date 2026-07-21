@@ -33,6 +33,7 @@
       <span id="fileName" class="file-name"></span>
       <button id="btnAreaQuery" class="ghost-btn" title="Dibujar un polígono en el mapa">&#128205; Dibujar Área</button>
       <button id="btnComunaQuery" class="ghost-btn" title="Consultar por límites de una comuna entera">&#127969; Por Comuna</button>
+      <button id="btnRecurringQuery" class="ghost-btn" title="Consultas guardadas a Inciti (comunas y áreas propias)">&#128257; Consultas Recurrentes</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
   </header>
@@ -140,7 +141,7 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; background: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
           <input type="text" id="prevFilterName" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing:border-box;" placeholder="🔍 Filtrar por nombre..." />
           <select id="prevFilterCommune" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todas las comunas</option></select>
-          <select id="prevFilterOwner" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todos los corredores</option></select>
+          <select id="prevFilterOwner" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todos los submercados</option></select>
         </div>
         <div style="flex: 1; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: auto; border: 1px solid #e2e8f0;">
           <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
@@ -149,7 +150,7 @@
                 <th width="40" style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;"><input type="checkbox" id="prevSelectAll" checked /></th>
                 <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Nombre</th>
                 <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Comuna</th>
-                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Corredor</th>
+                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Submercado</th>
               </tr>
             </thead>
             <tbody id="previewTableBody"></tbody>
@@ -168,12 +169,64 @@
         </div>
       </div>
 
+      <div id="recurringQueriesContainer" class="hidden">
+        <div class="rq-header">
+          <h2>Consultas Recurrentes</h2>
+          <div class="rq-header-actions">
+            <button id="rqAddBtn" class="area-btn primary">+ Nueva consulta</button>
+            <button id="rqBackBtn" class="area-btn cancel">Volver</button>
+          </div>
+        </div>
+        <div id="rqGrid" class="rq-grid"></div>
+      </div>
+
+      <div id="rqFormOverlay" class="hidden" style="position: fixed; inset: 0; z-index: 2000; background: rgba(15,23,42,0.45); display: flex; align-items: center; justify-content: center;">
+        <div class="comuna-query-panel" style="width: min(420px, 92%);">
+          <div class="comuna-query-title" id="rqFormTitle">Nueva consulta recurrente</div>
+          <div style="display:flex; flex-direction:column; gap: 10px;">
+            <label class="mp-label" style="font-size:12px;">Nombre</label>
+            <input type="text" id="rqFormLabel" class="mp-input" placeholder="Ej: Las Condes, o Torre X + comparables" />
+
+            <label class="mp-label" style="font-size:12px;">Tipo</label>
+            <div style="display:flex; gap:14px; font-size:13px; color:#374151;">
+              <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="rqFormType" value="comuna" checked /> Comuna</label>
+              <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="rqFormType" value="polygon" /> Área dibujada</label>
+            </div>
+
+            <div id="rqFormComunaRow">
+              <select id="rqFormComunaSelect" style="width:100%; padding:7px 10px; border:1px solid #d1d5db; border-radius:7px; font-size:13px; color:#374151;">
+                <option value="">-- Selecciona una comuna --</option>
+              </select>
+            </div>
+            <div id="rqFormPolygonRow" class="hidden">
+              <p class="hint" style="margin:0 0 8px 0;">Al guardar, te vamos a pedir dibujar el área en el mapa.</p>
+            </div>
+
+            <div class="comuna-query-row" style="justify-content:flex-end; margin-top:6px;">
+              <button id="rqFormCancel" class="area-btn cancel">Cancelar</button>
+              <button id="rqFormSave" class="area-btn primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="rqLoadingOverlay" class="hidden rq-loading-overlay">
+        <div class="rq-loading-scene">
+          <div class="rq-skyline">
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="rq-scanline"></div>
+          <div class="rq-pin">📍</div>
+        </div>
+        <p id="rqLoadingStatus" class="rq-loading-text">Consultando Inciti…</p>
+      </div>
+
       <div id="dashboard" class="dashboard hidden">
         <div class="kpis" id="kpis"></div>
 
         <div class="tabs">
           <button class="tab active" data-tab="mapa">Mapa</button>
-          <button class="tab" data-tab="proyectos">Por corredor</button>
+          <button class="tab" data-tab="proyectos">Proyectos</button>
           <button class="tab" data-tab="svp">Dispersión</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="comparativa">Resumen</button>
@@ -212,9 +265,17 @@
           </div>
         </div>
 
-        <!-- TAB: POR CORREDOR -->
+        <!-- TAB: PROYECTOS (agrupable por submercado / propietario / edificio) -->
         <div class="tab-panel" data-panel="proyectos">
           <div class="chart-controls">
+            <div class="ctrl">
+              <label>Agrupar por</label>
+              <select id="proyGroupBy">
+                <option value="submercado">Submercado</option>
+                <option value="propietario">Propietario</option>
+                <option value="edificio">Edificio</option>
+              </select>
+            </div>
             <div class="ctrl">
               <label>Métrica</label>
               <select id="proyMetrica">
@@ -355,6 +416,7 @@
               <label>Marcar percentil</label>
               <div class="marker-add">
                 <input type="number" id="distribPctInput" min="1" max="99" step="1" placeholder="ej: 50">
+                <input type="color" id="distribPctColor" value="#6b7280" title="Color del próximo marcador">
                 <button id="distribAddPct" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -362,6 +424,7 @@
               <label id="distribMarkLabel">Marcar valor</label>
               <div class="marker-add">
                 <input type="number" id="distribPriceInput" min="0" step="1" placeholder="ej: 20">
+                <input type="color" id="distribPriceColor" value="#ef4444" title="Color del próximo marcador">
                 <button id="distribAddPrice" class="marker-btn pct-btn">+</button>
               </div>
             </div>
@@ -379,6 +442,18 @@
                   <span id="distribFontSizeVal">11px</span>
                 </div>
               </div>
+              <div class="ctrl distrib-color-ctrl">
+                <label>Color de línea</label>
+                <input type="color" id="distribLineColor" value="#3b82f6">
+              </div>
+              <label class="toggle-check">
+                <input type="checkbox" id="distribFillToggle" checked />
+                <span>Área bajo la curva</span>
+              </label>
+              <label class="toggle-check">
+                <input type="checkbox" id="distribGridToggle" checked />
+                <span>Cuadrícula</span>
+              </label>
               <div class="ctrl distrib-ratio-ctrl">
                 <label>Proporción</label>
                 <div class="distrib-ratio-row">
@@ -386,6 +461,22 @@
                   <button class="ratio-btn" data-ratio="1.78">16:9</button>
                   <button class="ratio-btn" data-ratio="1.33">4:3</button>
                   <button class="ratio-btn" data-ratio="1">1:1</button>
+                </div>
+              </div>
+              <div class="ctrl axis-range-ctrl">
+                <label>Eje X</label>
+                <div class="axis-range-row">
+                  <input type="number" id="distribXMin" class="axis-range-input" placeholder="mín">
+                  <span>–</span>
+                  <input type="number" id="distribXMax" class="axis-range-input" placeholder="máx">
+                </div>
+              </div>
+              <div class="ctrl axis-range-ctrl">
+                <label>Eje Y</label>
+                <div class="axis-range-row">
+                  <input type="number" id="distribYMin" class="axis-range-input" placeholder="mín">
+                  <span>–</span>
+                  <input type="number" id="distribYMax" class="axis-range-input" placeholder="máx">
                 </div>
               </div>
             </div>

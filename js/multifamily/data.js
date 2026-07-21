@@ -186,6 +186,14 @@ export function onDataLoaded(rows) {
   state.filtered = rows.slice();
   state.excludedProjects = new Set();
 
+  // El histórico solo tiene sentido sobre una consulta a Inciti reciente
+  // (trae la serie de períodos completa). Si este load es un Excel o un
+  // dataset guardado, no hay periods[] disponibles — limpiar la fuente
+  // anterior para no mostrar histórico de una consulta que ya no aplica.
+  // (main.js vuelve a fijarla justo después de esta llamada cuando el
+  // load sí viene de una consulta Inciti recién confirmada.)
+  window._mfHistoricoSource = null;
+
   const colNames  = Object.keys(rows[0] ?? {});
   state.columns   = colNames.map(name => ({
     name,
@@ -198,7 +206,7 @@ export function onDataLoaded(rows) {
   // Lazy-load todos los módulos
   Promise.all([
     import('./miProyecto.js'),
-    import('../core/filters.js'),
+    import('./filters-modern.js'),
     import('../core/kpis.js'),
     import('../core/table.js'),
     import('../core/chart-distrib.js'),

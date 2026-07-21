@@ -20,6 +20,12 @@ export const state = {
   chart:        null,  // referencia al chart SVP activo (usado por el plugin de pendiente)
 };
 
+// Objeto mutable compartido entre data.js y main.js: el selector "Agrupar
+// por" del tab Proyectos escribe acá, y como chart-proyectos.js lee
+// options.projectCandidates en cada render (no lo cachea), todos los
+// llamados que reciban esta misma referencia quedan sincronizados.
+export const PROY_GROUP = { projectCandidates: ['submercado'] };
+
 // ── Normalización ──────────────────────────────────────────────────────────
 const _normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').trim();
 const NORM_MAP  = Object.fromEntries(
@@ -142,7 +148,7 @@ export function onDataLoaded(rows) {
 
       const tab = activeTab();
       if (tab === 'mapa')         renderMap(_state, MAP, mp);
-      if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, null, { projectCandidates: ['corredor'] });
+      if (tab === 'proyectos')    renderProyectos(_state, PROYECTOS_METRICS, null, PROY_GROUP);
       if (tab === 'svp')          renderSvp(_state, SVP, mp);
       if (tab === 'distribucion') renderDistrib(_state, DISTRIB_COLS, mp);
       if (tab === 'comparativa')  renderComparativa(_state, COMPARATIVA, null);
@@ -162,7 +168,7 @@ export function onDataLoaded(rows) {
     populateDistribSelectors(state, DISTRIB_COLS);
 
     // Inicializar listeners de gráficos
-    initProyectosListeners(state, PROYECTOS_METRICS, null, { projectCandidates: ['corredor'] });
+    initProyectosListeners(state, PROYECTOS_METRICS, null, PROY_GROUP);
     initSvpListeners(state, SVP, mp);
     initDistribListeners(state, DISTRIB_COLS, mp);
 

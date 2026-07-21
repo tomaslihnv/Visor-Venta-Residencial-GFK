@@ -2,6 +2,17 @@ import { $, fmt, extractDormitorios, norm } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 
+// ── Personalización de la curva de distribución (color de línea / relleno) ──
+function _distribLineColor() { return $('#distribLineColor')?.value || '#3b82f6'; }
+function _distribFillOn() { return $('#distribFillToggle')?.checked ?? true; }
+function _distribGridOn() { return $('#distribGridToggle')?.checked ?? true; }
+function _hexToRgba(hex, alpha) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex ?? '');
+  if (!m) return `rgba(59,130,246,${alpha})`;
+  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function _fmtTipo(v) {
   const s = String(v ?? '').trim();
   return (/^\d+$/.test(s) && +s > 0 && +s <= 10) ? `${s}D` : s.toUpperCase();
@@ -885,7 +896,15 @@ export function renderSupVsRenta() {
 // ============== Distribución (curva de cuantiles) ==============
 let distribChart = null;
 let distribListenersReady = false;
-const distribMarkers = { percentiles: new Set(), prices: new Set() };
+// Mapa en vez de Set: cada marcador (percentil o valor) guarda su propio color.
+const distribMarkers = { percentiles: new Map(), prices: new Map() };
+const MARKER_PALETTE = ['#6b7280', '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+let markerColorIdx = 0;
+function nextMarkerColor() {
+  const c = MARKER_PALETTE[markerColorIdx % MARKER_PALETTE.length];
+  markerColorIdx++;
+  return c;
+}
 let distribUnit = 'UF';
 
 export function populateDistribSelectors() {
@@ -932,6 +951,9 @@ export function populateDistribSelectors() {
     $('#distribXMax')?.addEventListener('input', renderDistrib);
     $('#distribYMin')?.addEventListener('input', renderDistrib);
     $('#distribYMax')?.addEventListener('input', renderDistrib);
+    $('#distribLineColor')?.addEventListener('input', renderDistrib);
+    $('#distribFillToggle')?.addEventListener('change', renderDistrib);
+    $('#distribGridToggle')?.addEventListener('change', renderDistrib);
     document.querySelector('.distrib-mp-btn')?.addEventListener('click', () => {
       document.querySelector('.distrib-mp-btn').classList.toggle('active');
       renderDistrib();
@@ -1004,8 +1026,10 @@ export function populateDistribSelectors() {
     const addPct = () => {
       const v = parseInt($('#distribPctInput').value);
       if (isNaN(v) || v < 1 || v > 99) return;
-      distribMarkers.percentiles.add(v);
+      const colorInput = $('#distribPctColor');
+      distribMarkers.percentiles.set(v, colorInput?.value || nextMarkerColor());
       $('#distribPctInput').value = '';
+      if (colorInput) colorInput.value = nextMarkerColor();
       refreshMarkerTags();
       renderDistrib();
     };
@@ -1015,8 +1039,10 @@ export function populateDistribSelectors() {
     const addPrice = () => {
       const v = parseFloat($('#distribPriceInput').value);
       if (isNaN(v) || v <= 0) return;
-      distribMarkers.prices.add(v);
+      const colorInput = $('#distribPriceColor');
+      distribMarkers.prices.set(v, colorInput?.value || nextMarkerColor());
       $('#distribPriceInput').value = '';
+      if (colorInput) colorInput.value = nextMarkerColor();
       refreshMarkerTags();
       renderDistrib();
     };
@@ -1031,10 +1057,14 @@ function refreshMarkerTags() {
   if (!pctContainer) return;
 
   pctContainer.innerHTML = '';
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(v => {
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([v, color]) => {
     const tag = document.createElement('span');
     tag.className = 'marker-tag pct-tag';
-    tag.innerHTML = `P${v} <button data-val="${v}" class="rm-pct">×</button>`;
+    tag.innerHTML = `<input type="color" class="marker-color-input" value="${color}" title="Color del marcador"> P${v} <button data-val="${v}" class="rm-pct">×</button>`;
+    tag.querySelector('.marker-color-input').addEventListener('input', e => {
+      distribMarkers.percentiles.set(v, e.target.value);
+      renderDistrib();
+    });
     tag.querySelector('.rm-pct').addEventListener('click', () => {
       distribMarkers.percentiles.delete(v);
       refreshMarkerTags();
@@ -1044,10 +1074,14 @@ function refreshMarkerTags() {
   });
 
   priceContainer.innerHTML = '';
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(v => {
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([v, color]) => {
     const tag = document.createElement('span');
     tag.className = 'marker-tag price-tag';
-    tag.innerHTML = `${v.toLocaleString('es-CL')} ${distribUnit} <button data-val="${v}" class="rm-price">×</button>`;
+    tag.innerHTML = `<input type="color" class="marker-color-input" value="${color}" title="Color del marcador"> ${v.toLocaleString('es-CL')} ${distribUnit} <button data-val="${v}" class="rm-price">×</button>`;
+    tag.querySelector('.marker-color-input').addEventListener('input', e => {
+      distribMarkers.prices.set(v, e.target.value);
+      renderDistrib();
+    });
     tag.querySelector('.rm-price').addEventListener('click', () => {
       distribMarkers.prices.delete(v);
       refreshMarkerTags();
@@ -1149,15 +1183,16 @@ export function renderDistrib() {
   });
   const normalFit = showNormal ? _computeNormalFit(sortedVals, refData) : null;
 
+  const lineColor = _distribLineColor();
   const datasets = [{
     label: col,
     data: refData,
-    borderColor: '#3b82f6',
-    backgroundColor: 'rgba(59,130,246,0.08)',
+    borderColor: lineColor,
+    backgroundColor: _hexToRgba(lineColor, 0.12),
     pointRadius: 0,
     borderWidth: 2,
     tension: 0.4,
-    fill: true,
+    fill: _distribFillOn(),
   }];
 
   if (normalFit) {
@@ -1173,40 +1208,40 @@ export function renderDistrib() {
 
   const annotations = {};
   const ANN_COLOR = '#6b7280';
-  const annLabel = (content) => ({
+  const annLabel = (content, color = ANN_COLOR) => ({
     content, display: true, position: 'start',
-    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([pct, color]) => {
     const price = lerpAtX(refData, pct);
     if (price == null || price === 0) return;
     annotations[`pv_${pct}`] = {
       type: 'line', xMin: pct, xMax: pct, yMax: price,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`P${pct}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}`, color),
     };
     annotations[`ph_${pct}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pct,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${fmtVal(price)} ${distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${fmtVal(price)} ${distribUnit}`, color),
     };
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([price, color]) => {
     const pct = lerpAtY(refData, price);
     const pctForLabel = pct !== null ? pct : 100;
     annotations[`prh_${price}`] = {
       type: 'line', yMin: price, yMax: price, xMax: pctForLabel,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${fmtVal(price)} ${distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${fmtVal(price)} ${distribUnit}`, color),
     };
     if (pct !== null) {
       annotations[`prv_${price}`] = {
         type: 'line', xMin: pct, xMax: pct, yMax: price,
-        borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-        label: annLabel(`P${pct.toFixed(1)}`),
+        borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+        label: annLabel(`P${pct.toFixed(1)}`, color),
       };
     }
   });
@@ -1312,10 +1347,12 @@ export function renderDistrib() {
           type: 'linear', min: 0, max: 100,
           title: { display: true, text: 'Percentil (%)', font: { size: fs } },
           ticks: { callback: v => v + '%', font: { size: fs } },
+          grid: { display: _distribGridOn() },
         },
         y: {
           title: { display: true, text: col, font: { size: fs } },
           ticks: { callback: v => v.toLocaleString('es-CL'), font: { size: fs } },
+          grid: { display: _distribGridOn() },
           ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
           ...(_parseAxisVal($('#distribYMax')?.value) !== null ? { max: _parseAxisVal($('#distribYMax').value) } : {}),
         },
@@ -1459,32 +1496,32 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
   };
 
   const ANN_COLOR = '#6b7280';
-  const annLabel = (content) => ({
+  const annLabel = (content, color = ANN_COLOR) => ({
     content, display: true, position: 'start',
-    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
   const annotations = {};
 
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([pct, color]) => {
     const val = valAtPct(pct);
     if (val == null) return;
     const valLabel = fmtVal(val);
     annotations[`dpv_${pct}`] = {
       type: 'line', xMin: val, xMax: val, yMax: lerpAtX(kdeData, val) ?? undefined,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`P${pct}: ${valLabel} ${distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}: ${valLabel} ${distribUnit}`, color),
     };
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([price, color]) => {
     const pct = lerpAtY(refData, price);
     const pctStr = pct !== null ? ` (P${pct.toFixed(1)})` : '';
     annotations[`dprv_${price}`] = {
       type: 'line', xMin: price, xMax: price, yMax: lerpAtX(kdeData, price) ?? undefined,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${fmtVal(price)} ${distribUnit}${pctStr}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${fmtVal(price)} ${distribUnit}${pctStr}`, color),
     };
   });
 
@@ -1517,17 +1554,18 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
     });
   }
 
+  const distribLineColor = _distribLineColor();
   const datasets = [
     {
       type: 'bar', label: 'Frecuencia',
       data: bins,
-      backgroundColor: 'rgba(59,130,246,0.55)', borderColor: 'rgba(59,130,246,0.85)', borderWidth: 1,
+      backgroundColor: _hexToRgba(distribLineColor, 0.55), borderColor: _hexToRgba(distribLineColor, 0.85), borderWidth: 1,
       barPercentage: 1.0, categoryPercentage: 1.0, order: 3,
     },
     {
       type: 'line', label: 'Densidad',
       data: kdeData,
-      borderColor: '#3b82f6', backgroundColor: 'transparent',
+      borderColor: distribLineColor, backgroundColor: 'transparent',
       borderWidth: 2, pointRadius: 0, tension: 0.4, fill: false, order: 2,
     },
   ];
@@ -1601,10 +1639,12 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
           min: _parseAxisVal($('#distribXMin')?.value) ?? x0,
           max: _parseAxisVal($('#distribXMax')?.value) ?? x1,
           title: { display: true, text: col, font: { size: fs } },
-          ticks: { callback: v => fmtVal(v), font: { size: fs } } },
+          ticks: { callback: v => fmtVal(v), font: { size: fs } },
+          grid: { display: _distribGridOn() } },
         y: { beginAtZero: true, bounds: 'data',
           title: { display: true, text: '% de datos', font: { size: fs } },
           ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } },
+          grid: { display: _distribGridOn() },
           ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
           ...(_parseAxisVal($('#distribYMax')?.value) !== null ? { max: _parseAxisVal($('#distribYMax').value) } : {}),
         },
@@ -1650,31 +1690,31 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
   };
 
   const ANN_COLOR = '#6b7280';
-  const annLabel = (content) => ({
+  const annLabel = (content, color = ANN_COLOR) => ({
     content, display: true, position: 'start',
-    color: ANN_COLOR, backgroundColor: 'rgba(255,255,255,0.9)',
+    color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
 
   const annotations = {};
 
-  [...distribMarkers.percentiles].sort((a, b) => a - b).forEach(pct => {
+  [...distribMarkers.percentiles.entries()].sort((a, b) => a[0] - b[0]).forEach(([pct, color]) => {
     const val = valAtPct(pct);
     if (val == null) return;
     annotations[`dpv_${pct}`] = {
       type: 'line', xMin: val, xMax: val, yMax: lerpAtX(lnData, val) ?? undefined,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`P${pct}: ${fmtVal(val)} ${distribUnit}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`P${pct}: ${fmtVal(val)} ${distribUnit}`, color),
     };
   });
 
-  [...distribMarkers.prices].sort((a, b) => a - b).forEach(price => {
+  [...distribMarkers.prices.entries()].sort((a, b) => a[0] - b[0]).forEach(([price, color]) => {
     const pct = lerpAtY(refData, price);
     const pctStr = pct !== null ? ` (P${pct.toFixed(1)})` : '';
     annotations[`dprv_${price}`] = {
       type: 'line', xMin: price, xMax: price, yMax: lerpAtX(lnData, price) ?? undefined,
-      borderColor: ANN_COLOR, borderWidth: 1.5, borderDash: [6, 4],
-      label: annLabel(`${fmtVal(price)} ${distribUnit}${pctStr}`),
+      borderColor: color, borderWidth: 1.5, borderDash: [6, 4],
+      label: annLabel(`${fmtVal(price)} ${distribUnit}${pctStr}`, color),
     };
   });
 
@@ -1713,12 +1753,12 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
       datasets: [{
         label: col,
         data: lnData,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59,130,246,0.08)',
+        borderColor: _distribLineColor(),
+        backgroundColor: _hexToRgba(_distribLineColor(), 0.12),
         pointRadius: 0,
         borderWidth: 2,
         tension: 0.3,
-        fill: true,
+        fill: _distribFillOn(),
       }],
     },
     options: {
@@ -1744,6 +1784,7 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
           ...(_parseAxisVal($('#distribXMax')?.value) !== null ? { max: _parseAxisVal($('#distribXMax').value) } : {}),
           title: { display: true, text: col, font: { size: fs } },
           ticks: { callback: v => fmtVal(v), font: { size: fs } },
+          grid: { display: _distribGridOn() },
         },
         y: {
           title: { display: true, text: 'Densidad', font: { size: fs } },

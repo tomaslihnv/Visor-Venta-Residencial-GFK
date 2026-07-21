@@ -49,38 +49,69 @@ function _gridPartition(polygon) {
 
 // ── Normalización ──────────────────────────────────────────────────────────
 
+// El survey de oficinas reporta por trimestre a nivel de edificio (no por
+// aviso individual como el Excel anterior): cada período trae priceUfPerM2,
+// vacancy, absorptionM2, etc. Bastantes trimestres traen priceUfPerM2: 0
+// cuando no hubo transacciones esa ventana (no significa arriendo gratis),
+// así que buscamos el más reciente con precio real antes de resignarnos
+// al último disponible.
+function _lastValidPeriod(periods) {
+  if (!Array.isArray(periods) || !periods.length) return null;
+  const withPrice = periods.slice().reverse().find(p => (p.priceUfPerM2 ?? 0) > 0);
+  return withPrice ?? periods[periods.length - 1];
+}
+
 export function flattenEntities(entities) {
   return entities.flatMap(entity => {
-    const loc    = entity.location ?? {};
-    const period = entity.periods?.[entity.periods.length - 1]; // Toma el último período (ej. Q2 2026)
-
+    const loc = entity.location ?? {};
     const lat = loc.lat ?? null, lng = loc.lng ?? null;
-    
+
     // Si la entidad no tiene coordenadas, la descartamos
     if (lat == null || lng == null) return [];
 
-    const usableM2 = _num(entity.usableM2 ?? entity.characteristics?.usableM2);
-    // En oficinas el precio viene en el período o se infiere de la estructura
-    const rentUF   = _num(period?.rentUF ?? period?.priceUF);
-    const ufPerM2  = _num(period?.ufPerM2 ?? period?.rentUfPerM2) ?? 
-                     (rentUF && usableM2 ? Number((rentUF / usableM2).toFixed(2)) : null);
+    const period = _lastValidPeriod(entity.periods);
+    if (!period) return [];
+
+    // usableM2 es la superficie arrendable de todo el edificio (no de un
+    // aviso individual): no hay equivalente 1:1 al "Precio UF" del Excel
+    // anterior (precio de una oferta puntual), así que lo aproximamos como
+    // el valor de mercado del edificio completo a la tarifa vigente.
+    const usableM2 = _num(entity.characteristics?.usableM2);
+    const ufPerM2  = _num(period.priceUfPerM2);
+    const rentUF   = (ufPerM2 && usableM2) ? Number((ufPerM2 * usableM2).toFixed(1)) : null;
+
+    const vacancy    = _num(period.vacancy);
+    const vacanciaPct = vacancy != null ? Math.round(vacancy * 1000) / 10 : null;
+
+    // "corridor" en la API de Inciti es en realidad el submercado (ej.
+    // Vitacura, El Golf, El Bosque), no un corredor/broker — lo renombramos
+    // acá para no arrastrar el nombre equivocado al resto del visor.
+    const chars = entity.characteristics ?? {};
 
     const row = {
-      'Nombre':     entity.name ?? entity.address ?? String(entity.id ?? ''),
-      'Corredor':   entity.corridor ?? entity.owner ?? '',
-      'Comuna':     loc.commune ?? loc.comuna ?? '',
-      'Operación':  'Arriendo',
-      'Tipo':       'Oficina',
-      'Clase':      entity.class ?? '',
-      'Útil (m²)':  usableM2,
-      'Precio UF':  rentUF,
-      'UF/m²':      ufPerM2,
-      '__lat':      Number(lat),
-      '__lng':      Number(lng),
+      'Nombre':             entity.name ?? entity.address ?? String(entity.id ?? ''),
+      'Submercado':         entity.corridor ?? '',
+      'Propietario':        entity.owner ?? '',
+      'Comuna':              loc.commune ?? loc.comuna ?? '',
+      'Operación':           'Arriendo',
+      'Tipo':                'Oficina',
+      'Clase':               entity.class ?? '',
+      'Período':             period.label ?? period.key ?? '',
+      'Útil (m²)':           usableM2,
+      'Precio UF':           rentUF,
+      'UF/m²':               ufPerM2,
+      'Vacancia (%)':        vacanciaPct,
+      'Pisos':               _num(chars.floors),
+      'Antigüedad':          _num(chars.age),
+      'Certificación LEED':  chars.leedCertification ?? '',
+      'Multipropietario':    chars.multiOwner ? 'Sí' : 'No',
+      'Corporativo':         chars.corporate ? 'Sí' : 'No',
+      '__lat':               Number(lat),
+      '__lng':               Number(lng),
     };
 
     return [row];
-  });
+  }).filter(r => (r['Útil (m²)'] ?? 0) > 0);
 }
 
 function _pointInPolygon(lat, lng, poly) {

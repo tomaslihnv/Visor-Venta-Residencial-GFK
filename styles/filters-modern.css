@@ -1,0 +1,195 @@
+/* ── Panel de filtros moderno (piloto Multifamily) ──────────────────────────
+   Tematiza Shoelace con la paleta ya usada en el dashboard (navy #0f172a /
+   #1e293b para superficies oscuras, azul #3b82f6 / #2563eb de acento, grises
+   #64748b / #94a3b8 / #e2e8f0 / #cbd5e1) en vez del azul por defecto de
+   Shoelace, para que los componentes calcen con el resto del visor. */
+
+:root {
+  --sl-color-primary-50:  #eff6ff;
+  --sl-color-primary-100: #dbeafe;
+  --sl-color-primary-200: #bfdbfe;
+  --sl-color-primary-300: #93c5fd;
+  --sl-color-primary-400: #60a5fa;
+  --sl-color-primary-500: #3b82f6;
+  --sl-color-primary-600: #2563eb;
+  --sl-color-primary-700: #1d4ed8;
+  --sl-color-primary-800: #1e40af;
+  --sl-color-primary-900: #1e3a8a;
+  --sl-color-primary-950: #172554;
+
+  --sl-color-neutral-0:   #ffffff;
+  --sl-color-neutral-50:  #f8fafc;
+  --sl-color-neutral-100: #f1f5f9;
+  --sl-color-neutral-200: #e2e8f0;
+  --sl-color-neutral-300: #cbd5e1;
+  --sl-color-neutral-400: #94a3b8;
+  --sl-color-neutral-500: #64748b;
+  --sl-color-neutral-600: #475569;
+  --sl-color-neutral-700: #334155;
+  --sl-color-neutral-800: #1e293b;
+  --sl-color-neutral-900: #0f172a;
+
+  --sl-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --sl-border-radius-medium: 7px;
+  --sl-border-radius-large: 10px;
+  --sl-input-height-small: 30px;
+}
+
+/* ── Grupos de filtros (sl-details) ─────────────────────────────────────── */
+
+.filter-group-modern {
+  margin-bottom: 8px;
+  --sl-panel-background-color: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.filter-group-modern::part(header) {
+  padding: 8px 10px;
+}
+.filter-group-modern::part(content) {
+  padding: 8px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.filter-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+.filter-group-count {
+  font-size: 10px;
+}
+.filter-group-count.hidden { display: none; }
+
+.filter-search { width: 100%; }
+
+/* Lista de checkboxes siempre visible (no un dropdown) — mismo patrón que
+   el panel de filtros anterior: caja con scroll, filas compactas. */
+.multi-checkbox-list {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+sl-checkbox.multi-checkbox-row {
+  display: block;
+  padding: 3px 0;
+  --sl-input-font-size-small: 12px;
+}
+sl-checkbox.multi-checkbox-row::part(label) {
+  font-size: 12px;
+  color: #374151;
+}
+/* Por defecto el <label> interno de sl-checkbox solo mide su contenido
+   (~48px) mientras la fila mide el ancho completo — los clics en el resto
+   de la fila (donde caería el texto largo de una etiqueta) no llegaban al
+   control real. Se estira a todo el ancho para que toda la fila sea
+   clickeable, no solo el cuadradito + primeras letras. */
+sl-checkbox.multi-checkbox-row::part(base) {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  cursor: pointer;
+}
+
+/* ── Slider (noUiSlider) ─────────────────────────────────────────────────── */
+
+.noui-slider-wrap {
+  margin: 10px 4px 6px;
+  height: 4px;
+}
+.noui-slider-wrap.noUi-target {
+  background: #e2e8f0;
+  border: none;
+  box-shadow: none;
+  border-radius: 999px;
+}
+.noui-slider-wrap .noUi-connect {
+  background: #3b82f6;
+}
+.noui-slider-wrap .noUi-handle {
+  width: 15px; height: 15px;
+  right: -8px; top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #3b82f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  cursor: grab;
+}
+.noui-slider-wrap .noUi-handle:active { cursor: grabbing; }
+.noui-slider-wrap .noUi-handle::before,
+.noui-slider-wrap .noUi-handle::after { display: none; }
+
+.slider-labels {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.slider-lbl-input { flex: 1; }
+.slider-lbl-input::part(base) { font-size: 12px; }
+
+/* ── Barra de filtros activos (chips) ───────────────────────────────────── */
+
+.active-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 8px;
+}
+.active-filters-bar.hidden { display: none; }
+.active-filters-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex: 1;
+}
+.active-filters-chips sl-tag::part(base) {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+/* ── Botón + drawer de filtros en mobile ─────────────────────────────────── */
+
+.mobile-filters-btn {
+  display: none;
+  position: fixed;
+  bottom: 20px; left: 20px;
+  z-index: 900;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: none;
+  background: #0f172a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+}
+.mobile-filters-btn sl-badge.hidden { display: none; }
+
+.filtros-drawer::part(panel) {
+  width: min(360px, 90vw);
+}
+.filtros-drawer::part(body) {
+  padding: 0 16px 16px;
+}
+
+@media (max-width: 880px) {
+  .mobile-filters-btn { display: inline-flex; }
+  #sidebar #filtrosPanel { display: none; }
+}
