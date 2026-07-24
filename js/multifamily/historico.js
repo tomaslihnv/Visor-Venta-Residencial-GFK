@@ -41,7 +41,10 @@ const MONTH_TO_Q = {
 };
 
 const _st = { rows: [], progFilt: new Set(), proyFilt: null };
-let _chartRent = null, _chartVac = null, _chartStock = null, _chartStockVac = null;
+// Un solo chart activo, navegado por botones "Vista" (mismo patrón que
+// Distribución/SVP/Cruz) en vez de 4 canvases simultáneos.
+let _chart = null;
+let _histMode = 'rent'; // 'rent' | 'vac' | 'stock' | 'stockvac'
 const _stockVacProgFilt = new Set(); // vacío = TODOS (una sola barra de stock total)
 let _initialized = false;
 let _showAvg = false;
@@ -55,6 +58,29 @@ const _portfolioVac = { IRR: null, ECH: null };
 let _portfolioLoading = false;
 
 const $ = id => document.getElementById(id);
+
+// Mismo helper y misma paleta de opacidad que las barras de Densidad en
+// Distribución (fill 0.55 / borde 0.85) — para que las barras de Histórico
+// (Stock, Stock+Vacancia, Absorción) hablen el mismo lenguaje visual.
+function _hexToRgba(hex, alpha) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex ?? '');
+  if (!m) return `rgba(59,130,246,${alpha})`;
+  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+const _histBarFill   = hex => _hexToRgba(hex, 0.55);
+const _histBarBorder = hex => _hexToRgba(hex, 0.85);
+
+// ── Opciones visuales (panel ⚙ Visual, mismo patrón que Distribución/SVP/Cruz) ─
+function _histFontSize() { return parseInt($('histFontSize')?.value ?? '11'); }
+function _histGridOn()   { return $('histGridToggle') ? $('histGridToggle').checked : true; }
+// Colores elegibles por el usuario (panel Visual) — aplican a las series
+// "TODOS" (sin desglose por tipología), donde no hay una paleta categórica
+// de por medio: barra de Stock total, línea de Vacancia/Absorción/Promedio
+// mercado. Cuando hay desglose por tipología se sigue usando PROGRAM_COLORS,
+// igual que en Dispersión/Cruz/Proyectos.
+function _histBarColor()  { return $('histBarColor')?.value ?? '#2a78d6'; }
+function _histLineColor() { return $('histLineColor')?.value ?? '#16a34a'; }
 
 function _avg(arr) {
   const v = arr.filter(x => x != null && !isNaN(x));
@@ -348,11 +374,18 @@ function _filtered() {
 
 async function _copyChart(chart, wrapEl, btnEl) {
   if (!chart || !wrapEl) return;
-  const scale = 3;
+  const scale = 3, pad = 32;
+  // Misma "Proporción" (botones + custom) que Distribución/SVP/Cruz/Proyectos.
+  const customVal = parseFloat($('histRatioCustom')?.value ?? '');
+  const ratio = (!isNaN(customVal) && customVal > 0)
+    ? String(customVal)
+    : (document.querySelector('.hist-ratio-btn.active')?.dataset.ratio ?? 'auto');
   const origDPR = chart.options.devicePixelRatio ?? window.devicePixelRatio;
   const origW = chart.width, origH = chart.height;
+  const exportW = wrapEl.clientWidth - pad;
+  const exportH = ratio === 'auto' ? origH : Math.round(exportW / parseFloat(ratio));
   chart.options.devicePixelRatio = scale;
-  chart.resize(wrapEl.clientWidth, wrapEl.clientHeight);
+  chart.resize(exportW, exportH);
   const url = chart.toBase64Image('image/png', 1);
   chart.options.devicePixelRatio = origDPR;
   chart.resize(origW, origH);
@@ -418,11 +451,12 @@ function _buildSeries(rows, metrica, agg = _avg) {
     const avgData = periodos.map(per =>
       _aggFor(rows.filter(r => r['Período Key'] === per))
     );
+    const avgColor = _histLineColor();
     datasets.push({
       label: agg === _sum ? 'Total mercado' : 'Promedio mercado',
       data: avgData,
-      borderColor: AVG_COLOR,
-      backgroundColor: AVG_COLOR + '11',
+      borderColor: avgColor,
+      backgroundColor: avgColor + '11',
       borderWidth: 2.5,
       pointRadius: 4,
       pointStyle: 'diamond',
@@ -508,19 +542,20 @@ function _buildStockVacSeries(rows) {
       ));
       datasets.push({
         type: 'bar', label: prog, data,
-        backgroundColor: color, borderColor: color, borderWidth: 1,
-        borderRadius: 4, maxBarThickness: 24,
+        backgroundColor: _histBarFill(color), borderColor: _histBarBorder(color), borderWidth: 1,
+        barPercentage: 1.0, categoryPercentage: 1.0,
         stack: 'stock', order: 2, yAxisID: 'y',
       });
     });
   } else {
+    const barColor = _histBarColor();
     const data = periodos.map(per => _sum(
       rows.filter(r => r['Período Key'] === per).map(r => r['Stock'])
     ));
     datasets.push({
       type: 'bar', label: 'Stock total', data,
-      backgroundColor: '#2a78d6', borderColor: '#2a78d6', borderWidth: 1,
-      borderRadius: 4, maxBarThickness: 24,
+      backgroundColor: _histBarFill(barColor), borderColor: _histBarBorder(barColor), borderWidth: 1,
+      barPercentage: 1.0, categoryPercentage: 1.0,
       stack: 'stock', order: 2, yAxisID: 'y',
     });
   }
@@ -528,9 +563,10 @@ function _buildStockVacSeries(rows) {
   const vacData = periodos.map(per =>
     _weightedVacancia(vacRows.filter(r => r['Período Key'] === per))
   );
+  const vacColor = _histLineColor();
   datasets.push({
     type: 'line', label: 'Vacancia (%)', data: vacData,
-    borderColor: '#e34948', backgroundColor: '#e3494819',
+    borderColor: vacColor, backgroundColor: vacColor + '19',
     borderWidth: 2, pointRadius: 4, pointStyle: 'circle', tension: 0.3,
     spanGaps: true, fill: true, order: 0, yAxisID: 'y1',
   });
@@ -538,17 +574,167 @@ function _buildStockVacSeries(rows) {
   return { periodos, datasets };
 }
 
-function _renderCharts(rows) {
-  const opts = (yLabel, unit) => ({
+// Absorción neta = variación de unidades ocupadas entre un período y el
+// anterior: Ocupadas_t = Stock_t - Disponibilidad_t; Absorción_t =
+// Ocupadas_t - Ocupadas_(t-1). Positivo = se arrendaron más unidades de las
+// que se liberaron ese período (velocidad de arriendo); negativo = la
+// vacancia creció más rápido que el stock. El primer período de la serie
+// completa (allPeriodos, no el rango filtrado) queda sin dato porque no hay
+// período anterior con el que comparar — así el rango de fechas (Eje X) no
+// cambia el valor del primer punto visible.
+function _buildAbsorcionSeries(rows) {
+  const allPeriodos = [...new Set(rows.map(r => r['Período Key']))].sort();
+  const periodos = allPeriodos.filter(p =>
+    (!_xFrom || p >= _xFrom) && (!_xTo || p <= _xTo)
+  );
+
+  const occupiedFor = subset => {
+    const stock = _sum(subset.map(r => r['Stock']));
+    const dispo = _sum(subset.map(r => r['Disponibilidad']));
+    return (stock != null && dispo != null) ? stock - dispo : null;
+  };
+
+  // { absUnits: [...], pctStock: [...] } — pctStock = absorción como % del
+  // stock del período anterior, para leer "velocidad" además de unidades.
+  const _seriesFor = filterRows => {
+    const occByPeriod = {};
+    const stockByPeriod = {};
+    for (const p of allPeriodos) {
+      const subset = filterRows.filter(r => r['Período Key'] === p);
+      occByPeriod[p] = occupiedFor(subset);
+      stockByPeriod[p] = _sum(subset.map(r => r['Stock']));
+    }
+    const absUnits = [], pctStock = [];
+    periodos.forEach(p => {
+      const idx = allPeriodos.indexOf(p);
+      if (idx <= 0) { absUnits.push(null); pctStock.push(null); return; }
+      const prevP = allPeriodos[idx - 1];
+      const cur = occByPeriod[p], prev = occByPeriod[prevP], prevStock = stockByPeriod[prevP];
+      if (cur == null || prev == null) { absUnits.push(null); pctStock.push(null); return; }
+      const diff = cur - prev;
+      absUnits.push(diff);
+      pctStock.push(prevStock ? (diff / prevStock) * 100 : null);
+    });
+    return { absUnits, pctStock };
+  };
+
+  const _signColor = ctx => (ctx.raw == null ? '#cbd5e1' : ctx.raw >= 0 ? '#16a34a' : '#dc2626');
+  const barFill   = ctx => _histBarFill(_signColor(ctx));
+  const barBorder = ctx => _histBarBorder(_signColor(ctx));
+
+  const datasets = [];
+  if (_stockVacProgFilt.size) {
+    const programas = [...new Set(rows.map(r => r['Programa']))]
+      .filter(p => _stockVacProgFilt.has(p))
+      .sort((a, b) => PROGRAMAS_ORDER.indexOf(a) - PROGRAMAS_ORDER.indexOf(b));
+    programas.forEach(prog => {
+      const { absUnits, pctStock } = _seriesFor(rows.filter(r => r['Programa'] === prog));
+      const color = PROGRAM_COLORS[prog] ?? '#94a3b8';
+      datasets.push({
+        type: 'bar', label: prog, data: absUnits, pctStock,
+        backgroundColor: _histBarFill(color), borderColor: _histBarBorder(color), borderWidth: 1,
+        barPercentage: 1.0, categoryPercentage: 1.0, stack: 'abs',
+      });
+    });
+  } else {
+    const { absUnits, pctStock } = _seriesFor(rows);
+    datasets.push({
+      type: 'bar', label: 'Absorción neta', data: absUnits, pctStock,
+      backgroundColor: barFill, borderColor: barBorder, borderWidth: 1,
+      barPercentage: 1.0, categoryPercentage: 1.0,
+    });
+  }
+
+  return { periodos, datasets };
+}
+
+// Stock (barras, TODOS o por tipología) + Absorción neta (línea, eje
+// secundario) — mismo patrón dual-axis que Stock + Vacancia, pero pareando
+// el nivel de stock con su velocidad de arriendo en vez de la vacancia.
+function _buildStockAbsSeries(rows) {
+  const allPeriodos = [...new Set(rows.map(r => r['Período Key']))].sort();
+  const periodos = allPeriodos.filter(p =>
+    (!_xFrom || p >= _xFrom) && (!_xTo || p <= _xTo)
+  );
+
+  const absRows = _stockVacProgFilt.size
+    ? rows.filter(r => _stockVacProgFilt.has(r['Programa']))
+    : rows;
+
+  const occupiedFor = subset => {
+    const stock = _sum(subset.map(r => r['Stock']));
+    const dispo = _sum(subset.map(r => r['Disponibilidad']));
+    return (stock != null && dispo != null) ? stock - dispo : null;
+  };
+  const occByPeriod = {};
+  for (const p of allPeriodos) {
+    occByPeriod[p] = occupiedFor(absRows.filter(r => r['Período Key'] === p));
+  }
+  const absData = periodos.map(p => {
+    const idx = allPeriodos.indexOf(p);
+    if (idx <= 0) return null;
+    const cur = occByPeriod[p], prev = occByPeriod[allPeriodos[idx - 1]];
+    return (cur != null && prev != null) ? cur - prev : null;
+  });
+
+  const datasets = [];
+  if (_stockVacProgFilt.size) {
+    const programas = [...new Set(rows.map(r => r['Programa']))]
+      .filter(p => _stockVacProgFilt.has(p))
+      .sort((a, b) => PROGRAMAS_ORDER.indexOf(a) - PROGRAMAS_ORDER.indexOf(b));
+    programas.forEach(prog => {
+      const color = PROGRAM_COLORS[prog] ?? '#94a3b8';
+      const data = periodos.map(per => _sum(
+        rows.filter(r => r['Período Key'] === per && r['Programa'] === prog).map(r => r['Stock'])
+      ));
+      datasets.push({
+        type: 'bar', label: prog, data,
+        backgroundColor: _histBarFill(color), borderColor: _histBarBorder(color), borderWidth: 1,
+        barPercentage: 1.0, categoryPercentage: 1.0,
+        stack: 'stock', order: 2, yAxisID: 'y',
+      });
+    });
+  } else {
+    const barColor = _histBarColor();
+    const data = periodos.map(per => _sum(
+      rows.filter(r => r['Período Key'] === per).map(r => r['Stock'])
+    ));
+    datasets.push({
+      type: 'bar', label: 'Stock total', data,
+      backgroundColor: _histBarFill(barColor), borderColor: _histBarBorder(barColor), borderWidth: 1,
+      barPercentage: 1.0, categoryPercentage: 1.0,
+      stack: 'stock', order: 2, yAxisID: 'y',
+    });
+  }
+
+  const absColor = _histLineColor();
+  datasets.push({
+    type: 'line', label: 'Absorción neta', data: absData,
+    borderColor: absColor, backgroundColor: absColor + '19',
+    borderWidth: 2, pointRadius: 4, pointStyle: 'circle', tension: 0.3,
+    spanGaps: true, fill: false, order: 0, yAxisID: 'y1',
+  });
+
+  return { periodos, datasets };
+}
+
+const _MODE_META = {
+  rent:     { metric: 'Arriendo UF',   agg: _avg, yLabel: 'Arriendo UF',       unit: ' UF' },
+  vac:      { metric: 'Vacancia (%)',  agg: _avg, yLabel: 'Vacancia (%)',      unit: '%' },
+  stock:    { metric: 'Stock',         agg: _sum, yLabel: 'Stock (unidades)',  unit: ' unid.' },
+};
+
+function _lineOpts(yLabel, unit, fs, gridOn) {
+  return {
     responsive: true, maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
-    layout: { padding: { right: 54 } },
+    layout: { padding: { right: 54, top: Math.max(18, fs * 1.5) } },
     elements: { line: { borderCapStyle: 'round', borderJoinStyle: 'round' } },
     plugins: {
-      legend: { position: 'top', align: 'center', labels: { boxWidth: 12, font: { size: 11 }, color: '#475569' } },
+      legend: { position: 'top', align: 'center', labels: { boxWidth: 12, font: { size: fs }, color: '#475569' } },
       tooltip: {
         backgroundColor: '#1e293b', padding: 10, cornerRadius: 8,
-        titleFont: { size: 12, weight: '600' }, bodyFont: { size: 12 },
+        titleFont: { size: fs + 1, weight: '600' }, bodyFont: { size: fs + 1 },
         callbacks: { label: ctx =>
           `${ctx.dataset.label}: ${ctx.parsed.y != null
             ? ctx.parsed.y.toLocaleString('es-CL', { maximumFractionDigits: 2 }) + unit : '—'}`
@@ -556,90 +742,343 @@ function _renderCharts(rows) {
       },
     },
     scales: {
-      x: { grid: { color: '#f1f5f9' }, border: { color: '#e2e8f0' }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+      x: { grid: { color: '#f1f5f9', display: gridOn }, border: { color: '#e2e8f0' }, ticks: { font: { size: fs - 1 }, color: '#94a3b8' } },
       y: {
         beginAtZero: true,
-        grid: { color: '#f1f5f9' }, border: { display: false },
-        title: { display: true, text: yLabel, font: { size: 11, weight: '600' }, color: '#64748b' },
-        ticks: { font: { size: 10 }, color: '#94a3b8' },
+        grid: { color: '#f1f5f9', display: gridOn }, border: { display: false },
+        title: { display: true, text: yLabel, font: { size: fs, weight: '600' }, color: '#64748b' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
       },
     },
-  });
+  };
+}
 
-  const { periodos: p1, datasets: ds1 } = _buildSeries(rows, 'Arriendo UF');
-  const { periodos: p2, datasets: ds2 } = _buildSeries(rows, 'Vacancia (%)');
-  const { periodos: p3, datasets: ds3 } = _buildSeries(rows, 'Stock', _sum);
+function _stockVacOpts(fs, gridOn) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { right: 12, top: Math.max(18, fs * 1.5) } },
+    plugins: {
+      legend: { position: 'top', align: 'center', labels: { boxWidth: 12, font: { size: fs }, color: '#475569' } },
+      tooltip: {
+        backgroundColor: '#1e293b', padding: 10, cornerRadius: 8,
+        titleFont: { size: fs + 1, weight: '600' }, bodyFont: { size: fs + 1 },
+        callbacks: { label: ctx => {
+          const unit = ctx.dataset.yAxisID === 'y1' ? '%' : ' unid.';
+          return ` ${ctx.dataset.label}: ${ctx.parsed.y != null
+            ? ctx.parsed.y.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + unit : '—'}`;
+        } },
+      },
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: '#f1f5f9', display: gridOn }, border: { color: '#e2e8f0' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
+      },
+      y: {
+        stacked: true, beginAtZero: true,
+        grid: { color: '#f1f5f9', display: gridOn }, border: { display: false },
+        title: { display: true, text: 'Stock (unidades)', font: { size: fs, weight: '600' }, color: '#64748b' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
+      },
+      y1: {
+        beginAtZero: true, position: 'right',
+        grid: { drawOnChartArea: false }, border: { display: false },
+        title: { display: true, text: 'Vacancia (%)', font: { size: fs, weight: '600' }, color: '#64748b' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
+      },
+    },
+  };
+}
 
+function _stockAbsOpts(fs, gridOn) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { right: 12, top: Math.max(18, fs * 1.5) } },
+    plugins: {
+      legend: { position: 'top', align: 'center', labels: { boxWidth: 12, font: { size: fs }, color: '#475569' } },
+      tooltip: {
+        backgroundColor: '#1e293b', padding: 10, cornerRadius: 8,
+        titleFont: { size: fs + 1, weight: '600' }, bodyFont: { size: fs + 1 },
+        callbacks: { label: ctx => {
+          if (ctx.dataset.yAxisID === 'y1') {
+            const v = ctx.parsed.y;
+            return ` ${ctx.dataset.label}: ${v != null ? (v >= 0 ? '+' : '') + Math.round(v).toLocaleString('es-CL') + ' unid.' : '—'}`;
+          }
+          return ` ${ctx.dataset.label}: ${ctx.parsed.y != null
+            ? ctx.parsed.y.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + ' unid.' : '—'}`;
+        } },
+      },
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: '#f1f5f9', display: gridOn }, border: { color: '#e2e8f0' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
+      },
+      y: {
+        stacked: true, beginAtZero: true,
+        grid: { color: '#f1f5f9', display: gridOn }, border: { display: false },
+        title: { display: true, text: 'Stock (unidades)', font: { size: fs, weight: '600' }, color: '#64748b' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
+      },
+      y1: {
+        position: 'right',
+        grid: { drawOnChartArea: false }, border: { display: false },
+        title: { display: true, text: 'Absorción neta (unidades)', font: { size: fs, weight: '600' }, color: '#64748b' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
+      },
+    },
+  };
+}
+
+// ── Anti-solape de etiquetas ────────────────────────────────────────────────
+// Con varias tipologías/series en el mismo gráfico, los textos de valor
+// terminan pisándose entre sí. En vez de ocultar el que sobra, cada label
+// candidato se compara contra las cajas ya dibujadas en ese frame (guardadas
+// en chart._histLabelRects) y si solapa se va empujando más lejos de su
+// punto/barra ancla (en pasos de una altura de línea) hasta encontrar hueco
+// libre — nunca desaparece, en el peor caso queda apilado más arriba/abajo.
+// _labelResetPlugin limpia esa lista una vez por frame, antes de que corra
+// cualquier plugin de etiquetas (debe ir primero en el array `plugins`).
+const _labelResetPlugin = {
+  id: 'histLabelReset',
+  beforeDatasetsDraw(chart) { chart._histLabelRects = []; },
+};
+
+// Posiciones arrastradas a mano por el usuario — persisten por modo/label
+// mientras la pestaña sigue abierta (se pierden si se recarga la consulta),
+// mismo espíritu que el drag de las etiquetas "mediana"/marcadores en
+// Proyectos/Distribución, pero implementado a mano porque estas etiquetas
+// se dibujan directo en canvas (no son elementos del plugin annotation).
+const _histLabelOffsets = {}; // { [mode]: { [key]: {dx, dy, touched} } }
+function _labelOffsetFor(mode, key) {
+  const byMode = (_histLabelOffsets[mode] ??= {});
+  return (byMode[key] ??= { dx: 0, dy: 0, touched: false });
+}
+
+function _tryPlaceLabel(chart, ctx, text, x, y, baseline, key) {
+  const w = ctx.measureText(text).width;
+  const h = (parseInt(ctx.font, 10) || 11) + 2;
+  const off = key ? _labelOffsetFor(_histMode, key) : null;
+  let placedX = x, placedY = y;
+
+  if (off?.touched) {
+    // El usuario ya la movió a mano — respetar esa posición sin anti-solape.
+    placedX = x + off.dx;
+    placedY = y + off.dy;
+  } else {
+    const dir = baseline === 'bottom' ? -1 : 1; // empujar más lejos del ancla
+    // Nunca empujar la etiqueta fuera del canvas — si no queda hueco dentro
+    // de esos límites, se deja apilada en el borde (posiblemente pisando
+    // otra) en vez de quedar dibujada fuera de vista, indistinguible de
+    // "desaparecida".
+    const minY = h;
+    const maxY = chart.height - 4;
+    const MAX_STEPS = 8;
+    const rects = chart._histLabelRects || (chart._histLabelRects = []);
+    for (let n = 0; n <= MAX_STEPS; n++) {
+      const testY = Math.min(maxY, Math.max(minY, y + dir * n * h));
+      const rectY = baseline === 'bottom' ? testY - h : testY;
+      const rect = { x: x - w / 2 - 2, y: rectY, w: w + 4, h };
+      const overlaps = rects.some(r =>
+        rect.x < r.x + r.w && rect.x + rect.w > r.x && rect.y < r.y + r.h && rect.y + rect.h > r.y
+      );
+      if (!overlaps || n === MAX_STEPS) { placedY = testY; break; }
+    }
+  }
+
+  const rects = chart._histLabelRects || (chart._histLabelRects = []);
+  const rectY = baseline === 'bottom' ? placedY - h : placedY;
+  rects.push({ x: placedX - w / 2 - 2, y: rectY, w: w + 4, h, key });
+  ctx.textBaseline = baseline;
+  ctx.fillText(text, placedX, placedY);
+}
+
+// Etiqueta con las unidades de stock absorbidas (consumidas) ese trimestre,
+// sobre (positivo) o bajo (negativo) cada barra — mismo patrón que las
+// etiquetas de cantidad del histograma de Densidad.
+function _absorcionLabelsPlugin(fs) {
+  return {
+    id: 'absorcionLabels',
+    afterDraw(chart) {
+      const { ctx: c } = chart;
+      c.save();
+      c.font = `bold ${fs}px system-ui, sans-serif`;
+      c.textAlign = 'center';
+      chart.data.datasets.forEach((ds, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((bar, i) => {
+          const val = ds.data[i];
+          if (val == null) return;
+          c.fillStyle = val >= 0 ? '#16a34a' : '#dc2626';
+          const baseline = val >= 0 ? 'bottom' : 'top';
+          const y = val >= 0 ? bar.y - 3 : bar.y + 3;
+          const text = `${val >= 0 ? '+' : ''}${Math.round(val).toLocaleString('es-CL')}`;
+          _tryPlaceLabel(chart, c, text, bar.x, y, baseline, `abs-${di}-${i}`);
+        });
+      });
+      c.restore();
+    },
+  };
+}
+
+// Etiquetas de valor para gráficos de línea (Arriendo/Vacancia/Stock) — un
+// texto sobre cada punto con el valor formateado, mismo lenguaje visual que
+// las etiquetas de barras de Absorción/Stock+Vacancia.
+function _lineLabelsPlugin(fs, fmt) {
+  return {
+    id: 'lineLabels',
+    afterDraw(chart) {
+      const { ctx: c } = chart;
+      c.save();
+      c.font = `600 ${fs - 1}px system-ui, sans-serif`;
+      c.textAlign = 'center';
+      chart.data.datasets.forEach((ds, di) => {
+        if (ds.type === 'bar') return;
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        c.fillStyle = ds.borderColor ?? '#334155';
+        meta.data.forEach((pt, i) => {
+          const val = ds.data[i];
+          if (val == null) return;
+          _tryPlaceLabel(chart, c, fmt(val), pt.x, pt.y - 6, 'bottom', `line-${di}-${i}`);
+        });
+      });
+      c.restore();
+    },
+  };
+}
+
+// Etiquetas de valor sobre las barras de Stock (Stock + Vacancia) — mismo
+// patrón que _absorcionLabelsPlugin pero para valores siempre positivos
+// (stock nunca es negativo), así que siempre van arriba de la barra.
+function _stockBarLabelsPlugin(fs) {
+  return {
+    id: 'stockBarLabels',
+    afterDraw(chart) {
+      const { ctx: c } = chart;
+      c.save();
+      c.font = `bold ${fs - 1}px system-ui, sans-serif`;
+      c.textAlign = 'center';
+      chart.data.datasets.forEach((ds, di) => {
+        if (ds.type !== 'bar') return;
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        c.fillStyle = '#334155';
+        meta.data.forEach((bar, i) => {
+          const val = ds.data[i];
+          if (val == null) return;
+          _tryPlaceLabel(chart, c, Math.round(val).toLocaleString('es-CL'), bar.x, bar.y - 3, 'bottom', `bar-${di}-${i}`);
+        });
+      });
+      c.restore();
+    },
+  };
+}
+
+function _absorcionOpts(fs, gridOn) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { top: Math.max(20, fs * 2), bottom: Math.max(16, fs * 1.5), right: 12 } },
+    plugins: {
+      legend: { position: 'top', align: 'center', labels: { boxWidth: 12, font: { size: fs }, color: '#475569' } },
+      tooltip: {
+        backgroundColor: '#1e293b', padding: 10, cornerRadius: 8,
+        titleFont: { size: fs + 1, weight: '600' }, bodyFont: { size: fs + 1 },
+        callbacks: { label: ctx => {
+          if (ctx.parsed.y == null) return ` ${ctx.dataset.label}: —`;
+          const units = ctx.parsed.y;
+          const pct = ctx.dataset.pctStock?.[ctx.dataIndex];
+          const pctStr = pct != null ? ` (${pct >= 0 ? '+' : ''}${pct.toLocaleString('es-CL', { maximumFractionDigits: 1 })}% del stock)` : '';
+          return ` ${ctx.dataset.label}: ${units >= 0 ? '+' : ''}${Math.round(units).toLocaleString('es-CL')} unid.${pctStr}`;
+        } },
+      },
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: '#f1f5f9', display: gridOn }, border: { color: '#e2e8f0' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
+      },
+      y: {
+        stacked: true, beginAtZero: true,
+        grid: { color: '#f1f5f9', display: gridOn }, border: { display: false },
+        title: { display: true, text: 'Absorción neta (unidades)', font: { size: fs, weight: '600' }, color: '#64748b' },
+        ticks: { font: { size: fs - 1 }, color: '#94a3b8' },
+      },
+    },
+  };
+}
+
+// Renderiza SOLO el chart de la vista activa (_histMode) en el único canvas
+// #histChart — igual lógica de navegación que los botones "Vista" de
+// Distribución/SVP/Cruz, en vez de 4 canvases simultáneos.
+function _renderActiveChart(rows) {
+  const fs = _histFontSize();
+  const gridOn = _histGridOn();
   const subtitle = periodos => periodos.length
     ? `${periodos[0]} – ${periodos[periodos.length - 1]}`
     : '';
-  const subRent  = $('histSubRent');  if (subRent)  subRent.textContent  = subtitle(p1);
-  const subVac   = $('histSubVac');   if (subVac)   subVac.textContent   = subtitle(p2);
-  const subStock = $('histSubStock'); if (subStock) subStock.textContent = subtitle(p3);
 
-  if (_chartRent) _chartRent.destroy();
-  _chartRent = new Chart($('histChartRent'), {
-    type: 'line', data: { labels: p1, datasets: ds1 }, options: opts('Arriendo UF', ' UF'),
-  });
+  // Los chips de tipología (TODOS / por programa) los usan tanto Stock +
+  // Vacancia como Absorción — ambos parten de las mismas columnas Stock /
+  // Disponibilidad, así que comparten el mismo filtro.
+  const stockVacChipsEl = $('histStockVacChips');
+  if (stockVacChipsEl) stockVacChipsEl.style.display = (_histMode === 'stockvac' || _histMode === 'absorcion' || _histMode === 'stockabs') ? '' : 'none';
 
-  if (_chartVac) _chartVac.destroy();
-  _chartVac = new Chart($('histChartVac'), {
-    type: 'line', data: { labels: p2, datasets: ds2 }, options: opts('Vacancia (%)', '%'),
-  });
+  if (_chart) { _chart.destroy(); _chart = null; }
+  const canvas = $('histChart');
+  if (!canvas) return;
 
-  if (_chartStock) _chartStock.destroy();
-  _chartStock = new Chart($('histChartStock'), {
-    type: 'line', data: { labels: p3, datasets: ds3 }, options: opts('Stock (unidades)', ' unid.'),
-  });
+  if (_histMode === 'stockvac') {
+    // Stock (barras, por tipología o TODOS) + Vacancia (línea, eje secundario)
+    // en un solo gráfico — a propósito: la gracia es verlos juntos. Mitigado
+    // con ambos ejes en beginAtZero (nada de recortar el 0 para "estirar" la
+    // correlación) y encodings bien distintos (relleno sólido vs. línea).
+    const { periodos, datasets } = _buildStockVacSeries(rows);
+    const sub = $('histSub'); if (sub) sub.textContent = subtitle(periodos);
+    _chart = new Chart(canvas, {
+      type: 'bar', data: { labels: periodos, datasets }, options: _stockVacOpts(fs, gridOn),
+      plugins: [_labelResetPlugin, _stockBarLabelsPlugin(fs)],
+    });
+    return;
+  }
 
-  // Stock (barras, por tipología o TODOS) + Vacancia (línea, eje secundario)
-  // en un solo gráfico — a propósito: la gracia es verlos juntos. Mitigado
-  // con ambos ejes en beginAtZero (nada de recortar el 0 para "estirar" la
-  // correlación) y encodings bien distintos (relleno sólido vs. línea).
-  const { periodos: p4, datasets: ds4 } = _buildStockVacSeries(rows);
-  const subStockVac = $('histSubStockVac');
-  if (subStockVac) subStockVac.textContent = subtitle(p4);
+  if (_histMode === 'stockabs') {
+    // Stock (barras) + Absorción neta (línea, eje secundario) — pareo directo
+    // de nivel de stock con velocidad de arriendo.
+    const { periodos, datasets } = _buildStockAbsSeries(rows);
+    const sub = $('histSub'); if (sub) sub.textContent = subtitle(periodos);
+    const absFmt = v => (v >= 0 ? '+' : '') + Math.round(v).toLocaleString('es-CL');
+    _chart = new Chart(canvas, {
+      type: 'bar', data: { labels: periodos, datasets }, options: _stockAbsOpts(fs, gridOn),
+      plugins: [_labelResetPlugin, _stockBarLabelsPlugin(fs), _lineLabelsPlugin(fs, absFmt)],
+    });
+    return;
+  }
 
-  if (_chartStockVac) _chartStockVac.destroy();
-  _chartStockVac = new Chart($('histChartStockVac'), {
-    type: 'bar',
-    data: { labels: p4, datasets: ds4 },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      layout: { padding: { right: 12 } },
-      plugins: {
-        legend: { position: 'top', align: 'center', labels: { boxWidth: 12, font: { size: 11 }, color: '#475569' } },
-        tooltip: {
-          backgroundColor: '#1e293b', padding: 10, cornerRadius: 8,
-          titleFont: { size: 12, weight: '600' }, bodyFont: { size: 12 },
-          callbacks: { label: ctx => {
-            const unit = ctx.dataset.yAxisID === 'y1' ? '%' : ' unid.';
-            return ` ${ctx.dataset.label}: ${ctx.parsed.y != null
-              ? ctx.parsed.y.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + unit : '—'}`;
-          } },
-        },
-      },
-      scales: {
-        x: {
-          stacked: true,
-          grid: { color: '#f1f5f9' }, border: { color: '#e2e8f0' },
-          ticks: { font: { size: 10 }, color: '#94a3b8' },
-        },
-        y: {
-          stacked: true, beginAtZero: true,
-          grid: { color: '#f1f5f9' }, border: { display: false },
-          title: { display: true, text: 'Stock (unidades)', font: { size: 11, weight: '600' }, color: '#64748b' },
-          ticks: { font: { size: 10 }, color: '#94a3b8' },
-        },
-        y1: {
-          beginAtZero: true, position: 'right',
-          grid: { drawOnChartArea: false }, border: { display: false },
-          title: { display: true, text: 'Vacancia (%)', font: { size: 11, weight: '600' }, color: '#64748b' },
-          ticks: { font: { size: 10 }, color: '#94a3b8' },
-        },
-      },
-    },
+  if (_histMode === 'absorcion') {
+    const { periodos, datasets } = _buildAbsorcionSeries(rows);
+    const sub = $('histSub'); if (sub) sub.textContent = subtitle(periodos);
+    _chart = new Chart(canvas, {
+      type: 'bar', data: { labels: periodos, datasets }, options: _absorcionOpts(fs, gridOn),
+      plugins: [_labelResetPlugin, _absorcionLabelsPlugin(fs)],
+    });
+    return;
+  }
+
+  const meta = _MODE_META[_histMode] ?? _MODE_META.rent;
+  const { periodos, datasets } = _buildSeries(rows, meta.metric, meta.agg);
+  const sub = $('histSub'); if (sub) sub.textContent = subtitle(periodos);
+  const fmt = v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) + meta.unit;
+  _chart = new Chart(canvas, {
+    type: 'line', data: { labels: periodos, datasets }, options: _lineOpts(meta.yLabel, meta.unit, fs, gridOn),
+    plugins: [_labelResetPlugin, _lineLabelsPlugin(fs, fmt)],
   });
 }
 
@@ -678,6 +1117,16 @@ function _renderKpis(rows) {
   const vacPrev  = prev ? _weightedVacancia(rows.filter(r => r['Período Key'] === prev)) : null;
   const stockLast = sumFor(last, 'Stock');
   const stockPrev = prev ? sumFor(prev, 'Stock') : null;
+
+  // Absorción neta del último período: Ocupadas = Stock - Disponibilidad,
+  // Absorción = Ocupadas_último - Ocupadas_previo (mismo cálculo que la
+  // vista "Absorción" del gráfico).
+  const dispoLast = sumFor(last, 'Disponibilidad');
+  const dispoPrev = prev ? sumFor(prev, 'Disponibilidad') : null;
+  const occLast = (stockLast != null && dispoLast != null) ? stockLast - dispoLast : null;
+  const occPrev = (stockPrev != null && dispoPrev != null) ? stockPrev - dispoPrev : null;
+  const absLast = (occLast != null && occPrev != null) ? occLast - occPrev : null;
+
   const proyectos = new Set(rows.map(r => r['Proyecto'])).size;
   const comunas   = new Set(rows.map(r => r['Comuna']).filter(Boolean)).size;
 
@@ -702,6 +1151,11 @@ function _renderKpis(rows) {
       <span class="hist-kpi-value">${fmtInt(stockLast)} ${_deltaHtml(stockLast, stockPrev, null)}</span>
       <span class="hist-kpi-sub">Unidades · último período</span>
     </div>
+    <div class="hist-kpi-card" style="--hist-kpi-accent:${absLast != null && absLast < 0 ? '#dc2626' : '#16a34a'};">
+      <span class="hist-kpi-label">Absorción neta</span>
+      <span class="hist-kpi-value">${absLast != null ? (absLast >= 0 ? '+' : '') + Math.round(absLast).toLocaleString('es-CL') : '—'}</span>
+      <span class="hist-kpi-sub">Unidades · ${prev ?? '—'} → ${last}</span>
+    </div>
     <div class="hist-kpi-card" style="--hist-kpi-accent:#059669;">
       <span class="hist-kpi-label">Proyectos</span>
       <span class="hist-kpi-value">${proyectos}</span>
@@ -719,12 +1173,13 @@ function _render() {
   const rows = _filtered();
   const hasData = rows.length > 0;
 
-  $('histEmpty').style.display   = hasData ? 'none'  : '';
-  $('histCharts').style.display  = hasData ? 'grid'  : 'none';
-  $('histFiltros').style.display = hasData ? 'flex'  : 'none';
-  $('histKpis').style.display    = hasData ? 'grid'  : 'none';
+  $('histEmpty').style.display     = hasData ? 'none'  : '';
+  $('histCharts').style.display    = hasData ? 'flex'  : 'none';
+  $('histChartArea').style.display = hasData ? ''      : 'none';
+  $('histFiltros').style.display   = hasData ? 'flex'  : 'none';
+  $('histKpis').style.display      = hasData ? 'grid'  : 'none';
 
-  if (hasData) { _renderCharts(rows); _renderKpis(rows); }
+  if (hasData) { _renderActiveChart(rows); _renderKpis(rows); }
 }
 
 // ── Carga serie interna (JSON manual) ─────────────────────────────────────
@@ -759,6 +1214,30 @@ function _clearInternal() {
 // ── Init ──────────────────────────────────────────────────────────────────
 
 function _initListeners() {
+  const fontSlider = $('histFontSize');
+  if (fontSlider) {
+    fontSlider.addEventListener('input', () => {
+      const val = $('histFontSizeVal');
+      if (val) val.textContent = fontSlider.value + 'px';
+      _render();
+    });
+  }
+  $('histGridToggle')?.addEventListener('change', _render);
+  $('histBarColor')?.addEventListener('input', _render);
+  $('histLineColor')?.addEventListener('input', _render);
+
+  document.querySelectorAll('.hist-ratio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.hist-ratio-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const customEl = $('histRatioCustom');
+      if (customEl) customEl.value = '';
+    });
+  });
+  $('histRatioCustom')?.addEventListener('input', e => {
+    if (e.target.value.trim() !== '') document.querySelectorAll('.hist-ratio-btn').forEach(b => b.classList.remove('active'));
+  });
+
   const avgBtn = $('histAvgBtn');
   if (avgBtn) {
     avgBtn.addEventListener('click', () => {
@@ -790,15 +1269,80 @@ function _initListeners() {
   $('histXFrom')?.addEventListener('change', e => { _xFrom = e.target.value; _render(); });
   $('histXTo')?.addEventListener('change',   e => { _xTo   = e.target.value; _render(); });
 
-  // Copy buttons
-  $('histCopyRent')?.addEventListener('click', () =>
-    _copyChart(_chartRent, $('histWrapRent'), $('histCopyRent')));
-  $('histCopyVac')?.addEventListener('click', () =>
-    _copyChart(_chartVac, $('histWrapVac'), $('histCopyVac')));
-  $('histCopyStock')?.addEventListener('click', () =>
-    _copyChart(_chartStock, $('histWrapStock'), $('histCopyStock')));
-  $('histCopyStockVac')?.addEventListener('click', () =>
-    _copyChart(_chartStockVac, $('histWrapStockVac'), $('histCopyStockVac')));
+  // Botones "Vista" — navegan entre series en el mismo canvas.
+  document.querySelectorAll('.hist-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.hist-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _histMode = btn.dataset.mode;
+      _render();
+    });
+  });
+
+  // Copy button (un solo chart activo)
+  $('histCopyBtn')?.addEventListener('click', () =>
+    _copyChart(_chart, $('histWrap'), $('histCopyBtn')));
+
+  _initLabelDrag();
+}
+
+// Arrastrar las etiquetas de valor (mismo gesto que "mediana" en Proyectos o
+// los marcadores en Distribución) — acá se implementa a mano porque estas
+// etiquetas se dibujan directo en canvas dentro de nuestros propios plugins,
+// no son elementos del plugin annotation. chart._histLabelRects trae las
+// cajas del último frame dibujado (con su `key`), así que un click adentro
+// de una caja identifica qué etiqueta mover; el offset queda guardado en
+// _histLabelOffsets y se reaplica en cada redraw.
+function _initLabelDrag() {
+  const canvas = $('histChart');
+  if (!canvas) return;
+  let dragging = null; // { key, startMX, startMY, startDx, startDy }
+
+  const hitTest = (mx, my) => {
+    const rects = _chart?._histLabelRects;
+    if (!rects) return null;
+    for (let i = rects.length - 1; i >= 0; i--) {
+      const r = rects[i];
+      if (r.key && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return r;
+    }
+    return null;
+  };
+
+  canvas.addEventListener('mousedown', e => {
+    const hit = hitTest(e.offsetX, e.offsetY);
+    if (!hit) return;
+    const off = _labelOffsetFor(_histMode, hit.key);
+    dragging = { key: hit.key, startMX: e.offsetX, startMY: e.offsetY, startDx: off.dx, startDy: off.dy };
+    canvas.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) {
+      const canvasRect = canvas.getBoundingClientRect();
+      const inside = e.clientX >= canvasRect.left && e.clientX <= canvasRect.right &&
+        e.clientY >= canvasRect.top && e.clientY <= canvasRect.bottom;
+      if (inside) {
+        const hit = hitTest(e.clientX - canvasRect.left, e.clientY - canvasRect.top);
+        canvas.style.cursor = hit ? 'grab' : '';
+      }
+      return;
+    }
+    if (!_chart) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const mx = e.clientX - canvasRect.left, my = e.clientY - canvasRect.top;
+    const off = _labelOffsetFor(_histMode, dragging.key);
+    off.dx = dragging.startDx + (mx - dragging.startMX);
+    off.dy = dragging.startDy + (my - dragging.startMY);
+    off.touched = true;
+    _chart.draw();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = null;
+    canvas.style.cursor = '';
+  });
 }
 
 // Referencia del último window._mfHistoricoSource ya cargado en _st.rows,

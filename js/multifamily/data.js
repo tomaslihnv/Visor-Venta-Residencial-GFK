@@ -239,9 +239,19 @@ export function onDataLoaded(rows) {
         const tipos = (programaFilter?.size > 0)
           ? (mp.tipologias ?? []).filter(t => programaFilter.has(t.nombre))
           : (mp.tipologias ?? []);
+        // Ponderado por "unidades" (cantidad de unidades de esa tipología):
+        // una tipología con 40 unidades pesa más en el promedio del edificio
+        // que una con 5. Si una tipología no tiene "unidades" cargado, pesa 1.
         const avgTipo = field => {
-          const vals = tipos.map(t => t[field]).filter(v => v != null);
-          return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+          const withVal = tipos.filter(t => t[field] != null);
+          if (!withVal.length) return null;
+          let sumW = 0, sumWV = 0;
+          for (const t of withVal) {
+            const w = (t.unidades != null && t.unidades > 0) ? t.unidades : 1;
+            sumW  += w;
+            sumWV += w * t[field];
+          }
+          return sumW ? sumWV / sumW : null;
         };
         if (metricId === 'util')     return avgTipo('sup');
         if (metricId === 'arriendo') return avgTipo('renta');
@@ -280,7 +290,11 @@ export function onDataLoaded(rows) {
         FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME,
       };
 
-      buildFilters(FILTERS, state, container, onChange);
+      // "Programa" (tipología) siempre incluye las tipologías cargadas en Mi
+      // Proyecto como opción de filtro, aunque ningún comparable del Excel
+      // las tenga (ej. si mi edificio tiene "2D1B" pero el mercado no).
+      const extraFilterValues = { programa: (mp.tipologias ?? []).map(t => t.nombre).filter(Boolean) };
+      buildFilters(FILTERS, state, container, onChange, extraFilterValues);
       applyFilters(FILTERS, state, onChange);
 
       populateDistribSelectors(state, DISTRIB_COLS);

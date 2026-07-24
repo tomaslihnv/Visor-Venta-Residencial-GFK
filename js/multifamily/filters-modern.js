@@ -17,9 +17,10 @@ function _findCol(candidates, columns) {
 
 // ── Build UI ───────────────────────────────────────────────────────────────
 
-export function buildFilters(filterDefs, state, container, onChange) {
+export function buildFilters(filterDefs, state, container, onChange, extraValuesByKey) {
   state._filterDefs = filterDefs;
   state._onChange   = onChange;
+  state._extraFilterValues = extraValuesByKey ?? {};
   state.filterValues = {};
   state.filterRefs   = {};
   state.filterCols   = {};
@@ -33,7 +34,7 @@ export function buildFilters(filterDefs, state, container, onChange) {
 
     if (def.type === 'multi') {
       state.filterValues[def.key] = new Set();
-      _buildMulti(def, colName, state, container);
+      _buildMulti(def, colName, state, container, state._extraFilterValues[def.key]);
     } else if (def.type === 'slider') {
       state.filterValues[def.key + 'Min'] = null;
       state.filterValues[def.key + 'Max'] = null;
@@ -44,10 +45,48 @@ export function buildFilters(filterDefs, state, container, onChange) {
   _renderActiveChips(state);
 }
 
-function _buildMulti(def, colName, state, container) {
-  const vals = [...new Set(
-    state.raw.map(r => r[colName]).filter(v => v !== '' && v != null)
-  )].sort((a, b) => String(a).localeCompare(String(b), 'es', { numeric: true }));
+// Agrega, sin resetear la selección actual, una opción a un filtro "multi"
+// que todavía no exista entre sus checkboxes — usado para que las
+// tipologías cargadas en Mi Proyecto (ej. "2D1B") aparezcan siempre como
+// filtro seleccionable aunque ningún comparable del Excel las tenga.
+export function ensureFilterOption(state, key, value) {
+  const v = String(value ?? '').trim();
+  if (!v) return;
+  const ref = state.filterRefs?.[key];
+  if (!ref || ref.type !== 'multi' || !ref.list) return;
+  if (ref.checkboxes.some(cb => String(cb._realVal) === v)) return;
+
+  const cb = _makeCheckbox(v, key, state, ref.checkboxes, ref.countBadge);
+  const idx = ref.checkboxes.findIndex(c => c !== cb && String(c._realVal).localeCompare(v, 'es', { numeric: true }) > 0);
+  if (idx === -1) ref.list.appendChild(cb);
+  else ref.list.insertBefore(cb, ref.list.children[idx]);
+}
+
+function _makeCheckbox(v, key, state, checkboxes, countBadge) {
+  const cb = document.createElement('sl-checkbox');
+  cb.size = 'small';
+  cb.className = 'multi-checkbox-row';
+  cb._realVal = v;
+  cb.textContent = String(v);
+  checkboxes.push(cb);
+
+  cb.addEventListener('sl-change', () => {
+    const set = state.filterValues[key];
+    set.clear();
+    checkboxes.filter(c => c.checked).forEach(c => set.add(c._realVal));
+    countBadge.textContent = String(set.size);
+    countBadge.classList.toggle('hidden', set.size === 0);
+    _applyAndNotify(state);
+  });
+
+  return cb;
+}
+
+function _buildMulti(def, colName, state, container, extraVals) {
+  const vals = [...new Set([
+    ...state.raw.map(r => r[colName]).filter(v => v !== '' && v != null),
+    ...(extraVals ?? []).filter(v => v !== '' && v != null),
+  ])].sort((a, b) => String(a).localeCompare(String(b), 'es', { numeric: true }));
   if (!vals.length) return;
 
   const details = document.createElement('sl-details');
@@ -85,22 +124,8 @@ function _buildMulti(def, colName, state, container) {
 
   const checkboxes = [];
   for (const v of vals) {
-    const cb = document.createElement('sl-checkbox');
-    cb.size = 'small';
-    cb.className = 'multi-checkbox-row';
-    cb._realVal = v;
-    cb.textContent = String(v);
+    const cb = _makeCheckbox(v, def.key, state, checkboxes, countBadge);
     list.appendChild(cb);
-    checkboxes.push(cb);
-
-    cb.addEventListener('sl-change', () => {
-      const set = state.filterValues[def.key];
-      set.clear();
-      checkboxes.filter(c => c.checked).forEach(c => set.add(c._realVal));
-      countBadge.textContent = String(set.size);
-      countBadge.classList.toggle('hidden', set.size === 0);
-      _applyAndNotify(state);
-    });
   }
 
   search.addEventListener('sl-input', () => {
@@ -113,7 +138,7 @@ function _buildMulti(def, colName, state, container) {
   details.append(search, list);
   container.appendChild(details);
 
-  state.filterRefs[def.key] = { type: 'multi', checkboxes, countBadge, label: def.label };
+  state.filterRefs[def.key] = { type: 'multi', checkboxes, countBadge, label: def.label, list };
 }
 
 function _buildSlider(def, colName, state, container) {
@@ -377,7 +402,7 @@ export function applyFilterState(data, state) {
 
 export function resetFilters(filterDefs, state, container, onChange) {
   if (!state.raw.length) return;
-  buildFilters(filterDefs, state, container, onChange);
+  buildFilters(filterDefs, state, container, onChange, state._extraFilterValues);
   const s = document.getElementById('searchInput');
   if (s) { s.value = ''; state.search = ''; }
   _applyAndNotify(state);

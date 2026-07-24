@@ -117,11 +117,82 @@ function normalizeInciti(rows) {
     if (!isNaN(stock) && stock > 0 && !isNaN(oferta)) {
       out['% Vendido'] = (stock - oferta) / stock;
     }
-    // Velocidad de venta a nivel proyecto
+    // Velocidad de venta a nivel proyecto (placeholder inicial sobre TODAS
+    // las tipologías — recomputeVelVenta() la recalcula sobre el subconjunto
+    // filtrado cada vez que cambian los filtros, ver applyFilters()).
     const vel = _proyVel.get(String(row['Proyecto'] ?? '').trim());
-    if (vel !== undefined) out['Vel. Venta (un./mes)'] = vel;
+    if (vel !== undefined) out['Vel. Venta Final (un./mes)'] = vel;
     return out;
   });
+}
+
+// Recalcula 'Vel. Venta Final (un./mes)' SOLO sobre las tipologías que pasan los
+// filtros activos, en vez de dejar un valor fijo calculado una vez sobre
+// todas las filas del proyecto. Se llama desde applyFilters() con
+// state.filtered — como esas filas son las mismas referencias que en
+// state.raw, escribir el campo acá actualiza ambos (se vuelve a sobrescribir
+// en cada llamada, así que no queda información stale mientras el filtro
+// siga activo). Dos fuentes, dos métodos de estimación:
+//  - xlsx/Inciti (snapshot único): (Stock - Disponibles) / meses desde el
+//    inicio de ventas más temprano entre las tipologías filtradas.
+//  - API/Inciti (serie mensual completa): suma de la tasa mensual propia de
+//    cada tipología filtrada (__velTipoRate, ver flattenEntities en api.js),
+//    ya promediada sobre su propia ventana de meses — no una inferencia
+//    desde stock, así que no se ve afectada por una tipología que queda
+//    estancada con 1 unidad disponible para siempre.
+export function recomputeVelVenta(filteredRows) {
+  if (!filteredRows.length) return;
+  if ('__velTipoRate' in filteredRows[0])            _recomputeVelVentaApi(filteredRows);
+  else if (state.source === 'inciti' && 'Vel. Venta Final (un./mes)' in filteredRows[0]) _recomputeVelVentaXlsx(filteredRows);
+}
+
+function _groupByEdificio(rows) {
+  const byProj = new Map();
+  for (const r of rows) {
+    const proj = String(r['Edificio'] ?? '').trim();
+    if (!proj) continue;
+    if (!byProj.has(proj)) byProj.set(proj, []);
+    byProj.get(proj).push(r);
+  }
+  return byProj;
+}
+
+function _recomputeVelVentaApi(filteredRows) {
+  for (const rows of _groupByEdificio(filteredRows).values()) {
+    // La tasa por tipología es aditiva (unidades/mes de cada una se suman
+    // al total del proyecto) — a diferencia de UF/m² o Ticket, que se
+    // promedian, acá promediar subestimaría la velocidad real cuando hay
+    // más de una tipología seleccionada.
+    const vel      = +rows.reduce((s, r) => s + (Number(r['__velTipoRate'])        || 0), 0).toFixed(2);
+    const velInit  = +rows.reduce((s, r) => s + (Number(r['__velTipoRateInicial']) || 0), 0).toFixed(2);
+    const velTotal = +rows.reduce((s, r) => s + (Number(r['__velTipoRateTotal'])   || 0), 0).toFixed(2);
+    for (const r of rows) {
+      r['Vel. Venta Final (un./mes)']         = vel;
+      r['Vel. Venta Inicial (un./mes)'] = velInit;
+      r['Vel. Venta Total (un./mes)']   = velTotal;
+    }
+  }
+}
+
+function _recomputeVelVentaXlsx(filteredRows) {
+  for (const rows of _groupByEdificio(filteredRows).values()) {
+    const stock  = rows.reduce((s, r) => s + (Number(r['Stock Programa']) || 0), 0);
+    const oferta = rows.reduce((s, r) => s + (Number(r['Disponibles'])    || 0), 0);
+    // Fecha de inicio de ventas más temprana entre las tipologías filtradas
+    // (si el filtro deja solo una tipología que partió después que otras, la
+    // velocidad se calcula desde SU propio inicio, no el del proyecto entero).
+    const fechasInicio = rows.map(r => _parseEsDate(r['Fecha Inicio Ventas'])).filter(Boolean);
+    const fechaInicio  = fechasInicio.length ? new Date(Math.min(...fechasInicio.map(d => d.getTime()))) : null;
+    const fechaCorte   = _parseEsDate(rows[0]['Periodo']);
+
+    let vel = null;
+    if (fechaInicio && fechaCorte) {
+      const meses    = Math.max(1, _monthsBetween(fechaInicio, fechaCorte));
+      const vendidas = stock - oferta;
+      if (vendidas > 0) vel = +(vendidas / meses).toFixed(2);
+    }
+    for (const r of rows) r['Vel. Venta Final (un./mes)'] = vel;
+  }
 }
 
 // ============== Carga de archivo ==============

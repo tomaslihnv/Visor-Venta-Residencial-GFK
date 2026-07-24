@@ -1,5 +1,5 @@
 import { $, $$ } from '../core/utils.js';
-import { resetFilters } from './filters-modern.js';
+import { resetFilters, ensureFilterOption } from './filters-modern.js';
 import { exportCsv, exportJson } from '../core/export.js';
 import { initFilterIO } from '../core/filter-io.js';
 import { initTiposIO } from '../core/tipos-io.js';
@@ -18,6 +18,9 @@ document.addEventListener('mpchange', async () => {
   if (!state.filtered.length) return;
   const tab = $('.tab.active')?.dataset.tab;
   const { mp } = await import('./miProyecto.js');
+  for (const t of mp.tipologias ?? []) {
+    if (t.nombre) ensureFilterOption(state, 'programa', t.nombre);
+  }
   if (tab === 'comparativa') {
     const { renderComparativa } = await import('../core/comparativa.js');
     renderComparativa(state, COMPARATIVA, mp);
@@ -361,7 +364,7 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
     // (nueva o "redibujar área"), lo persistimos antes de consultar Inciti,
     // para no perderlo si la consulta falla.
     if (drawForRQId) {
-      RQ.updateQuery(drawForRQId, { polygon: polygonInciti });
+      await RQ.updateQuery(drawForRQId, { polygon: polygonInciti });
       activeRQId  = drawForRQId;
       drawForRQId = null;
     }
@@ -521,7 +524,8 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
         // marcado esta vez para preseleccionarlo la próxima (modificable).
         if (activeRQId) {
           const checkedKeys = [...selectionMap.entries()].filter(([, v]) => v).map(([k]) => k);
-          RQ.updateQuery(activeRQId, { rememberedSelection: checkedKeys, lastRunAt: new Date().toISOString() });
+          RQ.updateQuery(activeRQId, { rememberedSelection: checkedKeys, lastRunAt: new Date().toISOString() })
+            .catch(err => console.error('[RQ] No se pudo actualizar la consulta:', err));
           activeRQId = null;
         }
 
@@ -715,26 +719,75 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
     return `Última consulta: ${d.toLocaleDateString('es-CL')}`;
   }
 
+  // null = todos, 'mine' = solo las propias, o un ownerUid específico.
+  let _rqUserFilter = null;
+
+  function _renderRQUserFilter(allQueries) {
+    const bar = document.getElementById('rqUserFilter');
+    if (!bar) return;
+    if (allQueries.length < 2) { bar.innerHTML = ''; return; }
+
+    const others = new Map(); // ownerUid → nombre a mostrar
+    allQueries.forEach(rq => {
+      if (RQ.isOwner(rq) || others.has(rq.ownerUid)) return;
+      others.set(rq.ownerUid, rq.ownerName || rq.ownerEmail || 'Usuario');
+    });
+
+    const chips = [
+      { key: null,   label: 'Todos' },
+      { key: 'mine', label: 'Mías' },
+      ...[...others.entries()].map(([uid, name]) => ({ key: uid, label: name })),
+    ];
+
+    bar.innerHTML = chips.map(c =>
+      `<button type="button" class="rq-user-filter-btn${_rqUserFilter === c.key ? ' active' : ''}" data-key="${c.key ?? ''}">${_escHtml(c.label)}</button>`
+    ).join('');
+
+    bar.querySelectorAll('.rq-user-filter-btn').forEach((btn, i) => {
+      btn.addEventListener('click', () => {
+        _rqUserFilter = chips[i].key;
+        _renderRecurringQueries();
+      });
+    });
+  }
+
   function _renderRecurringQueries() {
     const grid = document.getElementById('rqGrid');
     if (!grid) return;
-    const queries = RQ.getQueries();
+    const allQueries = RQ.getQueries();
+    _renderRQUserFilter(allQueries);
+
+    const queries = allQueries.filter(rq => {
+      if (_rqUserFilter === null) return true;
+      if (_rqUserFilter === 'mine') return RQ.isOwner(rq);
+      return rq.ownerUid === _rqUserFilter;
+    });
+
+    if (!queries.length) {
+      grid.innerHTML = `<p class="hint">${allQueries.length ? 'Sin consultas para este filtro.' : 'Sin consultas guardadas todavía.'}</p>` +
+        `<button type="button" class="rq-card-add" id="rqAddCard">+ Nueva consulta</button>`;
+      grid.querySelector('#rqAddCard')?.addEventListener('click', () => _openRQForm(null));
+      return;
+    }
     grid.innerHTML = queries.map(rq => {
       const typeLabel = rq.type === 'comuna' ? 'Comuna' : 'Área propia';
       const needsDraw = rq.type === 'polygon' && !(rq.polygon?.length >= 3);
       const remembered = rq.rememberedSelection?.length
         ? ` · ${rq.rememberedSelection.length} recordados`
         : '';
+      const mine = RQ.isOwner(rq);
+      // Consultas de otros usuarios: se pueden correr, pero no editar/borrar.
+      const ownerTag = mine ? '' : ` · de ${_escHtml(rq.ownerName || rq.ownerEmail || 'otro usuario')}`;
       return `
         <div class="rq-card" data-id="${rq.id}">
           <span class="rq-card-type">${typeLabel}</span>
-          <h3>${rq.label}</h3>
-          <p class="rq-card-meta">${_fmtRQDate(rq.lastRunAt)}${remembered}</p>
+          <h3>${_escHtml(rq.label)}</h3>
+          <p class="rq-card-meta">${_fmtRQDate(rq.lastRunAt)}${remembered}${ownerTag}</p>
           <div class="rq-card-actions">
             <button type="button" class="area-btn primary rq-btn-run">${needsDraw ? 'Dibujar área' : 'Consultar'}</button>
-            ${rq.type === 'polygon' && !needsDraw ? '<button type="button" class="area-btn rq-btn-redraw">Redibujar área</button>' : ''}
-            <button type="button" class="area-btn rq-btn-edit">Editar</button>
-            <button type="button" class="area-btn cancel rq-btn-delete">Eliminar</button>
+            ${rq.type === 'polygon' && !needsDraw && mine ? '<button type="button" class="area-btn rq-btn-redraw">Redibujar área</button>' : ''}
+            ${mine ? '<button type="button" class="area-btn rq-btn-edit">Editar</button>' : ''}
+            ${mine ? '<button type="button" class="area-btn cancel rq-btn-delete">Eliminar</button>' : ''}
           </div>
         </div>
       `;
@@ -756,14 +809,21 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
         _setState('drawing');
       });
       card.querySelector('.rq-btn-edit')?.addEventListener('click', () => _openRQForm(rq));
-      card.querySelector('.rq-btn-delete')?.addEventListener('click', () => {
+      card.querySelector('.rq-btn-delete')?.addEventListener('click', async () => {
         if (!confirm(`¿Eliminar la consulta recurrente "${rq.label}"?`)) return;
-        RQ.deleteQuery(id);
-        _renderRecurringQueries();
+        try { await RQ.deleteQuery(id); } catch (err) { alert(err.message); }
       });
     });
     grid.querySelector('#rqAddCard')?.addEventListener('click', () => _openRQForm(null));
   }
+
+  function _escHtml(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  RQ.onChange(() => {
+    if (rqContainer && !rqContainer.classList.contains('hidden')) _renderRecurringQueries();
+  });
 
   // ── Formulario alta/edición de consultas recurrentes ──
   const rqFormLabel  = document.getElementById('rqFormLabel');
@@ -806,32 +866,40 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
 
   document.getElementById('rqFormCancel')?.addEventListener('click', _closeRQForm);
 
-  document.getElementById('rqFormSave')?.addEventListener('click', () => {
+  document.getElementById('rqFormSave')?.addEventListener('click', async () => {
     const label = rqFormLabel.value.trim();
     if (!label) { alert('Ponle un nombre a la consulta.'); return; }
     const type = rqFormType();
     if (type === 'comuna' && !rqFormComunaSelect.value) { alert('Selecciona una comuna.'); return; }
 
-    if (_editingRQId) {
-      const patch = { label, type };
-      if (type === 'comuna') { patch.comuna = rqFormComunaSelect.value; patch.polygon = null; }
-      else { patch.comuna = null; } // conserva el polygon existente si lo tenía
-      RQ.updateQuery(_editingRQId, patch);
-      _closeRQForm();
-      _showScreen('recurring');
-    } else {
-      const entry = RQ.addQuery({
-        label, type,
-        comuna:  type === 'comuna'  ? rqFormComunaSelect.value : null,
-        polygon: null,
-      });
-      _closeRQForm();
-      if (type === 'polygon') {
-        // Sin área todavía: mandar directo a dibujarla.
-        _runPolygonRQ(entry);
-      } else {
+    const saveBtn = document.getElementById('rqFormSave');
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      if (_editingRQId) {
+        const patch = { label, type };
+        if (type === 'comuna') { patch.comuna = rqFormComunaSelect.value; patch.polygon = null; }
+        else { patch.comuna = null; } // conserva el polygon existente si lo tenía
+        await RQ.updateQuery(_editingRQId, patch);
+        _closeRQForm();
         _showScreen('recurring');
+      } else {
+        const entry = await RQ.addQuery({
+          label, type,
+          comuna:  type === 'comuna'  ? rqFormComunaSelect.value : null,
+          polygon: null,
+        });
+        _closeRQForm();
+        if (type === 'polygon') {
+          // Sin área todavía: mandar directo a dibujarla.
+          _runPolygonRQ(entry);
+        } else {
+          _showScreen('recurring');
+        }
       }
+    } catch (err) {
+      alert('Error guardando la consulta: ' + err.message);
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
     }
   });
 

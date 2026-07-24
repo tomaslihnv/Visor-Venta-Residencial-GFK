@@ -57,6 +57,7 @@
     .comuna-query-row { display: flex; gap: 8px; align-items: center; }
     .comuna-query-row select { flex: 1; padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 13px; color: #374151; }
   </style>
+  <script type="module" src="shared/auth.js"></script>
 </head>
 <body>
   <nav class="app-nav">
@@ -268,6 +269,7 @@
             <button id="rqBackBtn" class="area-btn cancel">Volver</button>
           </div>
         </div>
+        <div id="rqUserFilter" class="rq-user-filter"></div>
         <div id="rqGrid" class="rq-grid"></div>
       </div>
 
@@ -416,6 +418,7 @@
                   <button class="svp-ratio-btn" data-ratio="1.78">16:9</button>
                   <button class="svp-ratio-btn" data-ratio="1.33">4:3</button>
                   <button class="svp-ratio-btn" data-ratio="1">1:1</button>
+                  <input type="number" id="svpRatioCustom" class="axis-range-input" step="0.01" min="0.1" placeholder="ej: 2.5" title="Proporción personalizada (ancho/alto)">
                 </div>
               </div>
             </div>
@@ -450,6 +453,7 @@
                   <button class="cruz-ratio-btn" data-ratio="1.78">16:9</button>
                   <button class="cruz-ratio-btn" data-ratio="1.33">4:3</button>
                   <button class="cruz-ratio-btn" data-ratio="1">1:1</button>
+                  <input type="number" id="cruzRatioCustom" class="axis-range-input" step="0.01" min="0.1" placeholder="ej: 2.5" title="Proporción personalizada (ancho/alto)">
                 </div>
               </div>
             </div>
@@ -502,6 +506,7 @@
                   <button class="proy-ratio-btn" data-ratio="1.78">16:9</button>
                   <button class="proy-ratio-btn" data-ratio="1.33">4:3</button>
                   <button class="proy-ratio-btn" data-ratio="1">1:1</button>
+                  <input type="number" id="proyRatioCustom" class="axis-range-input" step="0.01" min="0.1" placeholder="ej: 2.5" title="Proporción personalizada (ancho/alto)">
                 </div>
               </div>
               <div class="ctrl distrib-ratio-ctrl">
@@ -519,6 +524,10 @@
                   <input type="number" id="proyYMax" class="axis-range-input" placeholder="máx">
                 </div>
               </div>
+              <label class="toggle-check">
+                <input type="checkbox" id="proyGridToggle" checked />
+                <span>Cuadrícula</span>
+              </label>
             </div>
           </div>
           <div class="chart-wrap" id="proyWrap">
@@ -603,6 +612,7 @@
                   <button class="ratio-btn" data-ratio="1.78">16:9</button>
                   <button class="ratio-btn" data-ratio="1.33">4:3</button>
                   <button class="ratio-btn" data-ratio="1">1:1</button>
+                  <input type="number" id="distribRatioCustom" class="axis-range-input" step="0.01" min="0.1" placeholder="ej: 2.5" title="Proporción personalizada (ancho/alto)">
                 </div>
               </div>
               <div class="ctrl axis-range-ctrl">
@@ -690,62 +700,63 @@
 
             </div>
 
-            <!-- Gráficos -->
-            <div id="histCharts" class="hist-charts" style="display:none;">
-
-              <div class="hist-chart-card">
-                <div class="hist-chart-header">
-                  <div>
-                    <span class="hist-chart-title">Arriendo UF promedio</span>
-                    <span class="hist-chart-subtitle" id="histSubRent"></span>
-                  </div>
-                  <button id="histCopyRent" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
-                </div>
-                <div class="hist-chart-wrap" id="histWrapRent">
-                  <canvas id="histChartRent"></canvas>
-                </div>
-              </div>
-
-              <div class="hist-chart-card">
-                <div class="hist-chart-header">
-                  <div>
-                    <span class="hist-chart-title">Vacancia %</span>
-                    <span class="hist-chart-subtitle" id="histSubVac"></span>
-                  </div>
-                  <button id="histCopyVac" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
-                </div>
-                <div class="hist-chart-wrap" id="histWrapVac">
-                  <canvas id="histChartVac"></canvas>
+            <!-- Gráfico — un solo canvas grande, navegable por botones "Vista",
+                 igual que Distribución/SVP/Cruz (en vez de 4 tarjetas chicas) -->
+            <div id="histCharts" class="chart-controls distrib-controls" style="display:none;">
+              <div class="ctrl distrib-ratio-ctrl">
+                <label>Vista</label>
+                <div class="distrib-ratio-row">
+                  <button class="hist-mode-btn active" data-mode="rent">Arriendo UF</button>
+                  <button class="hist-mode-btn" data-mode="vac">Vacancia</button>
+                  <button class="hist-mode-btn" data-mode="stock">Stock</button>
+                  <button class="hist-mode-btn" data-mode="stockvac">Stock + Vacancia</button>
+                  <button class="hist-mode-btn" data-mode="absorcion">Absorción</button>
+                  <button class="hist-mode-btn" data-mode="stockabs">Stock + Absorción</button>
                 </div>
               </div>
-
-              <div class="hist-chart-card">
-                <div class="hist-chart-header">
-                  <div>
-                    <span class="hist-chart-title">Stock total</span>
-                    <span class="hist-chart-subtitle" id="histSubStock"></span>
+              <button class="ctrl-opts-btn" data-opts="histOpts">&#9881; Visual</button>
+              <button id="histCopyBtn" class="primary-btn">Copiar imagen</button>
+              <div class="ctrl-opts" id="histOpts">
+                <div class="ctrl distrib-font-ctrl">
+                  <label>Texto</label>
+                  <div class="distrib-font-row">
+                    <input type="range" id="histFontSize" min="8" max="20" step="1" value="11">
+                    <span id="histFontSizeVal">11px</span>
                   </div>
-                  <button id="histCopyStock" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
                 </div>
-                <div class="hist-chart-wrap" id="histWrapStock">
-                  <canvas id="histChartStock"></canvas>
+                <label class="toggle-check">
+                  <input type="checkbox" id="histGridToggle" checked />
+                  <span>Cuadrícula</span>
+                </label>
+                <div class="ctrl distrib-color-ctrl">
+                  <label>Color de barra</label>
+                  <input type="color" id="histBarColor" value="#2a78d6" title="Color de barra (cuando no hay tipologías seleccionadas)">
+                </div>
+                <div class="ctrl distrib-color-ctrl">
+                  <label>Color de línea</label>
+                  <input type="color" id="histLineColor" value="#16a34a" title="Color de línea (Vacancia, Absorción, Promedio mercado)">
+                </div>
+                <div class="ctrl distrib-ratio-ctrl">
+                  <label>Proporción</label>
+                  <div class="distrib-ratio-row">
+                    <button class="hist-ratio-btn active" data-ratio="auto">Auto</button>
+                    <button class="hist-ratio-btn" data-ratio="1.78">16:9</button>
+                    <button class="hist-ratio-btn" data-ratio="1.33">4:3</button>
+                    <button class="hist-ratio-btn" data-ratio="1">1:1</button>
+                    <input type="number" id="histRatioCustom" class="axis-range-input" step="0.01" min="0.1" placeholder="ej: 2.5" title="Proporción personalizada (ancho/alto)">
+                  </div>
                 </div>
               </div>
+            </div>
 
-              <div class="hist-chart-card">
-                <div class="hist-chart-header">
-                  <div>
-                    <span class="hist-chart-title">Stock + Vacancia</span>
-                    <span class="hist-chart-subtitle" id="histSubStockVac"></span>
-                  </div>
-                  <button id="histCopyStockVac" class="hist-copy-btn" title="Copiar al portapapeles">Copiar imagen</button>
-                </div>
-                <div id="histStockVacChips" class="hist-chips" style="margin-bottom:4px;"></div>
-                <div class="hist-chart-wrap" id="histWrapStockVac">
-                  <canvas id="histChartStockVac"></canvas>
-                </div>
+            <div id="histChartArea" style="display:none;">
+              <div class="hist-chart-header">
+                <span class="hist-chart-subtitle" id="histSub"></span>
               </div>
-
+              <div id="histStockVacChips" class="hist-chips" style="margin-bottom:4px;"></div>
+              <div class="chart-wrap hist-chart-wrap-big" id="histWrap">
+                <canvas id="histChart"></canvas>
+              </div>
             </div>
 
             <div id="histEmpty" class="hist-empty">

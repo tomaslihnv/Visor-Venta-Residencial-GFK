@@ -31,11 +31,31 @@ const _normStr = s => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').tr
 const NORM_MAP  = Object.fromEntries(
   Object.entries(COLUMN_MAP).map(([k, v]) => [_normStr(k), v])
 );
+// Algunos exportadores de Excel truncan los encabezados (ej. "Metros Total"
+// en vez de "Metros Totales", "Estacionamie" en vez de "Estacionamientos").
+// Como fallback, si no hay match exacto/normalizado, buscamos la entrada de
+// COLUMN_MAP cuyo nombre normalizado empiece igual que la columna del Excel
+// (o viceversa), quedándonos con la coincidencia más larga.
+const NORM_ENTRIES = Object.entries(NORM_MAP);
+function _fuzzyMatch(normKey) {
+  if (normKey.length < 5) return null;
+  let best = null, bestLen = 0;
+  for (const [candNorm, mapped] of NORM_ENTRIES) {
+    if (candNorm.length < 5) continue;
+    const isPrefix = candNorm.startsWith(normKey) || normKey.startsWith(candNorm);
+    if (isPrefix && Math.min(candNorm.length, normKey.length) > bestLen) {
+      best = mapped;
+      bestLen = Math.min(candNorm.length, normKey.length);
+    }
+  }
+  return best;
+}
 
 function _normalizeRow(row) {
   const out = {};
   for (const [key, val] of Object.entries(row)) {
-    const mapped = COLUMN_MAP[key] ?? NORM_MAP[_normStr(key)] ?? key;
+    const normKey = _normStr(key);
+    const mapped = COLUMN_MAP[key] ?? NORM_MAP[normKey] ?? _fuzzyMatch(normKey) ?? key;
     out[mapped] = val;
   }
 

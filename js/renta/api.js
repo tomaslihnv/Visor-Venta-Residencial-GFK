@@ -1,4 +1,5 @@
 import { INCITI_PROXY_URL } from '../config.js';
+import { getIdToken } from '../../shared/auth.js';
 
 const ENDPOINT_PATH = 'get_insights_pro';
 const MAX_AREA_KM2  = 25;
@@ -99,9 +100,10 @@ function _num(v) {
 
 async function _fetchPolygon(polygon) {
   const url = INCITI_PROXY_URL.replace(/\/$/, '') + '/' + ENDPOINT_PATH;
+  const token = await getIdToken();
   const res = await fetch(url, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body:    JSON.stringify({ market: 'residencial', polygons: [polygon] }),
   });
   if (!res.ok) {

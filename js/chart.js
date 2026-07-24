@@ -104,8 +104,8 @@ export function renderKpis() {
     const display = a > 1 ? fmt(a) + '%' : (a * 100).toFixed(1) + '%';
     kpis.push({ label: '% Vendido promedio', value: display });
   }
-  if (state.columns.find(c => c.name === 'Vel. Venta (un./mes)')) {
-    kpis.push({ label: 'Vel. Venta promedio', value: fmt(avg('Vel. Venta (un./mes)')), sub: 'un./mes' });
+  if (state.columns.find(c => c.name === 'Vel. Venta Final (un./mes)')) {
+    kpis.push({ label: 'Vel. Venta Final promedio', value: fmt(avg('Vel. Venta Final (un./mes)')), sub: 'un./mes' });
   }
 
   for (const k of kpis) {
@@ -127,14 +127,16 @@ const palette = [
 let proyChart = null;
 let proyListenersReady = false;
 
-const PROY_UNITS = { ticket: 'UF', ufm2: 'UF/m²', util: 'm²', disp: 'un.', vel: 'un./mes', oferta: 'un.', pct: '' };
+const PROY_UNITS = { ticket: 'UF', ufm2: 'UF/m²', util: 'm²', disp: 'un.', vel: 'un./mes', velIni: 'un./mes', velTot: 'un./mes', oferta: 'un.', pct: '' };
 
 const PROY_METRICS = [
   { id: 'ticket', label: 'Ticket UF',            keys: ['ticket'],                      agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'ufm2',   label: 'UF/m²',               keys: ['uf/m', 'uf / m'],              agg: 'avg', fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
   { id: 'util',   label: 'Útil (m²)',            keys: ['útil', 'util', 'vendible'],    agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'disp',   label: 'Disponibles',          keys: ['disponib'],                    agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
-  { id: 'vel',    label: 'Vel. Venta (un./mes)', keys: ['vel. venta', 'vel venta'],     agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
+  { id: 'vel',    label: 'Vel. Venta Final (un./mes)', keys: ['vel. venta', 'vel venta'],     agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
+  { id: 'velIni', label: 'Vel. Venta Inicial (un./mes)', keys: ['vel. venta inicial', 'vel venta inicial', 'velocidad inicial'], agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
+  { id: 'velTot', label: 'Vel. Venta Total (un./mes)',   keys: ['vel. venta total', 'vel venta total', 'velocidad total'],       agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
   { id: 'oferta', label: 'Oferta total proyecto',keys: ['oferta total', 'oferta'],      agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'pct',    label: '% Vendido',            keys: ['% vendido', 'pct vendido', 'vendido'], agg: 'avg', fmt: v => {
     const pct = Math.abs(v) <= 1.05 ? v * 100 : v;
@@ -1229,6 +1231,41 @@ function refreshMarkerTags() {
   });
 }
 
+// ── Suavizado de la curva Acumulada (igual que Multifamily/Renta) ─────────
+// Estima la CDF con un kernel gaussiano (Silverman) y la renormaliza para
+// que toque exactamente (xMin,0%) y (xMax,100%) sin extrapolar más allá del
+// rango real de datos. Se usa invertida (percentil → valor) porque este
+// gráfico grafica x=percentil, y=valor.
+function _erf(x) {
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const t = 1 / (1 + p * x);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return sign * y;
+}
+function _normCdf(z) { return 0.5 * (1 + _erf(z / Math.SQRT2)); }
+
+function _computeSmoothCDF(sortedVals, nPoints = 200) {
+  const n = sortedVals.length;
+  const mean  = sortedVals.reduce((a, b) => a + b, 0) / n;
+  const sigma = Math.sqrt(sortedVals.reduce((s, v) => s + (v - mean) ** 2, 0) / n);
+  const h = Math.max(1.06 * sigma * Math.pow(n, -0.2), 1e-6);
+  const xMin = sortedVals[0], xMax = sortedVals[n - 1];
+  const rawCdf = x => { let sum = 0; for (const xi of sortedVals) sum += _normCdf((x - xi) / h); return sum / n; };
+  const rawMin = rawCdf(xMin), rawMax = rawCdf(xMax);
+  const span = rawMax - rawMin || 1;
+  const pts = [{ x: 0, y: 0 }];
+  if (xMin > 0) pts.push({ x: xMin, y: 0 });
+  const step = (xMax - xMin) / nPoints;
+  for (let i = 0; i <= nPoints; i++) {
+    const x = xMin + i * step;
+    const y = Math.min(100, Math.max(0, ((rawCdf(x) - rawMin) / span) * 100));
+    pts.push({ x, y });
+  }
+  return pts;
+}
+
 // Curva de cuantiles: X = percentil (0–100%), Y = valor
 function computeQuantileCurve(rows, col) {
   const vals = rows.map(r => Number(r[col])).filter(v => !isNaN(v));
@@ -1414,8 +1451,10 @@ export function renderDistrib() {
         // más allá del mínimo/máximo real de los datos).
         const lo = xMinV ?? x0;
         const hi = xMaxV ?? x1;
-        const kStart = Math.floor((lo - x0) / binW);
-        const kEnd   = Math.ceil((hi - x0) / binW);
+        // ceil (no floor) para kStart: floor podía generar un borde por
+        // debajo de "lo" cuando lo no cae justo en un múltiplo de binW.
+        const kStart = Math.ceil((lo - x0) / binW);
+        const kEnd   = Math.floor((hi - x0) / binW);
         const allTicks = [];
         for (let k = kStart; k <= kEnd; k++) allTicks.push(x0 + k * binW);
         const step = Math.max(1, Math.ceil(allTicks.length / 12));
@@ -1486,7 +1525,7 @@ export function renderDistrib() {
         responsive: true,
         maintainAspectRatio: false,
         parsing: false,
-        layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+        layout: { padding: { top: Math.max(24, fs * 2), right: Math.max(24, fs * 3), bottom: 12, left: Math.max(24, fs * 3) } },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -1536,7 +1575,18 @@ export function renderDistrib() {
     return;
   }
 
-  const refData = computeQuantileCurve(state.filtered, col);
+  // Curva suave: se calcula la CDF suavizada (kernel gaussiano, igual que
+  // Multifamily/Renta) y se invierte percentil→valor, así P0 queda
+  // exactamente en 0 y P100 en el máximo real, sin inventar datos fuera
+  // del rango.
+  const refData = sortedVals.length >= 2
+    ? (() => {
+        const smoothCurve = _computeSmoothCDF(sortedVals);
+        return Array.from({ length: 101 }, (_, pct) => ({
+          x: pct, y: lerpAtY(smoothCurve, pct) ?? valAtPct(pct),
+        }));
+      })()
+    : computeQuantileCurve(state.filtered, col);
   const kdeData = isDens ? computeLogNormal(sortedVals) : [];
 
   const chartData = isDens ? kdeData : refData;
@@ -1548,14 +1598,14 @@ export function renderDistrib() {
     backgroundColor: _hexToRgba(distribLineColor, 0.12),
     pointRadius: 0,
     borderWidth: 2,
-    tension: isDens ? 0.3 : 0.4,
+    tension: isDens ? 0.3 : 0.25,
     fill: _distribFillOn(),
   }];
 
   // Construir anotaciones
   const annotations = {};
   const annLabel   = (content, color) => ({
-    content, display: true, position: 'start',
+    content, display: true, position: 'start', clip: false,
     color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
@@ -1644,7 +1694,7 @@ export function renderDistrib() {
       if (val == null) return;
       const valLabel = val.toLocaleString('es-CL', { maximumFractionDigits: 0 });
       const mpAnnLabel = (content) => ({
-        content, display: true, position: 'start',
+        content, display: true, position: 'start', clip: false,
         color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
         padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
       });
@@ -1699,7 +1749,7 @@ export function renderDistrib() {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
-      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+      layout: { padding: { top: Math.max(24, fs * 2), right: Math.max(24, fs * 3), bottom: 12, left: Math.max(24, fs * 3) } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {

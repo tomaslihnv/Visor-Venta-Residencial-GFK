@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// Reglas de Firestore para 'recurringQueries' (consultas guardadas a Inciti,
+// compartidas entre usuarios de la herramienta). Esto es lo que hace CUMPLIR
+// el permiso — shared/recurringQueries.js solo maneja la UX, cualquiera
+// podría llamar a Firestore directo sin pasar por nuestro JS, así que la
+// regla real vive acá, igual que la verificación de token en el Worker de
+// Inciti (workers/inciti-proxy.js).
+//
+// Deploy: pegar este archivo completo en
+//   Firebase Console → Firestore Database → Reglas → Publicar
+// (o, si prefieres CLI: `firebase deploy --only firestore:rules`, requiere
+// `firebase init` primero — no configurado en este repo por simplicidad).
+//
+// Dominio permitido debe coincidir con ALLOWED_EMAIL_DOMAIN en js/config.js
+// y ALLOWED_EMAIL_DOMAIN en workers/wrangler.toml.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAllowedUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.matches('.*@situ[.]cl$');
+    }
+
+    match /recurringQueries/{queryId} {
+      // Cualquier usuario autorizado ve las consultas de TODOS.
+      allow read: if isAllowedUser();
+
+      // Solo puede crear a su propio nombre (no puede setear ownerUid de otro).
+      allow create: if isAllowedUser()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      // Solo el dueño puede editar/borrar — comparado contra el documento
+      // YA guardado (resource.data), no contra lo que mande el request.
+      allow update, delete: if isAllowedUser()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Todo lo demás, denegado por defecto.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

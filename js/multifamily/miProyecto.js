@@ -16,8 +16,10 @@ export const mp = {
   // Métricas del edificio (a nivel de edificio completo)
   stock:    null,
   vacancia: null,
-  // Unidades por tipología: [{ id, nombre, sup, ufm2, renta }]
+  // Unidades por tipología: [{ id, nombre, sup, ufm2, renta, unidades }]
   // renta se calcula automáticamente como sup * ufm2.
+  // unidades = cantidad de unidades de ese tipo en el edificio (usado para
+  // ponderar promedios/medianas en Proyectos, Dispersión, Cruz, etc.).
   tipologias: [],
   // Incluir en
   inComp:   false,
@@ -111,6 +113,11 @@ function _renderTipos() {
           <span>UF/m²</span>
           <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
             data-id="${tipo.id}" data-metric="ufm2" value="${tipo.ufm2 ?? ''}" />
+        </label>
+        <label class="mp-metric-row">
+          <span>Unidades</span>
+          <input type="number" class="mp-metric-input mp-input" step="1" min="0" placeholder="—"
+            data-id="${tipo.id}" data-metric="unidades" value="${tipo.unidades ?? ''}" />
         </label>
         <div class="mp-metric-row">
           <span>Renta UF</span>
@@ -219,7 +226,7 @@ export function initMpPanel() {
   document.getElementById('mpInProy')?.addEventListener('change',    e => { mp.inProy    = e.target.checked; _save(); });
 
   document.getElementById('mpAddTipo')?.addEventListener('click', () => {
-    mp.tipologias.push({ id: _nextId(), nombre: '', sup: null, ufm2: null, renta: null });
+    mp.tipologias.push({ id: _nextId(), nombre: '', sup: null, ufm2: null, renta: null, unidades: null });
     _renderTipos();
     _save();
   });

@@ -4,6 +4,7 @@ import { initFilterIO } from './core/filter-io.js';
 import { initTiposIO } from './core/tipos-io.js';
 import { queryArea, flattenEntities, calcAreaKm2 } from './api.js';
 import { state, onDataLoaded } from './data.js';
+import * as RQ from './recurringQueries.js';
 
 // Re-renderizar la pestaña activa cuando cambia Mi Proyecto
 document.addEventListener('mpchange', () => {
@@ -53,6 +54,9 @@ $$('.tab').forEach(tab => {
     }
     if (tab.dataset.tab === 'proyectos') {
       import('./chart.js').then(({ renderProyectos }) => renderProyectos());
+    }
+    if (tab.dataset.tab === 'actualizacion') {
+      import('./actualizacion.js').then(({ renderActualizacion }) => renderActualizacion());
     }
   });
 });
@@ -124,39 +128,63 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
   let areaMap = null, drawState = 'idle', vertices = [], lastScreen = 'dropzone';
   let vertexMarkers = [], edgePolyline = null, rubberLine = null, areaPoly = null;
 
-  const dropzone        = document.getElementById('dropzone');
-  const drawContainer   = document.getElementById('areaDrawContainer');
-  const previewContainer= document.getElementById('incitiPreview');
-  const comunaContainer = document.getElementById('comunaQueryContainer');
-  const dashboard       = document.getElementById('dashboard');
-  const statusEl        = document.getElementById('areaDrawStatus');
-  const btnDraw         = document.getElementById('areaBtnDraw');
-  const btnClear        = document.getElementById('areaBtnClear');
-  const btnClosePoly    = document.getElementById('areaBtnClosePoly');
-  const btnQuery        = document.getElementById('areaBtnQuery');
-  const btnCancel       = document.getElementById('areaBtnCancel');
-  const comunaSelect    = document.getElementById('comunaSelectInput');
-  const comunaBtnQuery  = document.getElementById('comunaBtnQuery');
-  const comunaBtnCancel = document.getElementById('comunaBtnCancel');
+  // Consultas recurrentes: id de la consulta activa (si el flujo actual vino
+  // de "Consultas Recurrentes"), y si estamos dibujando un polígono para
+  // guardarlo en una consulta (nueva o edición) en vez de solo consultar.
+  let activeRQId  = null;
+  let drawForRQId = null;
+
+  const dropzone         = document.getElementById('dropzone');
+  const drawContainer    = document.getElementById('areaDrawContainer');
+  const previewContainer = document.getElementById('incitiPreview');
+  const comunaContainer  = document.getElementById('comunaQueryContainer');
+  const rqContainer      = document.getElementById('recurringQueriesContainer');
+  const rqFormOverlay    = document.getElementById('rqFormOverlay');
+  const rqLoadingOverlay = document.getElementById('rqLoadingOverlay');
+  const rqLoadingStatus  = document.getElementById('rqLoadingStatus');
+  const dashboard        = document.getElementById('dashboard');
+  const statusEl         = document.getElementById('areaDrawStatus');
+  const btnDraw          = document.getElementById('areaBtnDraw');
+  const btnClear         = document.getElementById('areaBtnClear');
+  const btnClosePoly     = document.getElementById('areaBtnClosePoly');
+  const btnQuery         = document.getElementById('areaBtnQuery');
+  const btnCancel        = document.getElementById('areaBtnCancel');
+  const comunaSelect     = document.getElementById('comunaSelectInput');
+  const comunaBtnQuery   = document.getElementById('comunaBtnQuery');
+  const comunaBtnCancel  = document.getElementById('comunaBtnCancel');
 
   if (comunaSelect && comunaSelect.children.length <= 1) {
     COMUNAS_RM.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; comunaSelect.appendChild(o); });
   }
 
+  function _showRQLoading(msg) {
+    rqLoadingOverlay?.classList.remove('hidden');
+    if (rqLoadingStatus) rqLoadingStatus.textContent = msg;
+  }
+  function _hideRQLoading() {
+    rqLoadingOverlay?.classList.add('hidden');
+  }
+
   function _showScreen(screen) {
-    [dropzone, drawContainer, previewContainer, dashboard].forEach(el => el?.classList.add('hidden'));
+    [dropzone, drawContainer, previewContainer, dashboard, rqContainer].forEach(el => el?.classList.add('hidden'));
     comunaContainer?.classList.add('hidden');
+    _hideRQLoading();
     if (screen === 'dropzone')  dropzone?.classList.remove('hidden');
     if (screen === 'dashboard') dashboard?.classList.remove('hidden');
+    if (screen === 'recurring') { rqContainer?.classList.remove('hidden'); _renderRecurringQueries(); }
     if (screen === 'draw')   { drawContainer?.classList.remove('hidden'); _initMapIfNeeded(); _setState('idle'); }
     if (screen === 'comuna') { drawContainer?.classList.remove('hidden'); _initMapIfNeeded(); _clearAll(); comunaContainer?.classList.remove('hidden'); _setStatus('Selecciona una comuna y presiona <strong>Consultar</strong>.'); }
     if (screen === 'preview') previewContainer?.classList.remove('hidden');
   }
 
   function _setStatus(text, type = '') {
-    if (!statusEl) return;
-    statusEl.className = `area-draw-status${type ? ' ' + type : ''}`;
-    statusEl.innerHTML = text;
+    if (statusEl) {
+      statusEl.className = `area-draw-status${type ? ' ' + type : ''}`;
+      statusEl.innerHTML = text;
+    }
+    if (rqLoadingStatus && !rqLoadingOverlay?.classList.contains('hidden')) {
+      rqLoadingStatus.textContent = text.replace(/<[^>]+>/g, '');
+    }
   }
 
   function _setState(next) {
@@ -233,20 +261,37 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
   }
 
   async function _runQuery(polygonInciti) {
+    const wasRQFlow = !!(activeRQId || drawForRQId);
     _setStatus('Procesando área de consulta...', 'loading');
+    // Si este polígono se dibujó para guardarlo en una consulta recurrente
+    // (nueva o "redibujar área"), lo persistimos antes de consultar Inciti,
+    // para no perderlo si la consulta falla.
+    if (drawForRQId) {
+      await RQ.updateQuery(drawForRQId, { polygon: polygonInciti });
+      activeRQId  = drawForRQId;
+      drawForRQId = null;
+    }
     try {
       const entities = await queryArea({ polygons: [polygonInciti], onProgress: msg => _setStatus(msg, 'loading') });
-      _buildPreviewPanel(entities);
+      const rq = activeRQId ? RQ.getQuery(activeRQId) : null;
+      _buildPreviewPanel(entities, rq?.rememberedSelection ?? null);
       _showScreen('preview');
     } catch (err) {
       console.error('[Inciti/venta] Error:', err);
-      _setStatus(`Error: ${err.message}`, 'error');
-      if (btnQuery) btnQuery.disabled = false;
-      if (comunaBtnQuery) comunaBtnQuery.disabled = false;
+      if (wasRQFlow) {
+        _hideRQLoading();
+        alert(`Error consultando Inciti: ${err.message}`);
+        activeRQId = null; drawForRQId = null;
+        _showScreen('recurring');
+      } else {
+        _setStatus(`Error: ${err.message}`, 'error');
+        if (btnQuery) btnQuery.disabled = false;
+        if (comunaBtnQuery) comunaBtnQuery.disabled = false;
+      }
     }
   }
 
-  function _buildPreviewPanel(entities) {
+  function _buildPreviewPanel(entities, preselectedKeys = null) {
     const txtCount = document.getElementById('previewCountText');
     if (txtCount) txtCount.textContent = `Inciti encontró ${entities.length} proyectos de venta residencial`;
 
@@ -261,8 +306,12 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
     if (fOwner)   fOwner.innerHTML   = '<option value="">Todas las inmobiliarias</option>' + owners.map(o => `<option value="${o}">${o}</option>`).join('');
     if (fName) fName.value = '';
 
+    const rememberedSet = preselectedKeys ? new Set(preselectedKeys) : null;
     const selectionMap = new Map();
-    entities.forEach(e => selectionMap.set(String(e.id || e.name), true));
+    entities.forEach(e => {
+      const key = String(e.id || e.name);
+      selectionMap.set(key, rememberedSet ? rememberedSet.has(key) : true);
+    });
 
     function _renderTableRows() {
       const tbody = document.getElementById('previewTableBody');
@@ -295,7 +344,7 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
 
     const selectAll = document.getElementById('prevSelectAll');
     if (selectAll) {
-      selectAll.checked = true;
+      selectAll.checked = [...selectionMap.values()].every(Boolean);
       selectAll.addEventListener('change', () => {
         document.querySelectorAll('.prev-item-check').forEach(c => {
           c.checked = selectAll.checked;
@@ -324,6 +373,16 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
         }
         const fileNameEl = document.getElementById('fileName');
         if (fileNameEl) fileNameEl.textContent = `Inciti · ${selected.length} proyectos (${rows.length} registros)`;
+
+        // Si el flujo vino de una consulta recurrente, recordar qué quedó
+        // marcado esta vez para preseleccionarlo la próxima (modificable).
+        if (activeRQId) {
+          const checkedKeys = [...selectionMap.entries()].filter(([, v]) => v).map(([k]) => k);
+          RQ.updateQuery(activeRQId, { rememberedSelection: checkedKeys, lastRunAt: new Date().toISOString() })
+            .catch(err => console.error('[RQ] No se pudo actualizar la consulta:', err));
+          activeRQId = null;
+        }
+
         _showScreen('dashboard');
         _clearAll();
         onDataLoaded(rows);
@@ -331,10 +390,48 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
     }
   }
 
-  document.getElementById('btnAreaQuery')?.addEventListener('click', () => { lastScreen = 'draw'; _showScreen('draw'); });
-  document.getElementById('btnComunaQuery')?.addEventListener('click', () => { lastScreen = 'comuna'; _showScreen('comuna'); });
-  btnCancel?.addEventListener('click', () => _showScreen('dropzone'));
-  document.getElementById('previewBtnCancel')?.addEventListener('click', () => _showScreen(lastScreen));
+  async function _resolveComunaPolygon(comuna) {
+    const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Región+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=1`;
+    const res  = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+    if (!res.ok) throw new Error('No se pudo conectar con el servicio geográfico.');
+    const data = await res.json();
+    if (!data?.length || !data[0].geojson) throw new Error(`No se encontró el contorno para la comuna de ${comuna}.`);
+    const geojson = data[0].geojson;
+    let rawCoords = [];
+    if (geojson.type === 'Polygon') {
+      rawCoords = geojson.coordinates[0];
+    } else if (geojson.type === 'MultiPolygon') {
+      let maxLen = 0;
+      geojson.coordinates.forEach(poly => { if (poly[0].length > maxLen) { maxLen = poly[0].length; rawCoords = poly[0]; } });
+    } else {
+      throw new Error('El formato geográfico retornado no es compatible.');
+    }
+    let polygon_inciti = rawCoords.map(coord => ({ lat: coord[1], lng: coord[0] }));
+    if (polygon_inciti.length > 0) {
+      const first = polygon_inciti[0], last = polygon_inciti[polygon_inciti.length - 1];
+      if (first.lat !== last.lat || first.lng !== last.lng) polygon_inciti.push({ ...first });
+    }
+    if (polygon_inciti.length > 80) {
+      const step = Math.ceil(polygon_inciti.length / 80);
+      const simplified = [];
+      for (let i = 0; i < polygon_inciti.length - 1; i += step) simplified.push(polygon_inciti[i]);
+      simplified.push(polygon_inciti[polygon_inciti.length - 1]);
+      polygon_inciti = simplified;
+    }
+    return polygon_inciti;
+  }
+
+  document.getElementById('btnAreaQuery')?.addEventListener('click',  () => { activeRQId = null; drawForRQId = null; lastScreen = 'draw';   _showScreen('draw');   });
+  document.getElementById('btnComunaQuery')?.addEventListener('click', () => { activeRQId = null; drawForRQId = null; lastScreen = 'comuna'; _showScreen('comuna'); });
+  btnCancel?.addEventListener('click', () => {
+    const target = (activeRQId || drawForRQId) ? 'recurring' : 'dropzone';
+    activeRQId = null; drawForRQId = null;
+    _showScreen(target);
+  });
+  document.getElementById('previewBtnCancel')?.addEventListener('click', () => {
+    activeRQId = null; drawForRQId = null;
+    _showScreen(lastScreen);
+  });
   btnDraw?.addEventListener('click', () => { _clearAll(); _setState('drawing'); });
   btnClear?.addEventListener('click', _clearAll);
   btnClosePoly?.addEventListener('click', _closePoly);
@@ -345,40 +442,18 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
   });
 
   comunaSelect?.addEventListener('change', () => { if (comunaBtnQuery) comunaBtnQuery.disabled = !comunaSelect.value; });
-  comunaBtnCancel?.addEventListener('click', () => _showScreen('dropzone'));
+  comunaBtnCancel?.addEventListener('click', () => {
+    const target = activeRQId ? 'recurring' : 'dropzone';
+    activeRQId = null;
+    _showScreen(target);
+  });
   comunaBtnQuery?.addEventListener('click', async () => {
     const comuna = comunaSelect.value;
     if (!comuna) return;
     comunaBtnQuery.disabled = true;
     _setStatus(`Buscando límites geográficos de ${comuna}…`, 'loading');
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Región+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=1`;
-      const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
-      if (!res.ok) throw new Error('No se pudo conectar con el servicio geográfico.');
-      const data = await res.json();
-      if (!data?.length || !data[0].geojson) throw new Error(`No se encontró el contorno para la comuna de ${comuna}.`);
-      const geojson = data[0].geojson;
-      let rawCoords = [];
-      if (geojson.type === 'Polygon') {
-        rawCoords = geojson.coordinates[0];
-      } else if (geojson.type === 'MultiPolygon') {
-        let maxLen = 0;
-        geojson.coordinates.forEach(poly => { if (poly[0].length > maxLen) { maxLen = poly[0].length; rawCoords = poly[0]; } });
-      } else {
-        throw new Error('El formato geográfico retornado no es compatible.');
-      }
-      let polygon_inciti = rawCoords.map(coord => ({ lat: coord[1], lng: coord[0] }));
-      if (polygon_inciti.length > 0) {
-        const first = polygon_inciti[0], last = polygon_inciti[polygon_inciti.length - 1];
-        if (first.lat !== last.lat || first.lng !== last.lng) polygon_inciti.push({ ...first });
-      }
-      if (polygon_inciti.length > 80) {
-        const step = Math.ceil(polygon_inciti.length / 80);
-        const simplified = [];
-        for (let i = 0; i < polygon_inciti.length - 1; i += step) simplified.push(polygon_inciti[i]);
-        simplified.push(polygon_inciti[polygon_inciti.length - 1]);
-        polygon_inciti = simplified;
-      }
+      const polygon_inciti = await _resolveComunaPolygon(comuna);
       _clearAll();
       vertices = polygon_inciti.map(v => [v.lat, v.lng]);
       areaPoly = L.polygon(vertices, STYLE_POLYGON).addTo(areaMap);
@@ -390,6 +465,231 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
       comunaBtnQuery.disabled = false;
     }
   });
+
+  // ── Consultas Recurrentes ──────────────────────────────────────────────
+  async function _runComunaRQ(rq) {
+    activeRQId = rq.id;
+    _showRQLoading(`Buscando límites geográficos de ${rq.comuna}…`);
+    try {
+      const polygon_inciti = await _resolveComunaPolygon(rq.comuna);
+      await _runQuery(polygon_inciti);
+    } catch (err) {
+      console.error('[RQ Comuna] Error:', err);
+      _hideRQLoading();
+      alert(`Error consultando ${rq.comuna}: ${err.message}`);
+      activeRQId = null;
+      _showScreen('recurring');
+    }
+  }
+
+  function _runPolygonRQ(rq) {
+    if (rq.polygon?.length >= 3) {
+      activeRQId = rq.id;
+      _showRQLoading(`Consultando ${rq.label}…`);
+      _runQuery(rq.polygon);
+    } else {
+      drawForRQId = rq.id;
+      lastScreen = 'recurring';
+      _showScreen('draw');
+      _clearAll();
+      _setState('drawing');
+    }
+  }
+
+  function _fmtRQDate(iso) {
+    if (!iso) return 'Nunca consultada';
+    const d = new Date(iso);
+    return `Última consulta: ${d.toLocaleDateString('es-CL')}`;
+  }
+
+  function _escHtml(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // null = todos, 'mine' = solo las propias, o un ownerUid específico.
+  let _rqUserFilter = null;
+
+  function _renderRQUserFilter(allQueries) {
+    const bar = document.getElementById('rqUserFilter');
+    if (!bar) return;
+    if (allQueries.length < 2) { bar.innerHTML = ''; return; }
+
+    const others = new Map(); // ownerUid → nombre a mostrar
+    allQueries.forEach(rq => {
+      if (RQ.isOwner(rq) || others.has(rq.ownerUid)) return;
+      others.set(rq.ownerUid, rq.ownerName || rq.ownerEmail || 'Usuario');
+    });
+
+    const chips = [
+      { key: null,   label: 'Todos' },
+      { key: 'mine', label: 'Mías' },
+      ...[...others.entries()].map(([uid, name]) => ({ key: uid, label: name })),
+    ];
+
+    bar.innerHTML = chips.map(c =>
+      `<button type="button" class="rq-user-filter-btn${_rqUserFilter === c.key ? ' active' : ''}" data-key="${c.key ?? ''}">${_escHtml(c.label)}</button>`
+    ).join('');
+
+    bar.querySelectorAll('.rq-user-filter-btn').forEach((btn, i) => {
+      btn.addEventListener('click', () => {
+        _rqUserFilter = chips[i].key;
+        _renderRecurringQueries();
+      });
+    });
+  }
+
+  function _renderRecurringQueries() {
+    const grid = document.getElementById('rqGrid');
+    if (!grid) return;
+    const allQueries = RQ.getQueries();
+    _renderRQUserFilter(allQueries);
+
+    const queries = allQueries.filter(rq => {
+      if (_rqUserFilter === null) return true;
+      if (_rqUserFilter === 'mine') return RQ.isOwner(rq);
+      return rq.ownerUid === _rqUserFilter;
+    });
+
+    if (!queries.length) {
+      grid.innerHTML = `<p class="hint">${allQueries.length ? 'Sin consultas para este filtro.' : 'Sin consultas guardadas todavía.'}</p>` +
+        `<button type="button" class="rq-card-add" id="rqAddCard">+ Nueva consulta</button>`;
+      grid.querySelector('#rqAddCard')?.addEventListener('click', () => _openRQForm(null));
+      return;
+    }
+    grid.innerHTML = queries.map(rq => {
+      const typeLabel = rq.type === 'comuna' ? 'Comuna' : 'Área propia';
+      const needsDraw = rq.type === 'polygon' && !(rq.polygon?.length >= 3);
+      const remembered = rq.rememberedSelection?.length
+        ? ` · ${rq.rememberedSelection.length} recordados`
+        : '';
+      const mine = RQ.isOwner(rq);
+      const ownerTag = mine ? '' : ` · de ${_escHtml(rq.ownerName || rq.ownerEmail || 'otro usuario')}`;
+      return `
+        <div class="rq-card" data-id="${rq.id}">
+          <span class="rq-card-type">${typeLabel}</span>
+          <h3>${_escHtml(rq.label)}</h3>
+          <p class="rq-card-meta">${_fmtRQDate(rq.lastRunAt)}${remembered}${ownerTag}</p>
+          <div class="rq-card-actions">
+            <button type="button" class="area-btn primary rq-btn-run">${needsDraw ? 'Dibujar área' : 'Consultar'}</button>
+            ${rq.type === 'polygon' && !needsDraw && mine ? '<button type="button" class="area-btn rq-btn-redraw">Redibujar área</button>' : ''}
+            ${mine ? '<button type="button" class="area-btn rq-btn-edit">Editar</button>' : ''}
+            ${mine ? '<button type="button" class="area-btn cancel rq-btn-delete">Eliminar</button>' : ''}
+          </div>
+        </div>
+      `;
+    }).join('') + `<button type="button" class="rq-card-add" id="rqAddCard">+ Nueva consulta</button>`;
+
+    grid.querySelectorAll('.rq-card').forEach(card => {
+      const id = card.dataset.id;
+      const rq = RQ.getQuery(id);
+      if (!rq) return;
+      card.querySelector('.rq-btn-run')?.addEventListener('click', () => {
+        if (rq.type === 'comuna') _runComunaRQ(rq);
+        else _runPolygonRQ(rq);
+      });
+      card.querySelector('.rq-btn-redraw')?.addEventListener('click', () => {
+        drawForRQId = rq.id;
+        lastScreen = 'recurring';
+        _showScreen('draw');
+        _clearAll();
+        _setState('drawing');
+      });
+      card.querySelector('.rq-btn-edit')?.addEventListener('click', () => _openRQForm(rq));
+      card.querySelector('.rq-btn-delete')?.addEventListener('click', async () => {
+        if (!confirm(`¿Eliminar la consulta recurrente "${rq.label}"?`)) return;
+        try { await RQ.deleteQuery(id); } catch (err) { alert(err.message); }
+      });
+    });
+    grid.querySelector('#rqAddCard')?.addEventListener('click', () => _openRQForm(null));
+  }
+
+  RQ.onChange(() => {
+    if (rqContainer && !rqContainer.classList.contains('hidden')) _renderRecurringQueries();
+  });
+
+  // ── Formulario alta/edición de consultas recurrentes ──
+  const rqFormLabel        = document.getElementById('rqFormLabel');
+  const rqFormType         = () => document.querySelector('input[name="rqFormType"]:checked')?.value ?? 'comuna';
+  const rqFormComunaRow    = document.getElementById('rqFormComunaRow');
+  const rqFormPolygonRow   = document.getElementById('rqFormPolygonRow');
+  const rqFormComunaSelect = document.getElementById('rqFormComunaSelect');
+  let _editingRQId = null;
+
+  if (rqFormComunaSelect && rqFormComunaSelect.children.length <= 1) {
+    COMUNAS_RM.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      rqFormComunaSelect.appendChild(opt);
+    });
+  }
+
+  function _syncRQFormTypeUI() {
+    const isComuna = rqFormType() === 'comuna';
+    rqFormComunaRow?.classList.toggle('hidden', !isComuna);
+    rqFormPolygonRow?.classList.toggle('hidden', isComuna);
+  }
+  document.querySelectorAll('input[name="rqFormType"]').forEach(r => r.addEventListener('change', _syncRQFormTypeUI));
+
+  function _openRQForm(rq) {
+    _editingRQId = rq?.id ?? null;
+    document.getElementById('rqFormTitle').textContent = rq ? 'Editar consulta recurrente' : 'Nueva consulta recurrente';
+    rqFormLabel.value = rq?.label ?? '';
+    const type = rq?.type ?? 'comuna';
+    document.querySelector(`input[name="rqFormType"][value="${type}"]`).checked = true;
+    rqFormComunaSelect.value = rq?.comuna ?? '';
+    _syncRQFormTypeUI();
+    rqFormOverlay?.classList.remove('hidden');
+  }
+
+  function _closeRQForm() {
+    rqFormOverlay?.classList.add('hidden');
+    _editingRQId = null;
+  }
+
+  document.getElementById('rqFormCancel')?.addEventListener('click', _closeRQForm);
+
+  document.getElementById('rqFormSave')?.addEventListener('click', async () => {
+    const label = rqFormLabel.value.trim();
+    if (!label) { alert('Ponle un nombre a la consulta.'); return; }
+    const type = rqFormType();
+    if (type === 'comuna' && !rqFormComunaSelect.value) { alert('Selecciona una comuna.'); return; }
+
+    const saveBtn = document.getElementById('rqFormSave');
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      if (_editingRQId) {
+        const patch = { label, type };
+        if (type === 'comuna') { patch.comuna = rqFormComunaSelect.value; patch.polygon = null; }
+        else { patch.comuna = null; }
+        await RQ.updateQuery(_editingRQId, patch);
+        _closeRQForm();
+        _showScreen('recurring');
+      } else {
+        const entry = await RQ.addQuery({
+          label, type,
+          comuna:  type === 'comuna'  ? rqFormComunaSelect.value : null,
+          polygon: null,
+        });
+        _closeRQForm();
+        if (type === 'polygon') {
+          _runPolygonRQ(entry);
+        } else {
+          _showScreen('recurring');
+        }
+      }
+    } catch (err) {
+      alert('Error guardando la consulta: ' + err.message);
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('btnRecurringQuery')?.addEventListener('click', () => {
+    lastScreen = 'recurring';
+    _showScreen('recurring');
+  });
+  document.getElementById('rqAddBtn')?.addEventListener('click', () => _openRQForm(null));
+  document.getElementById('rqBackBtn')?.addEventListener('click', () => _showScreen(state.raw.length ? 'dashboard' : 'dropzone'));
 }
 
 // ============== Exportar ==============
@@ -417,295 +717,3 @@ $('#exportCsvBtn').addEventListener('click', () => {
     URL.revokeObjectURL(url);
   });
 });
-
-// \u2500\u2500 Consulta Inciti por \u00e1rea / comuna \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-{
-  const SNAP_PX = 15;
-  const STYLE_VERTEX  = { radius: 5, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 1, weight: 2 };
-  const STYLE_FIRST   = { radius: 7, color: '#16a34a', fillColor: '#22c55e', fillOpacity: 1, weight: 2 };
-  const STYLE_EDGE    = { color: '#3b82f6', weight: 2, opacity: 0.9 };
-  const STYLE_RUBBER  = { color: '#3b82f6', weight: 2, opacity: 0.5, dashArray: '5,5' };
-  const STYLE_POLYGON = { color: '#3b82f6', weight: 2, fillColor: '#3b82f6', fillOpacity: 0.12 };
-
-  const COMUNAS_RM = [
-    "Cerrillos","Cerro Navia","Conchal\u00ed","El Bosque","Estaci\u00f3n Central","Huechuraba",
-    "Independencia","La Cisterna","La Florida","La Granja","La Pintana","La Reina",
-    "Las Condes","Lo Barnechea","Lo Espejo","Lo Prado","Macul","Maip\u00fa","\u00d1u\u00f1oa",
-    "Pedro Aguirre Cerda","Pe\u00f1alol\u00e9n","Providencia","Pudahuel","Quilicura","Quinta Normal",
-    "Recoleta","Renca","San Joaqu\u00edn","San Miguel","San Ram\u00f3n","Santiago","Vitacura",
-    "Puente Alto","Pirque","San Jos\u00e9 de Maipo","San Bernardo","Buin","Calera de Tango",
-    "Paine","Colina","Lampa","Tiltil","Melipilla","Alhu\u00e9","Curacav\u00ed","Mar\u00eda Pinto",
-    "San Pedro","Talagante","El Monte","Isla de Maipo","Padre Hurtado","Pe\u00f1aflor"
-  ].sort();
-
-  let areaMap = null, drawState = 'idle', vertices = [], lastScreen = 'dropzone';
-  let vertexMarkers = [], edgePolyline = null, rubberLine = null, areaPoly = null;
-
-  const dropzone        = document.getElementById('dropzone');
-  const drawContainer   = document.getElementById('areaDrawContainer');
-  const previewContainer= document.getElementById('incitiPreview');
-  const comunaContainer = document.getElementById('comunaQueryContainer');
-  const dashboard       = document.getElementById('dashboard');
-  const statusEl        = document.getElementById('areaDrawStatus');
-  const btnDraw         = document.getElementById('areaBtnDraw');
-  const btnClear        = document.getElementById('areaBtnClear');
-  const btnClosePoly    = document.getElementById('areaBtnClosePoly');
-  const btnQuery        = document.getElementById('areaBtnQuery');
-  const btnCancel       = document.getElementById('areaBtnCancel');
-  const comunaSelect    = document.getElementById('comunaSelectInput');
-  const comunaBtnQuery  = document.getElementById('comunaBtnQuery');
-  const comunaBtnCancel = document.getElementById('comunaBtnCancel');
-
-  if (comunaSelect && comunaSelect.children.length <= 1) {
-    COMUNAS_RM.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; comunaSelect.appendChild(o); });
-  }
-
-  function _showScreen(screen) {
-    [dropzone, drawContainer, previewContainer, dashboard].forEach(el => el?.classList.add('hidden'));
-    comunaContainer?.classList.add('hidden');
-    if (screen === 'dropzone')  dropzone?.classList.remove('hidden');
-    if (screen === 'dashboard') dashboard?.classList.remove('hidden');
-    if (screen === 'draw')   { drawContainer?.classList.remove('hidden'); _initMapIfNeeded(); _setState('idle'); }
-    if (screen === 'comuna') { drawContainer?.classList.remove('hidden'); _initMapIfNeeded(); _clearAll(); comunaContainer?.classList.remove('hidden'); _setStatus('Selecciona una comuna y presiona <strong>Consultar</strong>.'); }
-    if (screen === 'preview') previewContainer?.classList.remove('hidden');
-  }
-
-  function _setStatus(text, type = '') {
-    if (!statusEl) return;
-    statusEl.className = `area-draw-status${type ? ' ' + type : ''}`;
-    statusEl.innerHTML = text;
-  }
-
-  function _setState(next) {
-    drawState = next;
-    if (!btnDraw) return;
-    btnDraw.disabled      = next !== 'idle';
-    btnClear.disabled     = next === 'idle';
-    btnClosePoly.disabled = next !== 'drawing' || vertices.length < 3;
-    btnQuery.disabled     = next !== 'complete';
-    drawContainer.classList.toggle('drawing-active', next === 'drawing');
-    if (next === 'idle') {
-      _setStatus('Haz clic en <strong>Dibujar zona</strong> para comenzar.');
-    } else if (next === 'drawing') {
-      const n = vertices.length;
-      _setStatus(n === 0 ? 'Haz clic en el mapa para agregar el primer v\u00e9rtice.'
-        : `<strong>${n} v\u00e9rtice${n !== 1 ? 's' : ''}</strong>${n >= 3 ? ' \u00b7 Clic en el primer punto o <em>Cerrar pol\u00edgono</em>.' : ' \u00b7 Sigue agregando (m\u00ednimo 3).'}`);
-    } else if (next === 'complete') {
-      const km2 = calcAreaKm2(vertices.map(([lat, lng]) => ({ lat, lng })));
-      _setStatus(`<strong>\u00c1rea: ${km2.toFixed(1)} km\u00b2</strong> (${vertices.length} v\u00e9rtices) \u00b7 Haz clic en <strong>Consultar Inciti</strong>.`);
-    }
-  }
-
-  function _clearTempLayers() {
-    if (!areaMap) return;
-    vertexMarkers.forEach(m => areaMap.removeLayer(m)); vertexMarkers = [];
-    if (edgePolyline) { areaMap.removeLayer(edgePolyline); edgePolyline = null; }
-    if (rubberLine)   { areaMap.removeLayer(rubberLine);   rubberLine   = null; }
-  }
-
-  function _clearAll() {
-    _clearTempLayers();
-    if (areaPoly && areaMap) { areaMap.removeLayer(areaPoly); areaPoly = null; }
-    vertices = [];
-    _setState('idle');
-  }
-
-  function _closePoly() {
-    if (vertices.length < 3) return;
-    _clearTempLayers();
-    areaPoly = L.polygon(vertices, STYLE_POLYGON).addTo(areaMap);
-    areaMap.fitBounds(areaPoly.getBounds(), { padding: [40, 40] });
-    _setState('complete');
-  }
-
-  function _initMapIfNeeded() {
-    if (!areaMap) {
-      areaMap = L.map('areaDrawMap', { doubleClickZoom: false }).setView([-33.45, -70.65], 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '\u00a9 OpenStreetMap \u00a9 CARTO', maxZoom: 19,
-      }).addTo(areaMap);
-      areaMap.on('click', e => {
-        if (drawState !== 'drawing') return;
-        const latlng = [e.latlng.lat, e.latlng.lng];
-        if (vertices.length >= 3) {
-          const fp = areaMap.latLngToContainerPoint(vertices[0]);
-          const cp = areaMap.latLngToContainerPoint(latlng);
-          if (fp.distanceTo(cp) < SNAP_PX) { _closePoly(); return; }
-        }
-        vertices.push(latlng);
-        vertexMarkers.push(L.circleMarker(latlng, vertices.length === 1 ? STYLE_FIRST : STYLE_VERTEX).addTo(areaMap));
-        if (edgePolyline) areaMap.removeLayer(edgePolyline);
-        if (vertices.length > 1) edgePolyline = L.polyline(vertices, STYLE_EDGE).addTo(areaMap);
-        _setState('drawing');
-      });
-      areaMap.on('mousemove', e => {
-        if (drawState !== 'drawing' || vertices.length === 0) return;
-        const cursor = [e.latlng.lat, e.latlng.lng];
-        if (rubberLine) areaMap.removeLayer(rubberLine);
-        rubberLine = L.polyline([vertices[vertices.length - 1], cursor], STYLE_RUBBER).addTo(areaMap);
-      });
-    } else {
-      areaMap.invalidateSize();
-    }
-  }
-
-  async function _runQuery(polygonInciti) {
-    _setStatus('Procesando \u00e1rea de consulta...', 'loading');
-    try {
-      const entities = await queryArea({ polygons: [polygonInciti], onProgress: msg => _setStatus(msg, 'loading') });
-      _buildPreviewPanel(entities);
-      _showScreen('preview');
-    } catch (err) {
-      console.error('[Inciti/venta] Error:', err);
-      _setStatus(`Error: ${err.message}`, 'error');
-      if (btnQuery) btnQuery.disabled = false;
-      if (comunaBtnQuery) comunaBtnQuery.disabled = false;
-    }
-  }
-
-  function _buildPreviewPanel(entities) {
-    const txtCount = document.getElementById('previewCountText');
-    if (txtCount) txtCount.textContent = `Inciti encontr\u00f3 ${entities.length} proyectos de venta residencial`;
-
-    const fCommune = document.getElementById('prevFilterCommune');
-    const fOwner   = document.getElementById('prevFilterOwner');
-    const fName    = document.getElementById('prevFilterName');
-
-    const communes = [...new Set(entities.map(e => e.location?.commune || e.location?.comuna || ''))].filter(Boolean).sort();
-    const owners   = [...new Set(entities.map(e => e.developer || e.owner || ''))].filter(Boolean).sort();
-
-    if (fCommune) fCommune.innerHTML = '<option value="">Todas las comunas</option>' + communes.map(c => `<option value="${c}">${c}</option>`).join('');
-    if (fOwner)   fOwner.innerHTML   = '<option value="">Todas las inmobiliarias</option>' + owners.map(o => `<option value="${o}">${o}</option>`).join('');
-    if (fName) fName.value = '';
-
-    const selectionMap = new Map();
-    entities.forEach(e => selectionMap.set(String(e.id || e.name), true));
-
-    function _renderTableRows() {
-      const tbody = document.getElementById('previewTableBody');
-      if (!tbody) return;
-      const nameVal = fName?.value.toLowerCase().trim() || '';
-      const commVal = fCommune?.value || '';
-      const ownVal  = fOwner?.value || '';
-      const filtered = entities.filter(e => {
-        const cName = (e.name || '').toLowerCase().includes(nameVal);
-        const cComm = !commVal || (e.location?.commune || e.location?.comuna || '') === commVal;
-        const cOwn  = !ownVal  || (e.developer || e.owner || '') === ownVal;
-        return cName && cComm && cOwn;
-      });
-      tbody.innerHTML = filtered.map(e => {
-        const key = String(e.id || e.name);
-        const chk = selectionMap.get(key) ? 'checked' : '';
-        return `<tr>
-          <td style="padding:8px 12px;"><input type="checkbox" class="prev-item-check" data-id="${key}" ${chk} /></td>
-          <td style="padding:8px 12px;"><strong>${e.name || '\u2014'}</strong></td>
-          <td style="padding:8px 12px;">${e.location?.commune || e.location?.comuna || '\u2014'}</td>
-          <td style="padding:8px 12px;">${e.developer || e.owner || '\u2014'}</td>
-        </tr>`;
-      }).join('');
-      tbody.querySelectorAll('.prev-item-check').forEach(c => {
-        c.addEventListener('change', () => selectionMap.set(String(c.dataset.id), c.checked));
-      });
-    }
-
-    [fName, fCommune, fOwner].forEach(el => el?.addEventListener('input', _renderTableRows));
-
-    const selectAll = document.getElementById('prevSelectAll');
-    if (selectAll) {
-      selectAll.checked = true;
-      selectAll.addEventListener('change', () => {
-        document.querySelectorAll('.prev-item-check').forEach(c => {
-          c.checked = selectAll.checked;
-          selectionMap.set(String(c.dataset.id), selectAll.checked);
-        });
-      });
-    }
-
-    _renderTableRows();
-
-    const btnLoad = document.getElementById('previewBtnLoad');
-    if (btnLoad) {
-      btnLoad.onclick = () => {
-        const selected = entities.filter(e => selectionMap.get(String(e.id || e.name)) === true);
-        if (!selected.length) { alert('Debes seleccionar al menos un proyecto para cargar.'); return; }
-        const rows = flattenEntities(selected);
-        if (!rows.length) {
-          console.warn('[Inciti/venta] flattenEntities devolvi\u00f3 0 filas. Entidades:', selected);
-          alert('Los proyectos seleccionados no tienen datos de venta disponibles. Revisa la consola del navegador.');
-          return;
-        }
-        const allowedNames = new Set(selected.map(e => e.name).filter(Boolean));
-        if (state && state.raw && state.raw.length > 0) {
-          state.raw = state.raw.filter(r => allowedNames.has(r['Edificio']));
-          state.filtered = [...state.raw];
-        }
-        const fileNameEl = document.getElementById('fileName');
-        if (fileNameEl) fileNameEl.textContent = `Inciti \u00b7 ${selected.length} proyectos (${rows.length} registros)`;
-        _showScreen('dashboard');
-        _clearAll();
-        onDataLoaded(rows);
-      };
-    }
-  }
-
-  document.getElementById('btnAreaQuery')?.addEventListener('click', () => { lastScreen = 'draw'; _showScreen('draw'); });
-  document.getElementById('btnComunaQuery')?.addEventListener('click', () => { lastScreen = 'comuna'; _showScreen('comuna'); });
-  btnCancel?.addEventListener('click', () => _showScreen('dropzone'));
-  document.getElementById('previewBtnCancel')?.addEventListener('click', () => _showScreen(lastScreen));
-  btnDraw?.addEventListener('click', () => { _clearAll(); _setState('drawing'); });
-  btnClear?.addEventListener('click', _clearAll);
-  btnClosePoly?.addEventListener('click', _closePoly);
-  btnQuery?.addEventListener('click', async () => {
-    if (drawState !== 'complete' || vertices.length < 3) return;
-    btnQuery.disabled = true;
-    await _runQuery(vertices.map(([lat, lng]) => ({ lat, lng })));
-  });
-
-  comunaSelect?.addEventListener('change', () => { if (comunaBtnQuery) comunaBtnQuery.disabled = !comunaSelect.value; });
-  comunaBtnCancel?.addEventListener('click', () => _showScreen('dropzone'));
-  comunaBtnQuery?.addEventListener('click', async () => {
-    const comuna = comunaSelect.value;
-    if (!comuna) return;
-    comunaBtnQuery.disabled = true;
-    _setStatus(`Buscando l\u00edmites geogr\u00e1ficos de ${comuna}\u2026`, 'loading');
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Regi\u00f3n+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=1`;
-      const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
-      if (!res.ok) throw new Error('No se pudo conectar con el servicio geogr\u00e1fico.');
-      const data = await res.json();
-      if (!data?.length || !data[0].geojson) throw new Error(`No se encontr\u00f3 el contorno para la comuna de ${comuna}.`);
-      const geojson = data[0].geojson;
-      let rawCoords = [];
-      if (geojson.type === 'Polygon') {
-        rawCoords = geojson.coordinates[0];
-      } else if (geojson.type === 'MultiPolygon') {
-        let maxLen = 0;
-        geojson.coordinates.forEach(poly => { if (poly[0].length > maxLen) { maxLen = poly[0].length; rawCoords = poly[0]; } });
-      } else {
-        throw new Error('El formato geogr\u00e1fico retornado no es compatible.');
-      }
-      let polygon_inciti = rawCoords.map(coord => ({ lat: coord[1], lng: coord[0] }));
-      if (polygon_inciti.length > 0) {
-        const first = polygon_inciti[0], last = polygon_inciti[polygon_inciti.length - 1];
-        if (first.lat !== last.lat || first.lng !== last.lng) polygon_inciti.push({ ...first });
-      }
-      if (polygon_inciti.length > 80) {
-        const step = Math.ceil(polygon_inciti.length / 80);
-        const simplified = [];
-        for (let i = 0; i < polygon_inciti.length - 1; i += step) simplified.push(polygon_inciti[i]);
-        simplified.push(polygon_inciti[polygon_inciti.length - 1]);
-        polygon_inciti = simplified;
-      }
-      _clearAll();
-      vertices = polygon_inciti.map(v => [v.lat, v.lng]);
-      areaPoly = L.polygon(vertices, STYLE_POLYGON).addTo(areaMap);
-      areaMap.fitBounds(areaPoly.getBounds(), { padding: [20, 20] });
-      await _runQuery(polygon_inciti);
-    } catch (err) {
-      console.error('[Comuna/venta] Error:', err);
-      _setStatus(`Error: ${err.message}`, 'error');
-      comunaBtnQuery.disabled = false;
-    }
-  });
-}
-

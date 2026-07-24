@@ -557,7 +557,10 @@ async function _copyMapTable(state, mapConfig) {
   const propCol = state.columns.find(c => ['corredor', 'propietario', 'owner'].some(k => norm(c.name).includes(k)))?.name;
   const { activeHeat, colName: heatColName } = _resolveHeatColumn(state, mapConfig);
 
-  const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+  // UF/m² se muestra con 2 decimales (igual que en el resto del visor);
+  // el resto de las métricas de calor mantienen 1 decimal.
+  const heatDecimals = /ufm|uf\/m/i.test(activeHeat?.value ?? '') ? 2 : 1;
+  const fmtU = v => v != null ? v.toLocaleString('es-CL', { minimumFractionDigits: heatDecimals, maximumFractionDigits: heatDecimals }) : '—';
 
   const rows = _lastOrderedPoints.map((pt, i) => {
     const proj = projCol ? String(pt.rows[0]?.[projCol] ?? '—') : '—';

@@ -34,14 +34,19 @@ export function initCruzListeners(state, cruzConfig, mp) {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.cruz-ratio-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      const customEl = document.getElementById('cruzRatioCustom');
+      if (customEl) customEl.value = '';
     });
+  });
+  document.getElementById('cruzRatioCustom')?.addEventListener('input', e => {
+    if (e.target.value.trim() !== '') document.querySelectorAll('.cruz-ratio-btn').forEach(b => b.classList.remove('active'));
   });
 
   document.getElementById('cruzGroupToggle')?.addEventListener('change', () => renderCruz(state, cruzConfig, mp));
 
   document.getElementById('cruzExportPngBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('cruzExportPngBtn');
-    const ok  = await copyChartPng(state.cruzChart, document.getElementById('cruzWrap'), '.cruz-ratio-btn');
+    const ok  = await copyChartPng(state.cruzChart, document.getElementById('cruzWrap'), '.cruz-ratio-btn', 'cruzRatioCustom');
     if (ok && btn) {
       const prev = btn.textContent;
       btn.textContent = '¡Copiado!'; btn.disabled = true;
@@ -269,9 +274,14 @@ export function renderCruz(state, cruzConfig, mp) {
     ? mp.tipologias
         .filter(t => t.nombre && t.sup != null && t.ufm2 != null)
         .filter(t => !(programaFilter?.size > 0) || programaFilter.has(t.nombre))
-        .map(t => ({ x: t.sup, y: t.ufm2, label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}`, tipo: t.nombre }))
+        .map(t => ({ x: t.sup, y: t.ufm2, label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}`, tipo: t.nombre, unidades: t.unidades }))
     : [];
   if (mpPoints.length) {
+    // Radio proporcional a la cantidad de unidades de esa tipología (raíz
+    // cuadrada: el área escala linealmente, no el radio), igual que en Dispersión.
+    const mpPointRadius = mpPoints.map(p => (p.unidades != null && p.unidades > 0)
+      ? Math.min(POINT_R + 9, Math.max(POINT_R + 1, POINT_R - 1 + Math.sqrt(p.unidades) * 1.6))
+      : POINT_R + 1);
     datasets.unshift({
       label: mp.proyecto || 'Mi Proyecto',
       data: mpPoints,
@@ -279,8 +289,8 @@ export function renderCruz(state, cruzConfig, mp) {
       borderColor: '#1e293b',
       borderWidth: 2,
       pointStyle: 'rectRot',
-      pointRadius: POINT_R + 1,
-      pointHoverRadius: POINT_R + 3,
+      pointRadius: mpPointRadius,
+      pointHoverRadius: mpPointRadius.map(r => r + 2),
     });
   }
 
@@ -362,6 +372,7 @@ export function renderCruz(state, cruzConfig, mp) {
               parts.push(`${yFmt(d.y)} ${cruzConfig.yLabel}`);
               if (d.reporta != null) parts.push(d.reporta ? 'Reporta' : 'No reporta');
               if (d.count > 1) parts.push(`${d.count} unidades`);
+              if (d.unidades != null) parts.push(`${d.unidades} unidades`);
               return parts.join(' · ');
             },
           },

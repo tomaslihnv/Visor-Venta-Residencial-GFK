@@ -199,6 +199,8 @@ export function renderComparativa() {
   const colDisponibles = findCol(['disponibles', 'disponible']);
   const colOfertaTotal = findCol(['oferta total', 'stock programa', 'stock prog', 'oferta prog']);
   const colVelVenta    = findCol(['velocidad', 'vel. venta', 'vel venta', 'vel.venta', 'vel ven']);
+  const colVelVentaIni = findCol(['vel. venta inicial', 'vel venta inicial', 'velocidad inicial']);
+  const colVelVentaTot = findCol(['vel. venta total', 'vel venta total', 'velocidad total']);
 
   if (!colEdificio) {
     container.innerHTML = '<p class="hint">No se encontró columna de Edificio/Proyecto en los datos.</p>';
@@ -242,7 +244,9 @@ export function renderComparativa() {
     const pctDisp = disponibles != null && ofertaTotal != null && ofertaTotal > 0
       ? disponibles / ofertaTotal * 100
       : null;
-    const velVenta = colVelVenta ? avg(p.rows.map(r => numVal(r[colVelVenta]))) : null;
+    const velVenta    = colVelVenta    ? avg(p.rows.map(r => numVal(r[colVelVenta])))    : null;
+    const velVentaIni = colVelVentaIni ? avg(p.rows.map(r => numVal(r[colVelVentaIni]))) : null;
+    const velVentaTot = colVelVentaTot ? avg(p.rows.map(r => numVal(r[colVelVentaTot]))) : null;
 
     const byTipo = {};
     for (const tipo of tipologias) {
@@ -260,13 +264,15 @@ export function renderComparativa() {
       ticket: avg(p.rows.map(r => numVal(colTicket  ? r[colTicket] : null))),
     };
 
-    return { ...p, disponibles, ofertaTotal, pctDisp, velVenta, byTipo, overall };
+    return { ...p, disponibles, ofertaTotal, pctDisp, velVenta, velVentaIni, velVentaTot, byTipo, overall };
   });
 
   // Promedios de mercado
   const promedioDisponibles  = avg(proyectos.map(p => p.disponibles).filter(v => v !== null));
   const promedioPctDisp      = avg(proyectos.map(p => p.pctDisp).filter(v => v !== null));
-  const promedioVelVenta = avg(proyectos.map(p => p.velVenta).filter(v => v !== null));
+  const promedioVelVenta    = avg(proyectos.map(p => p.velVenta).filter(v => v !== null));
+  const promedioVelVentaIni = avg(proyectos.map(p => p.velVentaIni).filter(v => v !== null));
+  const promedioVelVentaTot = avg(proyectos.map(p => p.velVentaTot).filter(v => v !== null));
   const promedioTipo = {};
   for (const tipo of tipologias) {
     promedioTipo[tipo] = {
@@ -285,6 +291,8 @@ export function renderComparativa() {
   const hasDisponibles = colDisponibles  !== null;
   const hasOferta      = colOfertaTotal  !== null;
   const hasVelVenta    = colVelVenta !== null;
+  const hasVelVentaIni = colVelVentaIni !== null;
+  const hasVelVentaTot = colVelVentaTot !== null;
   const hasProp        = colPropietario !== null;
 
   // Map pin numbers (only available when coordinates exist)
@@ -300,7 +308,7 @@ export function renderComparativa() {
     });
   }
 
-  const generalCols  = 1 + (hasProp ? 1 : 0) + (hasDisponibles ? 1 : 0) + (hasOferta ? 1 : 0) + (hasVelVenta ? 1 : 0);
+  const generalCols  = 1 + (hasProp ? 1 : 0) + (hasDisponibles ? 1 : 0) + (hasOferta ? 1 : 0) + (hasVelVenta ? 1 : 0) + (hasVelVentaIni ? 1 : 0) + (hasVelVentaTot ? 1 : 0);
   const metricGroups = hasTipos ? tipologias : ['_overall'];
 
   // ── HTML ────────────────────────────────────────────────────────────────
@@ -322,7 +330,9 @@ export function renderComparativa() {
   if (hasProp)     html += th('Propietario',         'class="comp-th-label"');
   if (hasDisponibles)  html += th('Disponibles',           'class="comp-th-label comp-num comp-col-kpi"');
   if (hasOferta)       html += th('% Stock disp.',         'class="comp-th-label comp-num comp-col-kpi"');
-  if (hasVelVenta) html += th('Vel. Venta (un./mes)', 'class="comp-th-label comp-num comp-col-kpi"');
+  if (hasVelVenta) html += th('Vel. Venta Final (un./mes)', 'class="comp-th-label comp-num comp-col-kpi"');
+  if (hasVelVentaIni) html += th('Vel. Venta Inicial (un./mes)', 'class="comp-th-label comp-num comp-col-kpi"');
+  if (hasVelVentaTot) html += th('Vel. Venta Total (un./mes)', 'class="comp-th-label comp-num comp-col-kpi"');
   for (const _ of metricGroups) {
     html += th('Útil m²',   'class="comp-th-metric comp-num comp-sep"');
     html += th('UF/m²',     'class="comp-th-metric comp-num"');
@@ -340,6 +350,8 @@ export function renderComparativa() {
     if (hasDisponibles)  html += cell(p.disponibles != null ? fmtDec(p.disponibles, 0) : '—', 'comp-num');
     if (hasOferta)       html += cell(p.pctDisp != null ? fmtDec(p.pctDisp, 0) + '%' : '—', 'comp-num');
     if (hasVelVenta) html += cell(p.velVenta != null ? fmtDec(p.velVenta, 1) : '—',       'comp-num');
+    if (hasVelVentaIni) html += cell(p.velVentaIni != null ? fmtDec(p.velVentaIni, 1) : '—', 'comp-num');
+    if (hasVelVentaTot) html += cell(p.velVentaTot != null ? fmtDec(p.velVentaTot, 1) : '—', 'comp-num');
     if (hasTipos) {
       for (const tipo of tipologias) {
         const d = p.byTipo[tipo];
@@ -367,6 +379,8 @@ export function renderComparativa() {
   if (hasDisponibles)  html += `<td class="comp-num"><strong>${promedioDisponibles != null ? fmtDec(promedioDisponibles, 0) : '—'}</strong></td>`;
   if (hasOferta)       html += `<td class="comp-num"><strong>${promedioPctDisp != null ? fmtDec(promedioPctDisp, 0) + '%' : '—'}</strong></td>`;
   if (hasVelVenta) html += `<td class="comp-num"><strong>${promedioVelVenta != null ? fmtDec(promedioVelVenta, 1) : '—'}</strong></td>`;
+  if (hasVelVentaIni) html += `<td class="comp-num"><strong>${promedioVelVentaIni != null ? fmtDec(promedioVelVentaIni, 1) : '—'}</strong></td>`;
+  if (hasVelVentaTot) html += `<td class="comp-num"><strong>${promedioVelVentaTot != null ? fmtDec(promedioVelVentaTot, 1) : '—'}</strong></td>`;
   if (hasTipos) {
     for (const tipo of tipologias) {
       const d = promedioTipo[tipo];
@@ -391,6 +405,8 @@ export function renderComparativa() {
     if (hasDisponibles)  html += `<td></td>`;
     if (hasOferta)       html += `<td></td>`;
     if (hasVelVenta)     html += `<td></td>`;
+    if (hasVelVentaIni)  html += `<td></td>`;
+    if (hasVelVentaTot)  html += `<td></td>`;
     if (hasTipos) {
       for (const tipo of tipologias) {
         const t = findMpTipo(tipo);
@@ -414,6 +430,8 @@ export function renderComparativa() {
     if (hasDisponibles)  html += `<td></td>`;
     if (hasOferta)       html += `<td></td>`;
     if (hasVelVenta)     html += `<td></td>`;
+    if (hasVelVentaIni)  html += `<td></td>`;
+    if (hasVelVentaTot)  html += `<td></td>`;
     if (hasTipos) {
       for (const tipo of tipologias) {
         const t    = findMpTipo(tipo);

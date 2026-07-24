@@ -37,6 +37,21 @@ export function uniqueValues(rows, col) {
   });
 }
 
+// "YYYY-MM" (formato de period.key de la API Inciti) → "YYYY-Qn"
+export function monthKeyToQuarter(key) {
+  const m = /^(\d{4})-(\d{2})$/.exec(key ?? '');
+  if (!m) return null;
+  const year = parseInt(m[1]), month = parseInt(m[2]);
+  return `${year}-Q${Math.ceil(month / 3)}`;
+}
+
+// Clave numérica ordenable para comparar/ordenar "YYYY-Qn"
+export function quarterSortKey(q) {
+  const m = /^(\d{4})-Q(\d)$/.exec(q ?? '');
+  if (!m) return -Infinity;
+  return parseInt(m[1]) * 10 + parseInt(m[2]);
+}
+
 export function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };

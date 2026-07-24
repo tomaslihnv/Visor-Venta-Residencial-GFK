@@ -136,7 +136,12 @@ function _computeSmoothCDF(sortedVals, nPoints = 200) {
 function _computeKDE(sortedVals, sigma, histBw, evalPoints = 120) {
   const n  = sortedVals.length;
   const h  = Math.max(1.06 * sigma * Math.pow(n, -0.2), histBw * 0.1);
-  const x0 = sortedVals[0] - 2 * sigma;
+  // La cola del kernel se extiende 2*sigma por debajo del mínimo real para
+  // dibujar la curva suave — pero un valor de precio/UF nunca es negativo,
+  // así que sin este clamp la curva podía seguir bajando a valores
+  // imposibles cuando sigma es grande respecto al mínimo (ej. pocos datos
+  // filtrados con alta dispersión).
+  const x0 = Math.max(0, sortedVals[0] - 2 * sigma);
   const x1 = sortedVals[n - 1] + 2 * sigma;
   const step = (x1 - x0) / evalPoints;
   const INV_SQRT2PI = 1 / Math.sqrt(2 * Math.PI);
@@ -223,7 +228,12 @@ export function initDistribListeners(state, distribCols, mp) {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      const customEl = document.getElementById('distribRatioCustom');
+      if (customEl) customEl.value = '';
     });
+  });
+  document.getElementById('distribRatioCustom')?.addEventListener('input', e => {
+    if (e.target.value.trim() !== '') document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
   });
 
   const fontSlider = document.getElementById('distribFontSize');
@@ -237,7 +247,7 @@ export function initDistribListeners(state, distribCols, mp) {
 
   document.getElementById('distribExportPngBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('distribExportPngBtn');
-    const ok  = await copyChartPng(_distribChart, document.getElementById('distribWrap'), '.ratio-btn');
+    const ok  = await copyChartPng(_distribChart, document.getElementById('distribWrap'), '.ratio-btn', 'distribRatioCustom');
     if (ok && btn) {
       const prev = btn.textContent;
       btn.textContent = '¡Copiado!'; btn.disabled = true;
@@ -625,7 +635,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
   const ANN_COLOR = '#6b7280';
   const annotations = {};
   const annLabel = (content, color = ANN_COLOR) => ({
-    content, display: true, position: 'start',
+    content, display: true, position: 'start', clip: false,
     color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
@@ -665,7 +675,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
     const mpColor = '#ef4444';
-    const mpAnn = (c) => ({ content: c, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    const mpAnn = (c) => ({ content: c, display: true, position: 'start', clip: false, color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
       if (val == null) return;
@@ -690,7 +700,7 @@ function _renderAcumulada(ctx, sortedVals, col, fs, showNormal, mp, label = col)
     plugins: [_statsPlugin(normalFit, fs)],
     options: {
       responsive: true, maintainAspectRatio: false, parsing: false,
-      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+      layout: { padding: { top: Math.max(24, fs * 2), right: Math.max(24, fs * 3), bottom: 12, left: Math.max(24, fs * 3) } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
@@ -770,7 +780,7 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
   const ANN_COLOR = '#6b7280';
   const annotations = {};
   const annLabel = (content, color = ANN_COLOR) => ({
-    content, display: true, position: 'start',
+    content, display: true, position: 'start', clip: false,
     color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
@@ -809,7 +819,7 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
     const mpColor = '#ef4444';
-    const mpAnn = (c) => ({ content: c, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    const mpAnn = (c) => ({ content: c, display: true, position: 'start', clip: false, color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
       if (val == null) return;
@@ -834,7 +844,7 @@ function _renderCuantil(ctx, sortedVals, col, fs, showNormal, mp, label = col) {
     plugins: [_statsPlugin(normalFit, fs)],
     options: {
       responsive: true, maintainAspectRatio: false, parsing: false,
-      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+      layout: { padding: { top: Math.max(24, fs * 2), right: Math.max(24, fs * 3), bottom: 12, left: Math.max(24, fs * 3) } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
@@ -905,7 +915,7 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
 
   const ANN_COLOR = '#6b7280';
   const annLabel = (content, color = ANN_COLOR) => ({
-    content, display: true, position: 'start',
+    content, display: true, position: 'start', clip: false,
     color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
@@ -935,7 +945,7 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
   const showMpDistrib = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistrib && mp?.inDistrib && mp.tipologias?.length > 0) {
     const mpColor = '#ef4444';
-    const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    const mpAnn = (content) => ({ content, display: true, position: 'start', clip: false, color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
       if (val == null) return;
@@ -967,7 +977,7 @@ function _renderLognormal(ctx, sortedVals, col, fs, mp, label = col) {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
-      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+      layout: { padding: { top: Math.max(24, fs * 2), right: Math.max(24, fs * 3), bottom: 12, left: Math.max(24, fs * 3) } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
@@ -1023,7 +1033,7 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
   if (!bins.length) return;
 
   const pad = 1.5 * Math.max(sigma, bw);
-  const x0 = sortedVals[0] - pad;
+  const x0 = Math.max(0, sortedVals[0] - pad);
   const x1 = sortedVals[sortedVals.length - 1] + pad;
 
   const kdeData    = _computeKDE(sortedVals, sigma, bw);
@@ -1062,7 +1072,7 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
 
   const ANN_COLOR_D = '#6b7280';
   const annLabelD = (content, color = ANN_COLOR_D) => ({
-    content, display: true, position: 'start',
+    content, display: true, position: 'start', clip: false,
     color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
@@ -1092,7 +1102,7 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
   const showMpDistribD = document.querySelector('.distrib-mp-btn')?.classList.contains('active') ?? true;
   if (showMpDistribD && mp?.inDistrib && mp.tipologias?.length > 0) {
     const mpColor = '#ef4444';
-    const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    const mpAnn = (content) => ({ content, display: true, position: 'start', clip: false, color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     _mpTiposFiltrados(mp).forEach(t => {
       const val = _mpValForCol(col, t);
       if (val == null) return;
@@ -1123,8 +1133,10 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
       const scale = args.scale;
       const lo = scale.min ?? _minV;
       const hi = scale.max ?? (_minV + _nBins * bw);
-      const kStart = Math.floor((lo - _minV) / bw);
-      const kEnd   = Math.ceil((hi - _minV) / bw);
+      // ceil (no floor) para kStart: floor podía generar un borde por debajo
+      // de "lo" (ej. eje clampeado en 0 pero _minV mayor → floor daba negativo).
+      const kStart = Math.ceil((lo - _minV) / bw);
+      const kEnd   = Math.floor((hi - _minV) / bw);
       const allTicks = [];
       for (let k = kStart; k <= kEnd; k++) allTicks.push(_minV + k * bw);
       const step = Math.max(1, Math.ceil(allTicks.length / 12));
@@ -1140,6 +1152,7 @@ function _renderDensidad(ctx, sortedVals, col, fs, showNormal, mp, label = col) 
     plugins: [_statsPlugin(showNormal ? normalFit : null, fs), _histEdgeTicks],
     options: {
       responsive: true, maintainAspectRatio: false, parsing: false,
+      layout: { padding: { top: Math.max(24, fs * 2), right: Math.max(24, fs * 3), bottom: 12, left: Math.max(24, fs * 3) } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {

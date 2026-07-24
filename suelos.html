@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
 
+  <script type="module" src="shared/auth.js"></script>
 </head>
 <body>
   <nav class="app-nav">
@@ -251,6 +252,10 @@
                   <button class="proy-xrot-btn" data-rot="vertical">Vertical</button>
                 </div>
               </div>
+              <label class="toggle-check">
+                <input type="checkbox" id="proyGridToggle" checked />
+                <span>Cuadrícula</span>
+              </label>
             </div>
           </div>
           <div class="chart-wrap" id="proyWrap"><canvas id="proyChart"></canvas></div>

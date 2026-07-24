@@ -6,6 +6,7 @@
   <title>Visor Venta Residencial</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+  <script type="module" src="shared/auth.js"></script>
 </head>
 <body>
   <nav class="app-nav">
@@ -43,6 +44,7 @@
       <span id="fileName" class="file-name"></span>
       <button id="btnAreaQuery" class="ghost-btn" title="Dibujar un polígono en el mapa">&#128205; Dibujar Área</button>
       <button id="btnComunaQuery" class="ghost-btn" title="Consultar por límites de una comuna entera">&#127969; Por Comuna</button>
+      <button id="btnRecurringQuery" class="ghost-btn" title="Consultas guardadas a Inciti (comunas y áreas propias)">&#128257; Consultas Recurrentes</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
   </header>
@@ -184,59 +186,57 @@
         </div>
       </div>
 
-      <div id="areaDrawContainer" class="hidden">
-        <div id="areaDrawMap"></div>
-        <div class="area-draw-bar">
-          <span id="areaDrawStatus" class="area-draw-status">Haz clic en <strong>Dibujar zona</strong> para comenzar.</span>
-          <div class="area-draw-divider"></div>
-          <button id="areaBtnDraw"      class="area-btn primary">Dibujar zona</button>
-          <button id="areaBtnClear"     class="area-btn" disabled>Borrar</button>
-          <button id="areaBtnClosePoly" class="area-btn" disabled>Cerrar polígono</button>
-          <button id="areaBtnQuery"     class="area-btn primary" disabled>Consultar Inciti</button>
-          <button id="areaBtnCancel"    class="area-btn cancel">Cancelar</button>
+      <div id="recurringQueriesContainer" class="hidden">
+        <div class="rq-header">
+          <h2>Consultas Recurrentes</h2>
+          <div class="rq-header-actions">
+            <button id="rqAddBtn" class="area-btn primary">+ Nueva consulta</button>
+            <button id="rqBackBtn" class="area-btn cancel">Volver</button>
+          </div>
+        </div>
+        <div id="rqUserFilter" class="rq-user-filter"></div>
+        <div id="rqGrid" class="rq-grid"></div>
+      </div>
+
+      <div id="rqFormOverlay" class="hidden" style="position: fixed; inset: 0; z-index: 2000; background: rgba(15,23,42,0.45); display: flex; align-items: center; justify-content: center;">
+        <div class="comuna-query-panel" style="width: min(420px, 92%);">
+          <div class="comuna-query-title" id="rqFormTitle">Nueva consulta recurrente</div>
+          <div style="display:flex; flex-direction:column; gap: 10px;">
+            <label class="mp-label" style="font-size:12px;">Nombre</label>
+            <input type="text" id="rqFormLabel" class="mp-input" placeholder="Ej: Las Condes, o Torre X + comparables" />
+
+            <label class="mp-label" style="font-size:12px;">Tipo</label>
+            <div style="display:flex; gap:14px; font-size:13px; color:#374151;">
+              <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="rqFormType" value="comuna" checked /> Comuna</label>
+              <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="rqFormType" value="polygon" /> Área dibujada</label>
+            </div>
+
+            <div id="rqFormComunaRow">
+              <select id="rqFormComunaSelect" style="width:100%; padding:7px 10px; border:1px solid #d1d5db; border-radius:7px; font-size:13px; color:#374151;">
+                <option value="">-- Selecciona una comuna --</option>
+              </select>
+            </div>
+            <div id="rqFormPolygonRow" class="hidden">
+              <p class="hint" style="margin:0 0 8px 0;">Al guardar, te vamos a pedir dibujar el área en el mapa.</p>
+            </div>
+
+            <div class="comuna-query-row" style="justify-content:flex-end; margin-top:6px;">
+              <button id="rqFormCancel" class="area-btn cancel">Cancelar</button>
+              <button id="rqFormSave" class="area-btn primary">Guardar</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div id="incitiPreview" class="hidden" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: #f8fafc; padding: 20px; box-sizing: border-box; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <div>
-            <h2 id="previewCountText" style="margin: 0; font-size: 18px; color: #1e3a5f;">Inciti encontró 0 proyectos</h2>
-            <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">Selecciona los proyectos que deseas cargar en el visor.</p>
+      <div id="rqLoadingOverlay" class="hidden rq-loading-overlay">
+        <div class="rq-loading-scene">
+          <div class="rq-skyline">
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
           </div>
-          <div style="display: flex; gap: 10px; align-items: center;">
-            <button id="previewBtnCancel" class="area-btn cancel">Volver</button>
-            <button id="previewBtnLoad" class="area-btn primary">Cargar Seleccionados</button>
-          </div>
+          <div class="rq-scanline"></div>
+          <div class="rq-pin">📍</div>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; background: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <input type="text" id="prevFilterName" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing:border-box;" placeholder="🔍 Filtrar por nombre..." />
-          <select id="prevFilterCommune" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todas las comunas</option></select>
-          <select id="prevFilterOwner" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"><option value="">Todas las inmobiliarias</option></select>
-        </div>
-        <div style="flex: 1; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: auto; border: 1px solid #e2e8f0;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
-            <thead>
-              <tr style="background: #f1f5f9;">
-                <th width="40" style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;"><input type="checkbox" id="prevSelectAll" checked /></th>
-                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Edificio</th>
-                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Comuna</th>
-                <th style="padding: 10px 12px; font-weight: 600; color: #334155; position: sticky; top: 0; background: #f1f5f9;">Inmobiliaria</th>
-              </tr>
-            </thead>
-            <tbody id="previewTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div id="comunaQueryContainer" class="hidden" style="position: absolute; top: 20px; left: 20px; z-index: 1000; background: rgba(255,255,255,0.96); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 14px; border-radius: 8px; width: 260px; box-shadow: 0 4px 14px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);">
-        <div style="font-size: 13px; font-weight: 700; color: #1e3a5f; margin-bottom: 8px;">Consultar por Comuna (RM)</div>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <select id="comunaSelectInput"><option value="">-- Selecciona una comuna --</option></select>
-          <div style="display:flex; gap:6px;">
-            <button id="comunaBtnQuery" class="area-btn primary" style="flex:1;" disabled>Consultar</button>
-            <button id="comunaBtnCancel" class="area-btn cancel">Cerrar</button>
-          </div>
-        </div>
+        <p id="rqLoadingStatus" class="rq-loading-text">Consultando Inciti…</p>
       </div>
 
       <div id="dashboard" class="dashboard hidden">
@@ -248,6 +248,7 @@
           <button class="tab" data-tab="svp">Dispersión</button>
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="comparativa">Resumen</button>
+          <button class="tab" data-tab="actualizacion">Actualización</button>
           <button class="tab" data-tab="tabla">Datos</button>
         </div>
 
@@ -331,7 +332,9 @@
                 <option value="ufm2">UF/m²</option>
                 <option value="util">Útil (m²)</option>
                 <option value="disp">Disponibles</option>
-                <option value="vel">Vel. Venta (un./mes)</option>
+                <option value="vel">Vel. Venta Final (un./mes)</option>
+                <option value="velIni">Vel. Venta Inicial (un./mes)</option>
+                <option value="velTot">Vel. Venta Total (un./mes)</option>
                 <option value="oferta">Oferta total proyecto</option>
                 <option value="pct">% Vendido</option>
               </select>
@@ -482,6 +485,25 @@
         </div>
 
         <!-- TAB: TABLA -->
+        <!-- TAB: ACTUALIZACIÓN -->
+        <div class="tab-panel" data-panel="actualizacion">
+          <div class="panel-toolbar">
+            <div class="ctrl">
+              <label for="freshMinSelect">Mostrar desde</label>
+              <select id="freshMinSelect">
+                <option value="">Sin filtro</option>
+              </select>
+            </div>
+            <span id="freshMinHint" class="muted"></span>
+          </div>
+          <div id="actualizacionEmpty" class="hint" style="display:none;">
+            Esta vista solo está disponible para proyectos cargados desde la API de Inciti (consulta por área/comuna) — el Excel no trae esta información.
+          </div>
+          <div class="chart-wrap" id="actualizacionWrap">
+            <canvas id="actualizacionChart"></canvas>
+          </div>
+        </div>
+
         <div class="tab-panel" data-panel="tabla">
           <div class="panel-toolbar">
             <input type="text" id="searchInput" placeholder="Buscar en la tabla..." />

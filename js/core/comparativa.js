@@ -19,13 +19,21 @@ function _fmtCell(v, fmtKey) {
   return fn(v);
 }
 
-// Promedio de un campo de mp.tipologias (edificios sin grupo en la tabla, ej.
-// multifamily), respetando el filtro de Programa activo en el sidebar.
+// Promedio ponderado por "unidades" de un campo de mp.tipologias (edificios
+// sin grupo en la tabla, ej. multifamily), respetando el filtro de Programa
+// activo en el sidebar. Una tipología sin "unidades" cargado pesa 1.
 function _avgTipo(mp, field, programaFilter) {
   let tipos = mp.tipologias ?? [];
   if (programaFilter?.size > 0) tipos = tipos.filter(t => programaFilter.has(t.nombre));
-  const vals = tipos.map(t => t[field]).filter(v => v != null);
-  return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  const withVal = tipos.filter(t => t[field] != null);
+  if (!withVal.length) return null;
+  let sumW = 0, sumWV = 0;
+  for (const t of withVal) {
+    const w = (t.unidades != null && t.unidades > 0) ? t.unidades : 1;
+    sumW  += w;
+    sumWV += w * t[field];
+  }
+  return sumW ? sumWV / sumW : null;
 }
 
 function _norm(s) { return String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, ''); }

@@ -53,24 +53,35 @@ function _probit(p) {
   }
 }
 
-function _computeHistogram(sortedVals, binCount) {
+// rangeMin/rangeMax (opcionales): si se especifican, los bins se calculan
+// dividiendo ESE rango en partes iguales en vez del min/max real del
+// subconjunto filtrado — así dos filtros distintos (ej. "1D Vitacura" vs
+// "2D Ñuñoa") quedan con los mismos bordes de bin y son comparables
+// directamente, barra a barra. Valores fuera del rango se agrupan en el
+// bin extremo correspondiente (no se descartan, para no alterar el % total).
+function _computeHistogram(sortedVals, binCount, rangeMin, rangeMax) {
   const n = sortedVals.length;
   if (!binCount) binCount = Math.min(50, Math.max(10, Math.ceil(Math.log2(n) + 1)));
-  const minV = sortedVals[0], maxV = sortedVals[n - 1];
+  const minV = rangeMin ?? sortedVals[0];
+  const maxV = rangeMax ?? sortedVals[n - 1];
   const bw = (maxV - minV) / binCount;
-  if (bw === 0) return { bins: [], bw: 0 };
+  if (bw <= 0) return { bins: [], bw: 0, minV, maxV };
   const bins = Array.from({ length: binCount }, (_, i) => ({ x: minV + (i + 0.5) * bw, y: 0 }));
   for (const v of sortedVals) {
-    const i = Math.min(Math.floor((v - minV) / bw), binCount - 1);
+    const i = Math.min(Math.max(Math.floor((v - minV) / bw), 0), binCount - 1);
     bins[i].y += 100 / n;
   }
-  return { bins, bw };
+  return { bins, bw, minV, maxV };
 }
 
 function _computeKDE(sortedVals, sigma, histBw, evalPoints = 120) {
   const n = sortedVals.length;
   const h = Math.max(1.06 * sigma * Math.pow(n, -0.2), histBw * 0.1);
-  const x0 = sortedVals[0] - 2 * sigma, x1 = sortedVals[n - 1] + 2 * sigma;
+  // La cola del kernel se extiende 2*sigma por debajo del mínimo real para
+  // dibujar la curva suave — pero precio/UF/m² nunca es negativo, así que
+  // sin este clamp la curva podía "seguir bajando" a valores imposibles
+  // cuando sigma es grande respecto al mínimo (ej. con pocos datos filtrados).
+  const x0 = Math.max(0, sortedVals[0] - 2 * sigma), x1 = sortedVals[n - 1] + 2 * sigma;
   const step = (x1 - x0) / evalPoints;
   const INV_SQRT2PI = 1 / Math.sqrt(2 * Math.PI);
   return Array.from({ length: evalPoints }, (_, i) => {
@@ -1092,6 +1103,41 @@ function refreshMarkerTags() {
 }
 
 // Curva de cuantiles: X = percentil (0–100%), Y = valor
+// ── Suavizado de la curva Acumulada (igual que Multifamily) ────────────────
+// Estima la CDF con un kernel gaussiano (Silverman) y la renormaliza para
+// que toque exactamente (xMin,0%) y (xMax,100%) sin extrapolar más allá del
+// rango real de datos. Acá se usa invertida (percentil → valor) porque este
+// gráfico grafica x=percentil, y=valor, a diferencia del core (x=valor, y=%).
+function _erf(x) {
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const t = 1 / (1 + p * x);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return sign * y;
+}
+function _normCdf(z) { return 0.5 * (1 + _erf(z / Math.SQRT2)); }
+
+function _computeSmoothCDF(sortedVals, nPoints = 200) {
+  const n = sortedVals.length;
+  const mean  = sortedVals.reduce((a, b) => a + b, 0) / n;
+  const sigma = Math.sqrt(sortedVals.reduce((s, v) => s + (v - mean) ** 2, 0) / n);
+  const h = Math.max(1.06 * sigma * Math.pow(n, -0.2), 1e-6);
+  const xMin = sortedVals[0], xMax = sortedVals[n - 1];
+  const rawCdf = x => { let sum = 0; for (const xi of sortedVals) sum += _normCdf((x - xi) / h); return sum / n; };
+  const rawMin = rawCdf(xMin), rawMax = rawCdf(xMax);
+  const span = rawMax - rawMin || 1;
+  const pts = [{ x: 0, y: 0 }];
+  if (xMin > 0) pts.push({ x: xMin, y: 0 });
+  const step = (xMax - xMin) / nPoints;
+  for (let i = 0; i <= nPoints; i++) {
+    const x = xMin + i * step;
+    const y = Math.min(100, Math.max(0, ((rawCdf(x) - rawMin) / span) * 100));
+    pts.push({ x, y });
+  }
+  return pts;
+}
+
 function computeQuantileCurve(rows, col) {
   const vals = rows.map(r => Number(r[col])).filter(v => !isNaN(v) && v > 0);
   if (vals.length < 2) return [];
@@ -1176,11 +1222,13 @@ export function renderDistrib() {
     return sortedVals[Math.max(0, idx)];
   };
 
-  const n = sortedVals.length;
-  const refData = Array.from({ length: 101 }, (_, pct) => {
-    const idx = Math.min(Math.round((pct / 100) * (n - 1)), n - 1);
-    return { x: pct, y: sortedVals[idx] };
-  });
+  // Curva suave: se calcula la CDF suavizada (kernel gaussiano, igual que
+  // Multifamily) y se invierte percentil→valor, así P0 queda exactamente en
+  // 0 y P100 en el máximo real, sin inventar datos fuera del rango.
+  const smoothCurve = _computeSmoothCDF(sortedVals);
+  const refData = Array.from({ length: 101 }, (_, pct) => ({
+    x: pct, y: lerpAtY(smoothCurve, pct) ?? valAtPct(pct),
+  }));
   const normalFit = showNormal ? _computeNormalFit(sortedVals, refData) : null;
 
   const lineColor = _distribLineColor();
@@ -1191,7 +1239,7 @@ export function renderDistrib() {
     backgroundColor: _hexToRgba(lineColor, 0.12),
     pointRadius: 0,
     borderWidth: 2,
-    tension: 0.4,
+    tension: 0.25,
     fill: _distribFillOn(),
   }];
 
@@ -1209,7 +1257,7 @@ export function renderDistrib() {
   const annotations = {};
   const ANN_COLOR = '#6b7280';
   const annLabel = (content, color = ANN_COLOR) => ({
-    content, display: true, position: 'start',
+    content, display: true, position: 'start', clip: false,
     color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
@@ -1262,7 +1310,7 @@ export function renderDistrib() {
 
     const mpColor = '#ef4444';
     const mpAnnLabel = (content) => ({
-      content, display: true, position: 'start',
+      content, display: true, position: 'start', clip: false,
       color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)',
       padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
     });
@@ -1319,7 +1367,7 @@ export function renderDistrib() {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
-      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+      layout: { padding: { top: Math.max(24, fs * 2), right: Math.max(24, fs * 3), bottom: 12, left: Math.max(24, fs * 3) } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {
@@ -1480,12 +1528,14 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
   const sigma = normalFit?.sigma ?? Math.sqrt(sortedVals.reduce((s, v) => s + (v - mu) ** 2, 0) / sortedVals.length);
 
   const customBinCount = _getBinCount(sortedVals);
-  const { bins, bw } = _computeHistogram(sortedVals, customBinCount);
+  const rangeMin = _parseAxisVal($('#distribXMin')?.value);
+  const rangeMax = _parseAxisVal($('#distribXMax')?.value);
+  const { bins, bw, minV, maxV } = _computeHistogram(sortedVals, customBinCount, rangeMin, rangeMax);
   if (!bins.length) return;
 
   const pad = 1.5 * Math.max(sigma, bw);
-  const x0 = sortedVals[0] - pad;
-  const x1 = sortedVals[sortedVals.length - 1] + pad;
+  const x0 = Math.max(0, minV - pad);
+  const x1 = maxV + pad;
 
   const kdeData    = _computeKDE(sortedVals, sigma, bw);
   const normalData = showNormal && normalFit ? _normalPDFcurve(mu, sigma, bw, x0, x1) : null;
@@ -1497,7 +1547,7 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
 
   const ANN_COLOR = '#6b7280';
   const annLabel = (content, color = ANN_COLOR) => ({
-    content, display: true, position: 'start',
+    content, display: true, position: 'start', clip: false,
     color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
@@ -1537,7 +1587,7 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
       if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(_fmtTipo(t.nombre)));
     }
     const mpColor = '#ef4444';
-    const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    const mpAnn = (content) => ({ content, display: true, position: 'start', clip: false, color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     mpTipos.forEach(t => {
       let val = null;
       if (isUfm2)       val = t.ufm2;
@@ -1600,7 +1650,40 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
     },
   };
 
-  const _minVR  = sortedVals[0];
+  // Etiqueta con la cantidad de unidades sobre cada barra del histograma.
+  const _binCountLabelsPlugin = {
+    id: 'binCountLabels',
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      if (!meta || meta.hidden) return;
+      const { ctx: c } = chart;
+      c.save();
+      c.font = `bold ${fs}px system-ui, sans-serif`;
+      c.fillStyle = '#374151';
+      c.textAlign = 'center';
+      c.textBaseline = 'bottom';
+      meta.data.forEach((bar, i) => {
+        const raw = bins[i];
+        if (!raw || raw.y <= 0) return;
+        const count = Math.round((raw.y / 100) * sortedVals.length);
+        if (count <= 0) return;
+        c.fillText(String(count), bar.x, bar.y - 3);
+      });
+      c.restore();
+    },
+  };
+
+  const _minVR  = minV;
+  // Seaborn/matplotlib no imprimen el rango "lo–hi" de cada barra en el
+  // eje — eso lo comunica el borde visual de la barra. El eje solo lleva
+  // números limpios, uno por borde de bin (bin_edges de numpy), sin coma
+  // decimal ni guion, para que no se vea recargado. El rango exacto queda
+  // en el tooltip al pasar el mouse.
+  //
+  // Los decimales se calculan a partir del ancho real del bin (bw), no de
+  // la magnitud del valor: con filtros angostos (ej. "1D Vitacura") bw
+  // puede ser 0.02–0.05, y con solo 1 decimal fijo bordes distintos como
+  const _axisFmt = v => v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const _histEdgeTicksR = {
     id: 'histEdgeTicks',
     afterBuildTicks(chart, args) {
@@ -1608,19 +1691,18 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
       const scale = args.scale;
       const lo = scale.min ?? _minVR;
       const hi = scale.max ?? (_minVR + bins.length * bw);
-      const kStart = Math.floor((lo - _minVR) / bw);
-      const kEnd   = Math.ceil((hi - _minVR) / bw);
-      const allTicks = [];
-      for (let k = kStart; k <= kEnd; k++) allTicks.push(_minVR + k * bw);
-      const step = Math.max(1, Math.ceil(allTicks.length / 12));
-      args.scale.ticks = allTicks
-        .filter((_, i) => i % step === 0 || i === allTicks.length - 1)
-        .map(value => ({ value }));
+      // ceil (no floor) para kStart: floor podía generar un borde por debajo
+      // de "lo" (ej. eje clampeado en 0 pero _minVR=0.07 → floor daba -0.11).
+      const kStart = Math.ceil((lo - _minVR) / bw);
+      const kEnd   = Math.floor((hi - _minVR) / bw);
+      const edges = [];
+      for (let k = kStart; k <= kEnd; k++) edges.push(_minVR + k * bw);
+      args.scale.ticks = edges.map(value => ({ value, label: _axisFmt(value) }));
     },
   };
 
   distribChart = new Chart(ctx, {
-    type: 'bar', data: { datasets }, plugins: [statsPlugin, _histEdgeTicksR],
+    type: 'bar', data: { datasets }, plugins: [statsPlugin, _binCountLabelsPlugin, _histEdgeTicksR],
     options: {
       responsive: true, maintainAspectRatio: false, parsing: false,
       plugins: {
@@ -1628,8 +1710,27 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
         tooltip: {
           mode: 'nearest', intersect: false, axis: 'x',
           callbacks: {
-            title: items => { const x = items[0]?.raw?.x; return x != null ? `${fmtVal(x)} ${distribUnit}` : ''; },
-            label: item => { const y = item.raw?.y; return y != null ? ` ${item.dataset.label}: ${y.toFixed(2)}%` : ''; },
+            title: items => {
+              // Para la barra de Frecuencia mostramos el rango del bin
+              // (desde–hasta), no solo su centro, para que quede claro qué
+              // intervalo de valores agrupa cada barra.
+              const barItem = items.find(it => it.dataset.label === 'Frecuencia') ?? items[0];
+              if (!barItem?.raw) return '';
+              if (barItem.dataset.label === 'Frecuencia') {
+                const lo = barItem.raw.x - bw / 2, hi = barItem.raw.x + bw / 2;
+                return `${fmtVal(lo)} – ${fmtVal(hi)} ${distribUnit}`;
+              }
+              return `${fmtVal(barItem.raw.x)} ${distribUnit}`;
+            },
+            label: item => {
+              const y = item.raw?.y;
+              if (y == null) return '';
+              if (item.dataset.label === 'Frecuencia') {
+                const count = Math.round((y / 100) * sortedVals.length);
+                return ` ${item.dataset.label}: ${y.toFixed(2)}% (${count})`;
+              }
+              return ` ${item.dataset.label}: ${y.toFixed(2)}%`;
+            },
           },
         },
         annotation: { annotations },
@@ -1639,11 +1740,14 @@ function _renderDensidadRenta(ctx, sortedVals, col, fs, showNormal, fmtVal) {
           min: _parseAxisVal($('#distribXMin')?.value) ?? x0,
           max: _parseAxisVal($('#distribXMax')?.value) ?? x1,
           title: { display: true, text: col, font: { size: fs } },
-          ticks: { callback: v => fmtVal(v), font: { size: fs } },
+          ticks: {
+            callback: (v, i, ticks) => ticks[i]?.label ?? fmtVal(v), font: { size: fs },
+            autoSkip: true, autoSkipPadding: 12, maxRotation: 0, minRotation: 0,
+          },
           grid: { display: _distribGridOn() } },
         y: { beginAtZero: true, bounds: 'data',
           title: { display: true, text: '% de datos', font: { size: fs } },
-          ticks: { callback: v => v.toFixed(1) + '%', font: { size: fs } },
+          ticks: { callback: v => Math.round(v) + '%', font: { size: fs } },
           grid: { display: _distribGridOn() },
           ...(_parseAxisVal($('#distribYMin')?.value) !== null ? { min: _parseAxisVal($('#distribYMin').value) } : {}),
           ...(_parseAxisVal($('#distribYMax')?.value) !== null ? { max: _parseAxisVal($('#distribYMax').value) } : {}),
@@ -1691,7 +1795,7 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
 
   const ANN_COLOR = '#6b7280';
   const annLabel = (content, color = ANN_COLOR) => ({
-    content, display: true, position: 'start',
+    content, display: true, position: 'start', clip: false,
     color, backgroundColor: 'rgba(255,255,255,0.9)',
     padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' },
   });
@@ -1730,7 +1834,7 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
       if (activeTipos.size > 0) mpTipos = mpTipos.filter(t => activeTipos.has(_fmtTipo(t.nombre)));
     }
     const mpColor = '#ef4444';
-    const mpAnn = (content) => ({ content, display: true, position: 'start', color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
+    const mpAnn = (content) => ({ content, display: true, position: 'start', clip: false, color: mpColor, backgroundColor: 'rgba(255,255,255,0.9)', padding: { x: 4, y: 2 }, font: { size: fs, weight: 'bold' } });
     mpTipos.forEach(t => {
       let val = null;
       if (isUfm2)       val = t.ufm2;
@@ -1765,7 +1869,7 @@ function _renderLognormalRenta(ctx, sortedVals, col, fs, fmtVal) {
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
-      layout: { padding: { top: 12, right: Math.max(24, fs * 3), bottom: 12, left: 12 } },
+      layout: { padding: { top: Math.max(24, fs * 2), right: Math.max(24, fs * 3), bottom: 12, left: Math.max(24, fs * 3) } },
       plugins: {
         legend: { position: 'top', labels: { font: { size: fs } } },
         tooltip: {

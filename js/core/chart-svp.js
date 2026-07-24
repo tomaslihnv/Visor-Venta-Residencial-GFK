@@ -88,12 +88,17 @@ export function initSvpListeners(state, svpConfig, mp) {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.svp-ratio-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      const customEl = document.getElementById('svpRatioCustom');
+      if (customEl) customEl.value = '';
     });
+  });
+  document.getElementById('svpRatioCustom')?.addEventListener('input', e => {
+    if (e.target.value.trim() !== '') document.querySelectorAll('.svp-ratio-btn').forEach(b => b.classList.remove('active'));
   });
 
   document.getElementById('svpExportPngBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('svpExportPngBtn');
-    const ok  = await copyChartPng(state.chart, document.getElementById('svpWrap'), '.svp-ratio-btn');
+    const ok  = await copyChartPng(state.chart, document.getElementById('svpWrap'), '.svp-ratio-btn', 'svpRatioCustom');
     if (ok && btn) {
       const prev = btn.textContent;
       btn.textContent = '¡Copiado!'; btn.disabled = true;
@@ -330,14 +335,25 @@ export function renderSvp(state, svpConfig, mp) {
     if (programaFilter?.size > 0) mpFiltered = mpFiltered.filter(t => programaFilter.has(t.nombre));
     const getMpY = svpConfig.getMpY ?? ((t, mode) => mode === 'ufm2' ? t.ufm2 : t.sup * t.ufm2);
     const mpPoints = mpFiltered
-      .map(t => ({ x: t.sup, y: getMpY(t, yAxisMode), label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}` }))
+      .map(t => ({
+        x: t.sup, y: getMpY(t, yAxisMode),
+        label: `${mp.proyecto || 'Mi Proyecto'} ${t.nombre}`,
+        unidades: t.unidades,
+      }))
       .filter(p => p.y != null);
     if (mpPoints.length > 0) {
+      // Radio del punto proporcional a la cantidad de unidades de esa
+      // tipología (raíz cuadrada para que el área, no el radio, escale
+      // linealmente con las unidades) — así una tipología con más unidades
+      // "pesa" visiblemente más en el gráfico. Sin dato de unidades, radio base.
+      const pointRadius = mpPoints.map(p => (p.unidades != null && p.unidades > 0)
+        ? Math.min(16, Math.max(6, 5 + Math.sqrt(p.unidades) * 1.6))
+        : 7);
       mpDatasets.push({
         label: mp.proyecto || 'Mi Proyecto',
         data: mpPoints,
         backgroundColor: mpColor, borderColor: mpColor,
-        borderWidth: 2, pointRadius: 7, pointHoverRadius: 9,
+        borderWidth: 2, pointRadius, pointHoverRadius: pointRadius.map(r => r + 2),
       });
     }
   }
@@ -629,7 +645,8 @@ export function renderSvp(state, svpConfig, mp) {
               if (item.dataset.showLine) return null;
               const d = item.raw;
               const name = d.label ? `${d.label}: ` : '';
-              return `${name}${xFmtFn(Number(d.x))} · ${yTooltip(d.y)}`;
+              const uds  = d.unidades != null ? ` (${d.unidades} uds.)` : '';
+              return `${name}${xFmtFn(Number(d.x))} · ${yTooltip(d.y)}${uds}`;
             },
           },
         },

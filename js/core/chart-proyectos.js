@@ -45,6 +45,90 @@ function _withMargin(dataUrl, m) {
   });
 }
 
+// ── Drag de etiquetas de anotaciones (ej. "Mediana") ────────────────────────
+// Mismo patrón que chart-distrib.js, generalizado para leer label.position
+// ('start'|'center'|'end') ya que acá la mediana usa 'end'.
+function _enableAnnotationLabelDrag(chart) {
+  const canvas = chart.canvas;
+  let dragging = null;
+
+  function _anns() { return chart.options?.plugins?.annotation?.annotations ?? {}; }
+
+  function _anchorCoord(scale, vMin, vMax, position) {
+    if (position === 'end')    return scale.getPixelForValue(vMax ?? scale.max ?? 0);
+    if (position === 'center') return (scale.getPixelForValue(scale.min ?? 0) + scale.getPixelForValue(scale.max ?? 0)) / 2;
+    return scale.getPixelForValue(vMin ?? scale.min ?? 0);
+  }
+
+  function _anchor(ann) {
+    const sx = chart.scales?.x, sy = chart.scales?.y;
+    if (!sx || !sy) return null;
+    const pos = ann.label?.position ?? 'start';
+    if (ann.xMin != null && (ann.xMax == null || ann.xMin === ann.xMax))
+      return { ax: sx.getPixelForValue(ann.xMin), ay: _anchorCoord(sy, ann.yMin, ann.yMax, pos) };
+    if (ann.yMin != null && (ann.yMax == null || ann.yMin === ann.yMax))
+      return { ax: _anchorCoord(sx, ann.xMin, ann.xMax, pos), ay: sy.getPixelForValue(ann.yMin) };
+    return null;
+  }
+
+  function _box(key) {
+    const ann = _anns()[key];
+    if (!ann?.label || ann.label.display === false) return null;
+    const a = _anchor(ann);
+    if (!a) return null;
+    const fs = ann.label.font?.size ?? 11;
+    const content = Array.isArray(ann.label.content) ? ann.label.content : [ann.label.content];
+    const text = content.join(' ');
+    const ctx2 = canvas.getContext('2d');
+    ctx2.save(); ctx2.font = `bold ${fs}px system-ui, sans-serif`;
+    const tw = Math.max(...content.map(l => ctx2.measureText(String(l ?? '')).width));
+    ctx2.restore();
+    return { cx: a.ax + (ann.label.xAdjust ?? 0), cy: a.ay + (ann.label.yAdjust ?? 0), w: tw + 16, h: fs * 1.8 * content.length };
+  }
+
+  function _hit(mx, my) {
+    for (const key of Object.keys(_anns())) {
+      const b = _box(key);
+      if (b && Math.abs(mx - b.cx) <= b.w / 2 + 10 && Math.abs(my - b.cy) <= b.h / 2 + 10) return key;
+    }
+    return null;
+  }
+
+  canvas.addEventListener('mousedown', e => {
+    const key = _hit(e.offsetX, e.offsetY);
+    if (!key) return;
+    const ann = _anns()[key];
+    if (!ann?.label) return;
+    e.preventDefault(); e.stopPropagation();
+    if (chart.options.plugins.tooltip) chart.options.plugins.tooltip.enabled = false;
+    dragging = { key, sx: e.offsetX, sy: e.offsetY, ox: ann.label.xAdjust ?? 0, oy: ann.label.yAdjust ?? 0 };
+    canvas.style.cursor = 'grabbing';
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (dragging) {
+      const ann = _anns()[dragging.key];
+      if (!ann?.label) return;
+      ann.label.xAdjust = dragging.ox + (e.offsetX - dragging.sx);
+      ann.label.yAdjust = dragging.oy + (e.offsetY - dragging.sy);
+      chart.update('none');
+      canvas.style.cursor = 'grabbing';
+    } else {
+      const mx = e.offsetX, my = e.offsetY;
+      setTimeout(() => { if (!dragging) canvas.style.cursor = _hit(mx, my) ? 'grab' : ''; }, 0);
+    }
+  });
+
+  function _stop() {
+    if (!dragging) return;
+    dragging = null; canvas.style.cursor = '';
+    if (chart.options.plugins.tooltip) chart.options.plugins.tooltip.enabled = true;
+    chart.update('none');
+  }
+  canvas.addEventListener('mouseup', _stop);
+  canvas.addEventListener('mouseleave', _stop);
+}
+
 let _proyChart  = null;
 let _proyReady  = false;
 
@@ -70,11 +154,18 @@ export function initProyectosListeners(state, metricDefs, mp, options = {}) {
     });
   }
 
+  document.getElementById('proyGridToggle')?.addEventListener('change', () => renderProyectos(state, metricDefs, mp, options));
+
   document.querySelectorAll('.proy-ratio-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.proy-ratio-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      const customEl = document.getElementById('proyRatioCustom');
+      if (customEl) customEl.value = '';
     });
+  });
+  document.getElementById('proyRatioCustom')?.addEventListener('input', e => {
+    if (e.target.value.trim() !== '') document.querySelectorAll('.proy-ratio-btn').forEach(b => b.classList.remove('active'));
   });
 
   document.querySelectorAll('.proy-xrot-btn').forEach(btn => {
@@ -99,7 +190,10 @@ export function initProyectosListeners(state, metricDefs, mp, options = {}) {
     const scale = 4;
     const pad = 32;
     const wrap = document.getElementById('proyWrap');
-    const ratio = document.querySelector('.proy-ratio-btn.active')?.dataset.ratio ?? 'auto';
+    const customVal = parseFloat(document.getElementById('proyRatioCustom')?.value ?? '');
+    const ratio = (!isNaN(customVal) && customVal > 0)
+      ? String(customVal)
+      : (document.querySelector('.proy-ratio-btn.active')?.dataset.ratio ?? 'auto');
 
     const origDPR = _proyChart.options.devicePixelRatio ?? window.devicePixelRatio;
     const exportW = wrap ? wrap.clientWidth - pad : _proyChart.width;
@@ -145,6 +239,7 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
   const xMaxRot = xRot === 'vertical' ? 90 : 45;
   const xMinRot = xRot === 'vertical' ? 90 : 30;
   const showMedian = (document.querySelector('.proy-median-btn.active')?.dataset.median ?? 'show') === 'show';
+  const gridOn = _$('proyGridToggle') ? _$('proyGridToggle').checked : true;
 
   if (_proyChart) { _proyChart.destroy(); _proyChart = null; }
   const ctx = document.getElementById(canvasId)?.getContext('2d');
@@ -237,7 +332,7 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
     mediana: {
       type: 'line', yMin: medianVal, yMax: medianVal,
       borderColor: '#ef4444', borderWidth: 1.5, borderDash: [5, 4],
-      label: { content: medianLabel, display: true, position: 'end', font: { size: fs - 1 }, color: '#ef4444', backgroundColor: 'rgba(255,255,255,0.92)' },
+      label: { content: medianLabel, display: true, position: 'end', clip: false, font: { size: fs - 1 }, color: '#ef4444', backgroundColor: 'rgba(255,255,255,0.92)' },
     },
   } : {};
 
@@ -256,16 +351,17 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      layout: { padding: { top: 40, right: 20, bottom: 12, left: 12 } },
+      layout: { padding: { top: Math.max(40, fs * 3), right: 20, bottom: 12, left: 12 } },
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: item => ` ${metric.fmt(item.raw)}` } },
         annotation: { annotations: medianAnnotations },
       },
       scales: {
-        x: { ticks: { maxRotation: xMaxRot, minRotation: xMinRot, font: { size: fs } } },
+        x: { grid: { display: gridOn }, ticks: { maxRotation: xMaxRot, minRotation: xMinRot, font: { size: fs } } },
         y: {
           title: { display: false },
+          grid: { display: gridOn },
           ticks: { callback: v => metric.fmt(v), font: { size: fs } },
           beginAtZero: false,
           ...(_parseAxisVal(_$('proyYMin')?.value) !== null ? { min: _parseAxisVal(_$('proyYMin').value) } : {}),
@@ -278,7 +374,7 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
       afterDraw(chart) {
         const { ctx, chartArea } = chart;
         ctx.save();
-        ctx.font = '11px system-ui, sans-serif';
+        ctx.font = `${fs}px system-ui, sans-serif`;
         ctx.fillStyle = '#666';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
@@ -287,4 +383,5 @@ export function renderProyectos(state, metricDefs, mp, options = {}) {
       },
     }],
   });
+  _enableAnnotationLabelDrag(_proyChart);
 }

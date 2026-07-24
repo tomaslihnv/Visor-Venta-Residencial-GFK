@@ -1,4 +1,5 @@
 import { INCITI_PROXY_URL } from '../config.js';
+import { getIdToken } from '../../shared/auth.js';
 
 // ── Inciti API — POIs del Barrio ───────────────────────────────────────────
 //
@@ -23,9 +24,11 @@ export async function fetchPois(polygon, { onProgress } = {}) {
 
   onProgress?.('Consultando POIs del barrio…');
 
+  const token = await getIdToken();
+
   const res = await fetch(url, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify({
       market:   'residencial',
       polygons: [polygon],

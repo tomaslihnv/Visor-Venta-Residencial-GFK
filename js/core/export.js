@@ -29,34 +29,59 @@ export function exportJson(state, filename) {
   URL.revokeObjectURL(url);
 }
 
-export async function copyChartPng(chart, wrapEl, ratioSelector) {
+export async function copyChartPng(chart, wrapEl, ratioSelector, customInputId) {
   if (!chart || !wrapEl) return false;
   const scale = 4, pad = 32;
-  const ratio = document.querySelector(ratioSelector + '.active')?.dataset.ratio ?? 'auto';
+  // El input de "proporción personalizada" tiene prioridad sobre los botones
+  // preestablecidos cuando tiene un valor válido — no requiere que ningún
+  // botón esté marcado "active".
+  const customVal = customInputId ? parseFloat(document.getElementById(customInputId)?.value ?? '') : NaN;
+  const ratio = (!isNaN(customVal) && customVal > 0)
+    ? String(customVal)
+    : (document.querySelector(ratioSelector + '.active')?.dataset.ratio ?? 'auto');
   const origDPR = chart.options.devicePixelRatio ?? window.devicePixelRatio;
   const origW   = chart.width;
   const origH   = chart.height;
   const exportW = wrapEl.clientWidth - pad;
   const exportH = ratio === 'auto' ? origH : Math.round(exportW / parseFloat(ratio));
-  const scaleX  = exportW / origW;
-  const scaleY  = exportH / origH;
 
-  // Escalar xAdjust/yAdjust de anotaciones para que las etiquetas queden
-  // en la misma posición relativa en la imagen exportada.
+  // Guardar xAdjust/yAdjust originales de las anotaciones (offsets de drag
+  // manual) para restaurarlos después.
   const anns = chart.options?.plugins?.annotation?.annotations ?? {};
   const saved = {};
   for (const [key, ann] of Object.entries(anns)) {
     if (!ann?.label) continue;
     saved[key] = { x: ann.label.xAdjust ?? 0, y: ann.label.yAdjust ?? 0 };
-    ann.label.xAdjust = saved[key].x * scaleX;
-    ann.label.yAdjust = saved[key].y * scaleY;
   }
+
+  // El área de ploteo (chart.chartArea) excluye el padding fijo de ejes,
+  // leyenda, etc. — a diferencia del ancho/alto total del canvas, escala
+  // proporcionalmente con el contenido real. Usar esa relación (en vez de
+  // width/height del canvas) para reescalar los xAdjust/yAdjust evita que
+  // las etiquetas ancladas cerca de un borde (ej. el marcador de UF/m²,
+  // que suele quedar pegado al límite del eje) terminen desplazadas en la
+  // imagen exportada, mientras que las etiquetas centradas (ej. percentil)
+  // apenas se notaban afectadas por el cálculo anterior.
+  const areaOld = { w: chart.chartArea.width, h: chart.chartArea.height };
 
   chart.options.devicePixelRatio = scale;
   chart.resize(exportW, exportH);
+  chart.update('none');
+
+  const areaNew = { w: chart.chartArea.width, h: chart.chartArea.height };
+  const scaleX = areaNew.w / areaOld.w;
+  const scaleY = areaNew.h / areaOld.h;
+  for (const [key, ann] of Object.entries(anns)) {
+    if (!ann?.label || !saved[key]) continue;
+    ann.label.xAdjust = saved[key].x * scaleX;
+    ann.label.yAdjust = saved[key].y * scaleY;
+  }
+  chart.update('none');
+
   const url = chart.toBase64Image('image/png', 1);
   chart.options.devicePixelRatio = origDPR;
   chart.resize(origW, origH);
+  chart.update('none');
 
   // Restaurar adjusts originales
   for (const [key, ann] of Object.entries(anns)) {

@@ -7,5 +7,11 @@ compatibility_date = "2024-09-23"
 # En desarrollo puedes dejar "*" o tu localhost. En producción poner el dominio exacto.
 ALLOWED_ORIGIN = "*"
 
+# projectId del proyecto Firebase usado por shared/auth.js (login de la herramienta).
+FIREBASE_PROJECT_ID = "visor-estudio-mercado"
+
+# Dominio de correo permitido — debe coincidir con ALLOWED_EMAIL_DOMAIN en js/config.js.
+ALLOWED_EMAIL_DOMAIN = "situ.cl"
+
 # INCITI_API_KEY se define como secret (nunca en este archivo):
 #   npx wrangler secret put INCITI_API_KEY

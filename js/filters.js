@@ -1,5 +1,5 @@
-import { $, debounce, fmt, norm, fmtTipo } from './utils.js';
-import { state } from './data.js';
+import { $, debounce, fmt, norm, fmtTipo, monthKeyToQuarter, quarterSortKey } from './utils.js';
+import { state, recomputeVelVenta } from './data.js';
 
 // ============== Resolución de columnas ==============
 function findCol(candidates) {
@@ -29,7 +29,17 @@ const F = {
   ufm2Min: null, ufm2Max: null,
   estado:       new Set(),
   fechaEntrega: new Set(),
+  freshMin:     null, // "YYYY-Qn" — oculta proyectos actualizados antes de ese trimestre (ver actualizacion.js)
 };
+
+// Corte mínimo de "Última Actualización" (tab Actualización). Se expone
+// aparte del resto de los filtros porque su UI vive en su propia pestaña,
+// no en el sidebar de filtros.
+export function setFreshnessMin(q) {
+  F.freshMin = q || null;
+  applyFilters();
+}
+export function getFreshnessMin() { return F.freshMin; }
 
 const refs = {}; // referencias a elementos DOM para actualizaciones dinámicas
 
@@ -71,6 +81,7 @@ export function buildFilters() {
   F.supMin = F.supMax = F.ticketMin = F.ticketMax = F.ufm2Min = F.ufm2Max = null;
   F.supRanges = {};
   F.estado.clear(); F.fechaEntrega.clear();
+  F.freshMin = null;
   Object.keys(refs).forEach(k => delete refs[k]);
 
   const container = $('#filtersContainer');
@@ -85,6 +96,7 @@ export function buildFilters() {
   if (cols.propietario)  _buildMulti('propietario',   cols.propietario,  'Propietario',                                  container);
   if (cols.estado)       _buildMulti('estado',        cols.estado,       'Estado',                                       container);
   if (cols.fechaEntrega) _buildQuarters(container);
+  _buildFreshness(container);
 }
 
 // --- Multi checkbox ---
@@ -421,6 +433,39 @@ function _buildQuarters(container) {
   container.appendChild(group);
 }
 
+// --- Corte mínimo de "Última Actualización" (solo datos API/Inciti) ---
+function _buildFreshness(container) {
+  const hasCol = state.raw.some(r => 'Última Actualización' in r && r['Última Actualización']);
+  if (!hasCol) return;
+
+  const byProj = new Map();
+  for (const r of state.raw) {
+    const proj = String(r[cols.edificio] ?? '').trim();
+    if (!proj || byProj.has(proj)) continue;
+    const q = monthKeyToQuarter(r['Última Actualización']);
+    if (q) byProj.set(proj, q);
+  }
+  const quarters = [...new Set(byProj.values())].sort((a, b) => quarterSortKey(a) - quarterSortKey(b));
+  if (!quarters.length) return;
+
+  const group = document.createElement('div');
+  group.className = 'filter-group';
+  group.innerHTML = `<label class="title">Actualizado desde</label>`;
+
+  const sel = document.createElement('select');
+  sel.innerHTML = '<option value="">Sin filtro</option>' +
+    quarters.map(q => `<option value="${q}">${q} en adelante</option>`).join('');
+  sel.value = F.freshMin && quarters.includes(F.freshMin) ? F.freshMin : '';
+  sel.addEventListener('change', () => {
+    F.freshMin = sel.value || null;
+    applyFilters();
+  });
+  refs.freshSelect = sel;
+
+  group.appendChild(sel);
+  container.appendChild(group);
+}
+
 // ============== Aplicar filtros ==============
 export function applyFilters() {
   state.filtered = state.raw.filter(row => {
@@ -464,13 +509,21 @@ export function applyFilters() {
       const q = dateToQuarter(row[cols.fechaEntrega]);
       if (!F.fechaEntrega.has(q)) return false;
     }
+    if (F.freshMin) {
+      const q = monthKeyToQuarter(row['Última Actualización']);
+      if (!q || quarterSortKey(q) < quarterSortKey(F.freshMin)) return false;
+    }
     return true;
   });
 
   state.page = 1;
   $('#filterCount').textContent = `${state.filtered.length} / ${state.raw.length}`;
 
+  recomputeVelVenta(state.filtered);
   _updateRangeLimits();
+  // Mantener sincronizado el select del sidebar con el de la pestaña
+  // Actualización (setFreshnessMin() desde ahí no toca este <select>).
+  if (refs.freshSelect) refs.freshSelect.value = F.freshMin ?? '';
 
   import('./table.js').then(({ renderTable }) => renderTable());
   import('./chart.js').then(({ renderKpis, renderDistrib, renderSupVsPrecio, renderProyectos }) => {
@@ -483,6 +536,9 @@ export function applyFilters() {
   const activeTab = $('.tab.active')?.dataset.tab;
   if (activeTab === 'comparativa') {
     import('./comparativa.js').then(({ renderComparativa }) => renderComparativa());
+  }
+  if (activeTab === 'actualizacion') {
+    import('./actualizacion.js').then(({ renderActualizacion }) => renderActualizacion());
   }
   import('./map.js').then(({ renderMap, updateFilterWidget }) => {
     updateFilterWidget?.();
