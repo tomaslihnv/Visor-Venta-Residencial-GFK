@@ -227,27 +227,51 @@ function _exportXlsx() {
     }
   }
 
-  const rows = [...byKey.values()]
-    .sort((a, b) => a.periodKey === b.periodKey
-      ? a.tipo.localeCompare(b.tipo, 'es')
-      : a.periodKey.localeCompare(b.periodKey))
-    .map(r => ({
-      'Mes':                   periodLabels.get(r.periodKey) ?? r.periodKey,
-      'Período Key':           r.periodKey,
-      'Tipología':             r.tipo,
-      'Unidades Disponibles':  r.available,
-      'Ventas Netas':          r.sales,
-      'Precio Promedio (UF)':  r.priceCount ? +(r.priceSum / r.priceCount).toFixed(1) : null,
-    }));
+  // Agrupa por tipología — una hoja por tipología, cada una con su propia
+  // serie mensual ordenada cronológicamente, lista para regresión sin tener
+  // que filtrar/separar filas dentro de Excel.
+  const byTipo = new Map();
+  for (const r of byKey.values()) {
+    if (!byTipo.has(r.tipo)) byTipo.set(r.tipo, []);
+    byTipo.get(r.tipo).push(r);
+  }
 
-  if (!rows.length) {
+  if (!byTipo.size) {
     alert('No hay datos para exportar con los filtros actuales.');
     return;
   }
 
-  const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Absorción');
+  const usedNames = new Set();
+  const tipos = [...byTipo.keys()].sort((a, b) => {
+    const na = parseInt(a), nb = parseInt(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b, 'es');
+  });
+
+  for (const tipo of tipos) {
+    const rows = byTipo.get(tipo)
+      .sort((a, b) => a.periodKey.localeCompare(b.periodKey))
+      .map(r => ({
+        'Mes':                   periodLabels.get(r.periodKey) ?? r.periodKey,
+        'Período Key':           r.periodKey,
+        'Unidades Disponibles':  r.available,
+        'Ventas Netas':          r.sales,
+        'Precio Promedio (UF)':  r.priceCount ? +(r.priceSum / r.priceCount).toFixed(1) : null,
+      }));
+
+    // Nombres de hoja en Excel: máx 31 caracteres, sin []:*?/\ ni duplicados.
+    let sheetName = String(tipo).replace(/[\[\]:*?/\\]/g, '').slice(0, 31) || 'Tipología';
+    let suffix = 2;
+    while (usedNames.has(sheetName)) {
+      sheetName = `${sheetName.slice(0, 28)}_${suffix++}`;
+    }
+    usedNames.add(sheetName);
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  }
+
   XLSX.writeFile(wb, `absorcion_por_tipologia_${Date.now()}.xlsx`);
 }
 
