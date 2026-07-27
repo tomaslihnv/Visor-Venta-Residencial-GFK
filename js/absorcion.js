@@ -18,8 +18,9 @@ function _hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-const BAR_COLOR  = '#3b82f6';
-const LINE_COLOR = '#16a34a';
+const BAR_COLOR   = '#3b82f6';
+const LINE_COLOR  = '#16a34a';
+const PRICE_COLOR = '#f59e0b';
 
 function _renderChips(tipologias) {
   const cont = $('#absorcionChips');
@@ -65,6 +66,8 @@ function _renderChart(tipologias) {
 
   const availableTotals = new Map(); // key -> suma de unidades disponibles del mes (oferta)
   const salesTotals     = new Map(); // key -> suma de netSales del mes
+  const priceSums       = new Map(); // key -> suma de priceUF del mes (para promediar)
+  const priceCounts     = new Map(); // key -> cantidad de programas con precio ese mes
   const periodLabels    = new Map(); // key -> label legible
 
   for (const entity of state.rawEntities) {
@@ -78,6 +81,11 @@ function _renderChart(tipologias) {
           if (_tipoFilt.size && !_tipoFilt.has(tipo)) continue;
           availableTotals.set(period.key, (availableTotals.get(period.key) ?? 0) + (Number(prog.available) || 0));
           salesTotals.set(period.key,     (salesTotals.get(period.key)     ?? 0) + (Number(prog.netSales)  || 0));
+          const precio = Number(prog.priceUF);
+          if (!isNaN(precio) && precio > 0) {
+            priceSums.set(period.key,   (priceSums.get(period.key)   ?? 0) + precio);
+            priceCounts.set(period.key, (priceCounts.get(period.key) ?? 0) + 1);
+          }
         }
       }
     }
@@ -87,6 +95,7 @@ function _renderChart(tipologias) {
   const labels    = keys.map(k => periodLabels.get(k) ?? k);
   const available = keys.map(k => availableTotals.get(k));
   const sales     = keys.map(k => salesTotals.get(k) ?? 0);
+  const priceAvg  = keys.map(k => priceCounts.get(k) ? +(priceSums.get(k) / priceCounts.get(k)).toFixed(1) : null);
 
   if (_chart) { _chart.destroy(); _chart = null; }
   const ctx = canvas.getContext('2d');
@@ -117,6 +126,20 @@ function _renderChart(tipologias) {
           tension: 0.15,
           yAxisID: 'y1',
           order: 1,
+        },
+        {
+          type: 'line',
+          label: 'Precio promedio (Ticket UF)',
+          data: priceAvg,
+          borderColor: PRICE_COLOR,
+          backgroundColor: PRICE_COLOR,
+          borderWidth: 2,
+          borderDash: [5, 3],
+          pointRadius: 0,
+          tension: 0.15,
+          spanGaps: true,
+          yAxisID: 'y2',
+          order: 0,
         },
       ],
     },
@@ -153,6 +176,13 @@ function _renderChart(tipologias) {
           title: { display: true, text: 'Ventas netas del mes' },
           grid: { drawOnChartArea: false },
           ticks: { precision: 0 },
+        },
+        y2: {
+          type: 'linear',
+          position: 'right',
+          beginAtZero: false,
+          title: { display: true, text: 'Precio promedio (UF)' },
+          grid: { drawOnChartArea: false },
         },
       },
     },
