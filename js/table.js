@@ -25,6 +25,15 @@ export function renderTable() {
     const th = document.createElement('th');
     th.textContent = col.name;
 
+    if (state.sort.col === col.name) {
+      th.classList.add('sort-' + state.sort.dir);
+    }
+    const arrow = document.createElement('span');
+    arrow.className = 'sort-arrow';
+    arrow.textContent = state.sort.col === col.name ? (state.sort.dir === 'asc' ? '▲' : '▼') : '↕';
+    arrow.style.pointerEvents = 'none'; // No bloquear eventos
+    th.appendChild(arrow);
+
     // Agregar tooltip si existe descripción de la métrica
     const desc = METRIC_DESCRIPTIONS[col.name];
     if (desc) {
@@ -40,13 +49,6 @@ export function renderTable() {
       th.addEventListener('mouseleave', hideTableTooltip);
     }
 
-    if (state.sort.col === col.name) {
-      th.classList.add('sort-' + state.sort.dir);
-    }
-    const arrow = document.createElement('span');
-    arrow.className = 'sort-arrow';
-    arrow.textContent = state.sort.col === col.name ? (state.sort.dir === 'asc' ? '▲' : '▼') : '↕';
-    th.appendChild(arrow);
     th.addEventListener('click', () => {
       if (state.sort.col === col.name) {
         state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
