@@ -63,7 +63,8 @@ function _renderChart(tipologias) {
   // comparable" que el resto del visor, no todo lo que trae la API.
   const allowedPairs = new Set(state.filtered.map(r => `${r['Edificio']}::${r['Tipología']}`));
 
-  const periodTotals = new Map(); // key -> suma netSales del mes
+  const stockTotals = new Map(); // key -> suma de stock del mes (tamaño del mercado)
+  const salesTotals = new Map(); // key -> suma de netSales del mes
   const periodLabels = new Map(); // key -> label legible
 
   for (const entity of state.rawEntities) {
@@ -75,17 +76,17 @@ function _renderChart(tipologias) {
           const pairKey = `${entity.name}::${tipo}`;
           if (!allowedPairs.has(pairKey)) continue;
           if (_tipoFilt.size && !_tipoFilt.has(tipo)) continue;
-          periodTotals.set(period.key, (periodTotals.get(period.key) ?? 0) + (Number(prog.netSales) || 0));
+          stockTotals.set(period.key, (stockTotals.get(period.key) ?? 0) + (Number(prog.stock)    || 0));
+          salesTotals.set(period.key, (salesTotals.get(period.key) ?? 0) + (Number(prog.netSales) || 0));
         }
       }
     }
   }
 
-  const keys = [...periodTotals.keys()].sort();
+  const keys   = [...stockTotals.keys()].sort();
   const labels = keys.map(k => periodLabels.get(k) ?? k);
-  const monthly = keys.map(k => periodTotals.get(k));
-  let running = 0;
-  const cumulative = monthly.map(v => (running += v));
+  const stock  = keys.map(k => stockTotals.get(k));
+  const sales  = keys.map(k => salesTotals.get(k) ?? 0);
 
   if (_chart) { _chart.destroy(); _chart = null; }
   const ctx = canvas.getContext('2d');
@@ -96,8 +97,8 @@ function _renderChart(tipologias) {
       datasets: [
         {
           type: 'bar',
-          label: 'Ventas netas mensuales',
-          data: monthly,
+          label: 'Stock total del mes',
+          data: stock,
           backgroundColor: _hexToRgba(BAR_COLOR, 0.55),
           borderColor: _hexToRgba(BAR_COLOR, 0.9),
           borderWidth: 1,
@@ -107,8 +108,8 @@ function _renderChart(tipologias) {
         },
         {
           type: 'line',
-          label: 'Unidades vendidas (acumulado)',
-          data: cumulative,
+          label: 'Ventas netas del mes',
+          data: sales,
           borderColor: LINE_COLOR,
           backgroundColor: LINE_COLOR,
           borderWidth: 2,
@@ -142,14 +143,14 @@ function _renderChart(tipologias) {
           type: 'linear',
           position: 'left',
           beginAtZero: true,
-          title: { display: true, text: 'Ventas netas del mes' },
+          title: { display: true, text: 'Stock total' },
           ticks: { precision: 0 },
         },
         y1: {
           type: 'linear',
           position: 'right',
           beginAtZero: true,
-          title: { display: true, text: 'Acumulado vendido' },
+          title: { display: true, text: 'Ventas netas del mes' },
           grid: { drawOnChartArea: false },
           ticks: { precision: 0 },
         },
