@@ -323,7 +323,7 @@ export function renderComparativa() {
   html += `<thead><tr class="comp-head-top">`;
   html += `<th colspan="${generalColsTotal}" class="comp-th-section"></th>`;
   for (const tipo of metricGroups) {
-    html += `<th colspan="3" class="comp-th-tipo">${tipo === '_overall' ? 'Indicadores' : tipoDisplayName(tipo)}</th>`;
+    html += `<th colspan="4" class="comp-th-tipo">${tipo === '_overall' ? 'Indicadores' : tipoDisplayName(tipo)}</th>`;
   }
   html += `</tr>`;
 
