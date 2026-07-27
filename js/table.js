@@ -20,10 +20,11 @@ export function renderTable() {
 
   // Header
   const tr = document.createElement('tr');
-  console.log('Renderizando tabla con columnas:', state.columns.map(c => c.name));
   for (const col of state.columns) {
     const th = document.createElement('th');
     th.textContent = col.name;
+    th.style.userSelect = 'none';
+    th.style.cursor = 'pointer';
 
     if (state.sort.col === col.name) {
       th.classList.add('sort-' + state.sort.dir);
@@ -37,16 +38,10 @@ export function renderTable() {
     // Agregar tooltip si existe descripción de la métrica
     const desc = METRIC_DESCRIPTIONS[col.name];
     if (desc) {
-      console.log('✓ Tooltip agregado a:', col.name);
-      th.style.cursor = 'help';
       th.classList.add('has-tooltip');
       th.title = desc;
 
-      // Usar onmouseenter/onmouseleave para mayor compatibilidad
-      th.onmouseenter = (e) => {
-        console.log('💬 Hover en:', col.name);
-        showTableTooltip(e, desc);
-      };
+      th.onmouseenter = (e) => showTableTooltip(e, desc);
       th.onmouseleave = hideTableTooltip;
     }
 
