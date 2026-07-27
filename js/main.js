@@ -58,6 +58,9 @@ $$('.tab').forEach(tab => {
     if (tab.dataset.tab === 'actualizacion') {
       import('./actualizacion.js').then(({ renderActualizacion }) => renderActualizacion());
     }
+    if (tab.dataset.tab === 'absorcion') {
+      import('./absorcion.js').then(({ renderAbsorcion }) => renderAbsorcion());
+    }
   });
 });
 
@@ -386,6 +389,10 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
         _showScreen('dashboard');
         _clearAll();
         onDataLoaded(rows);
+        // onDataLoaded() resetea rawEntities a [] — se repuebla acá porque
+        // solo esta consulta API trae periods/stages/programs/netSales
+        // completos (absorcion.js los necesita para el histórico mensual).
+        state.rawEntities = selected;
       };
     }
   }

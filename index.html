@@ -249,6 +249,7 @@
           <button class="tab" data-tab="distribucion">Distribución</button>
           <button class="tab" data-tab="comparativa">Resumen</button>
           <button class="tab" data-tab="actualizacion">Actualización</button>
+          <button class="tab" data-tab="absorcion">Absorción</button>
           <button class="tab" data-tab="tabla">Datos</button>
         </div>
 
@@ -499,6 +500,19 @@
           </div>
           <div class="chart-wrap" id="actualizacionWrap">
             <canvas id="actualizacionChart"></canvas>
+          </div>
+        </div>
+
+        <!-- TAB: ABSORCIÓN -->
+        <div class="tab-panel" data-panel="absorcion">
+          <div class="panel-toolbar">
+            <div class="hist-chips" id="absorcionChips"></div>
+          </div>
+          <div id="absorcionEmpty" class="hint" style="display:none;">
+            Esta vista solo está disponible para proyectos cargados desde la API de Inciti (consulta por área/comuna) — el Excel no trae el histórico mensual de ventas.
+          </div>
+          <div class="chart-wrap" id="absorcionWrap">
+            <canvas id="absorcionChart"></canvas>
           </div>
         </div>
 

@@ -540,6 +540,9 @@ export function applyFilters() {
   if (activeTab === 'actualizacion') {
     import('./actualizacion.js').then(({ renderActualizacion }) => renderActualizacion());
   }
+  if (activeTab === 'absorcion') {
+    import('./absorcion.js').then(({ renderAbsorcion }) => renderAbsorcion());
+  }
   import('./map.js').then(({ renderMap, updateFilterWidget }) => {
     updateFilterWidget?.();
     if (activeTab === 'mapa') renderMap();

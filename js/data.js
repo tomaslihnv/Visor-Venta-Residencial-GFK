@@ -12,6 +12,12 @@ export const state = {
   pageSize: 50,
   chart: null,
   source: 'gfk',     // 'gfk' | 'inciti'
+  // Entidades crudas de la API de Inciti (con periods/stages/programs/netSales
+  // completos) — solo se llenan cuando los datos vienen de una consulta API
+  // (Dibujar Área / Por Comuna), NO desde Excel. Las usa absorcion.js para
+  // construir la serie mensual de ventas netas; flattenEntities() colapsa esta
+  // info a una fila por tipología y no sirve para reconstruir el histórico.
+  rawEntities: [],
 };
 
 // ============== Normalización Inciti → GFK ==============
@@ -283,6 +289,10 @@ function onDataLoaded(rows) {
   }
   state.raw = rows;
   state.filtered = rows.slice();
+  // Se resetea acá y main.js lo repuebla justo después de esta llamada
+  // cuando el origen es una consulta API — así un Excel cargado después
+  // de una consulta API no arrastra entidades de la consulta anterior.
+  state.rawEntities = [];
 
   // Detectar columnas y tipos
   const colNames = Object.keys(rows[0] ?? {});
