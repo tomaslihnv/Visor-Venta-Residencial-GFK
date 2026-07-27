@@ -69,24 +69,30 @@ export function flattenEntities(entities) {
     const totalStock  = stages.reduce((s, st) => s + (st.totalStock     ?? 0), 0);
     const totalOferta = stages.reduce((s, st) => s + (st.availableUnits ?? 0), 0);
 
-    // Mediana de netSales por (etapa, programa) sobre TODA la vida reportada
-    // del proyecto (desde su primer período hasta el último que Inciti
-    // encuestó, sin importar si dejó de reportar hace años — ver 'Última
-    // Actualización' para saber cuándo fue eso). netSales ya viene mensual y
-    // neto por tipología directo de Inciti (no es acumulado); se guarda la
-    // serie mensual completa y se toma la MEDIANA (no el promedio) para que
-    // un mes con una venta atípicamente alta o baja no distorsione el
-    // número — a diferencia de inferir velocidad desde Stock-Disponible, un
-    // programa que queda con 1 unidad disponible para siempre tampoco
-    // arrastra la velocidad hacia abajo, porque acá se mide venta real
-    // reportada mes a mes, no el remanente de stock.
+    // Mediana de netSales por (etapa, programa) sobre la vida VENDIBLE del
+    // proyecto (desde su primer período hasta el mes en que se agota esa
+    // tipología — available llega a 0 — o hasta el último período reportado
+    // si nunca se agota). netSales ya viene mensual y neto por tipología
+    // directo de Inciti (no es acumulado); se guarda la serie mensual y se
+    // toma la MEDIANA (no el promedio) para que un mes con una venta
+    // atípicamente alta o baja no distorsione el número.
+    //
+    // Corte al agotarse: Inciti sigue reportando una tipología agotada
+    // (available=0, netSales=0) durante meses o años después de venderse
+    // por completo — esos meses no son "el proyecto no vendió", son "ya no
+    // quedaba nada que vender", así que no deben contar como parte del
+    // ritmo de ventas. Se corta la serie en el primer mes que llega a 0
+    // disponibles (inclusive, por si esa fue la venta que la agotó).
     const velSeriesByKey = new Map();
+    const agotado = new Set();
     for (const p of periods) {
       for (const st of (p.stages ?? [])) {
         for (const prog of (st.programs ?? [])) {
           const key = `${st.stageCode}::${prog.program}`;
+          if (agotado.has(key)) continue;
           if (!velSeriesByKey.has(key)) velSeriesByKey.set(key, []);
           velSeriesByKey.get(key).push(Number(prog.netSales) || 0);
+          if ((Number(prog.available) || 0) <= 0) agotado.add(key);
         }
       }
     }
