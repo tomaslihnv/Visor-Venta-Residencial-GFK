@@ -31,7 +31,7 @@ export function renderTable() {
     const arrow = document.createElement('span');
     arrow.className = 'sort-arrow';
     arrow.textContent = state.sort.col === col.name ? (state.sort.dir === 'asc' ? '▲' : '▼') : '↕';
-    arrow.style.pointerEvents = 'none'; // No bloquear eventos
+    arrow.style.pointerEvents = 'none';
     th.appendChild(arrow);
 
     // Agregar tooltip si existe descripción de la métrica
@@ -40,16 +40,17 @@ export function renderTable() {
       console.log('✓ Tooltip agregado a:', col.name);
       th.style.cursor = 'help';
       th.classList.add('has-tooltip');
-      th.title = desc; // Fallback nativo
+      th.title = desc;
 
-      th.addEventListener('mouseenter', (e) => {
+      // Usar onmouseenter/onmouseleave para mayor compatibilidad
+      th.onmouseenter = (e) => {
         console.log('💬 Hover en:', col.name);
         showTableTooltip(e, desc);
-      });
-      th.addEventListener('mouseleave', hideTableTooltip);
+      };
+      th.onmouseleave = hideTableTooltip;
     }
 
-    th.addEventListener('click', () => {
+    th.onclick = () => {
       if (state.sort.col === col.name) {
         state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
       } else {
@@ -57,7 +58,7 @@ export function renderTable() {
         state.sort.dir = 'asc';
       }
       renderTable();
-    });
+    };
     tr.appendChild(th);
   }
   thead.appendChild(tr);
