@@ -146,15 +146,20 @@ export function recomputeVelVenta(filteredRows) {
   else if (state.source === 'inciti' && 'Vel. Venta (un./mes)' in filteredRows[0]) _recomputeVelVentaXlsx(filteredRows);
 }
 
-function _groupByEdificio(rows) {
-  const byProj = new Map();
+// Agrupa por edificio + tipología — la velocidad de venta se calcula POR
+// TIPOLOGÍA (departamentos 1D se venden a un ritmo distinto que 3D), no
+// como un solo número repetido para todas las filas del proyecto.
+function _groupByEdificioTipo(rows) {
+  const byKey = new Map();
   for (const r of rows) {
     const proj = String(r['Edificio'] ?? '').trim();
+    const tipo = String(r['Tipología'] ?? '').trim();
     if (!proj) continue;
-    if (!byProj.has(proj)) byProj.set(proj, []);
-    byProj.get(proj).push(r);
+    const key = proj + '::' + tipo;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(r);
   }
-  return byProj;
+  return byKey;
 }
 
 function _median(arr) {
@@ -164,9 +169,11 @@ function _median(arr) {
 }
 
 function _recomputeVelVentaApi(filteredRows) {
-  for (const rows of _groupByEdificio(filteredRows).values()) {
-    // Mediana de velocidades por tipología — más robusta que el promedio
-    // frente a outliers y tipologías estancadas
+  for (const rows of _groupByEdificioTipo(filteredRows).values()) {
+    // Mediana de velocidades dentro de la MISMA tipología — más robusta que
+    // el promedio frente a outliers y tipologías estancadas. Se agrupa por
+    // edificio+tipología (no solo edificio) para que 1D y 3D del mismo
+    // proyecto no terminen compartiendo el mismo número.
     const velocidades = rows.map(r => Number(r['__velTipoRate']) || 0).filter(v => v > 0);
     const velMediana = velocidades.length ? +_median(velocidades).toFixed(2) : null;
     for (const r of rows) {
@@ -176,12 +183,12 @@ function _recomputeVelVentaApi(filteredRows) {
 }
 
 function _recomputeVelVentaXlsx(filteredRows) {
-  for (const rows of _groupByEdificio(filteredRows).values()) {
+  // Agrupa por edificio+tipología: cada tipología tiene su propia fecha de
+  // inicio de ventas y su propio stock, así que la velocidad se calcula
+  // independiente por tipología en vez de repetir un número a nivel proyecto.
+  for (const rows of _groupByEdificioTipo(filteredRows).values()) {
     const stock  = rows.reduce((s, r) => s + (Number(r['Stock Programa']) || 0), 0);
     const oferta = rows.reduce((s, r) => s + (Number(r['Disponibles'])    || 0), 0);
-    // Fecha de inicio de ventas más temprana entre las tipologías filtradas
-    // (si el filtro deja solo una tipología que partió después que otras, la
-    // velocidad se calcula desde SU propio inicio, no el del proyecto entero).
     const fechasInicio = rows.map(r => _parseEsDate(r['Fecha Inicio Ventas'])).filter(Boolean);
     const fechaInicio  = fechasInicio.length ? new Date(Math.min(...fechasInicio.map(d => d.getTime()))) : null;
     const fechaCorte   = _parseEsDate(rows[0]['Periodo']);
