@@ -108,20 +108,29 @@ function showTableTooltip(event, text) {
 
   globalTooltip = document.createElement('div');
   globalTooltip.className = 'table-tooltip-global';
-  globalTooltip.textContent = text;
+  globalTooltip.innerHTML = `<strong>${event.target.textContent}</strong><br>${text}`;
   document.body.appendChild(globalTooltip);
 
   const rect = event.target.getBoundingClientRect();
+  const tooltipWidth = 320;
+  let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+  if (left < 10) left = 10;
+  if (left + tooltipWidth > window.innerWidth - 10) left = window.innerWidth - tooltipWidth - 10;
+
   globalTooltip.style.position = 'fixed';
-  globalTooltip.style.left = (rect.left + rect.width / 2) + 'px';
-  globalTooltip.style.top = (rect.top - 10) + 'px';
+  globalTooltip.style.left = left + 'px';
+  globalTooltip.style.top = (rect.top - 80) + 'px';
   globalTooltip.style.opacity = '1';
+  globalTooltip.style.display = 'block';
 }
 
 function hideTableTooltip() {
   if (globalTooltip) {
-    globalTooltip.remove();
-    globalTooltip = null;
+    globalTooltip.style.opacity = '0';
+    setTimeout(() => {
+      if (globalTooltip) globalTooltip.remove();
+      globalTooltip = null;
+    }, 200);
   }
 }
 
