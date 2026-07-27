@@ -189,6 +189,70 @@ function _renderChart(tipologias) {
   });
 }
 
+// Exporta la serie mensual DESGLOSADA POR TIPOLOGÍA (una fila por mes×tipología,
+// no agregada como en el gráfico) para poder correr una regresión multivariable
+// en Excel: Disponibles / Ventas Netas / Precio Promedio como variables por mes
+// y tipología. Ignora el filtro local de chips (_tipoFilt) a propósito — el
+// gráfico se puede acotar visualmente a una tipología, pero el export siempre
+// trae todas las tipologías del mercado filtrado para no perder datos de la
+// regresión sin que el usuario se dé cuenta.
+function _exportXlsx() {
+  if (!state.rawEntities.length) return;
+
+  const allowedPairs = new Set(state.filtered.map(r => `${r['Edificio']}::${r['Tipología']}`));
+
+  const byKey = new Map(); // `${periodKey}::${tipo}` -> acumulador
+  const periodLabels = new Map();
+
+  for (const entity of state.rawEntities) {
+    for (const period of (entity.periods ?? [])) {
+      if (!periodLabels.has(period.key)) periodLabels.set(period.key, period.label ?? period.key);
+      for (const stage of (period.stages ?? [])) {
+        for (const prog of (stage.programs ?? [])) {
+          const tipo = _tipoFromPrograma(prog.program);
+          const pairKey = `${entity.name}::${tipo}`;
+          if (!allowedPairs.has(pairKey)) continue;
+
+          const key = `${period.key}::${tipo}`;
+          if (!byKey.has(key)) {
+            byKey.set(key, { periodKey: period.key, tipo, available: 0, sales: 0, priceSum: 0, priceCount: 0 });
+          }
+          const acc = byKey.get(key);
+          acc.available += Number(prog.available) || 0;
+          acc.sales     += Number(prog.netSales)  || 0;
+          const precio = Number(prog.priceUF);
+          if (!isNaN(precio) && precio > 0) { acc.priceSum += precio; acc.priceCount++; }
+        }
+      }
+    }
+  }
+
+  const rows = [...byKey.values()]
+    .sort((a, b) => a.periodKey === b.periodKey
+      ? a.tipo.localeCompare(b.tipo, 'es')
+      : a.periodKey.localeCompare(b.periodKey))
+    .map(r => ({
+      'Mes':                   periodLabels.get(r.periodKey) ?? r.periodKey,
+      'Período Key':           r.periodKey,
+      'Tipología':             r.tipo,
+      'Unidades Disponibles':  r.available,
+      'Ventas Netas':          r.sales,
+      'Precio Promedio (UF)':  r.priceCount ? +(r.priceSum / r.priceCount).toFixed(1) : null,
+    }));
+
+  if (!rows.length) {
+    alert('No hay datos para exportar con los filtros actuales.');
+    return;
+  }
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Absorción');
+  XLSX.writeFile(wb, `absorcion_por_tipologia_${Date.now()}.xlsx`);
+}
+
+let _exportListenerReady = false;
+
 export function renderAbsorcion() {
   const wrap  = $('#absorcionWrap');
   const empty = $('#absorcionEmpty');
@@ -203,6 +267,11 @@ export function renderAbsorcion() {
   }
   if (empty) empty.style.display = 'none';
   if (wrap)  wrap.style.display  = '';
+
+  if (!_exportListenerReady) {
+    _exportListenerReady = true;
+    $('#absorcionExportBtn')?.addEventListener('click', _exportXlsx);
+  }
 
   const tipologias = [...new Set(state.filtered.map(r => r['Tipología']).filter(Boolean))]
     .sort((a, b) => {
