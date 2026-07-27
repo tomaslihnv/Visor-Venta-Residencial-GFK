@@ -22,25 +22,18 @@ export function renderTable() {
   const tr = document.createElement('tr');
   for (const col of state.columns) {
     const th = document.createElement('th');
-    // Contenedor para label + tooltip
-    const labelContainer = document.createElement('div');
-    labelContainer.style.position = 'relative';
-    labelContainer.style.display = 'inline-block';
-    labelContainer.textContent = col.name;
+    th.textContent = col.name;
 
     // Agregar tooltip si existe descripción de la métrica
     const desc = METRIC_DESCRIPTIONS[col.name];
     if (desc) {
       th.style.cursor = 'help';
       th.classList.add('has-tooltip');
+      th.title = desc; // Fallback nativo
 
-      const tooltip = document.createElement('div');
-      tooltip.className = 'table-tooltip';
-      tooltip.textContent = desc;
-      labelContainer.appendChild(tooltip);
+      th.addEventListener('mouseenter', (e) => showTableTooltip(e, desc));
+      th.addEventListener('mouseleave', hideTableTooltip);
     }
-
-    th.appendChild(labelContainer);
 
     if (state.sort.col === col.name) {
       th.classList.add('sort-' + state.sort.dir);
@@ -106,6 +99,31 @@ export function renderTable() {
 $('#prevPage').addEventListener('click', () => { state.page = Math.max(1, state.page - 1); renderTable(); });
 $('#nextPage').addEventListener('click', () => { state.page++; renderTable(); });
 $('#pageSize').addEventListener('change', (e) => { state.pageSize = Number(e.target.value); state.page = 1; renderTable(); });
+
+// ============== Tooltips dinámicos ==============
+let globalTooltip = null;
+
+function showTableTooltip(event, text) {
+  hideTableTooltip();
+
+  globalTooltip = document.createElement('div');
+  globalTooltip.className = 'table-tooltip-global';
+  globalTooltip.textContent = text;
+  document.body.appendChild(globalTooltip);
+
+  const rect = event.target.getBoundingClientRect();
+  globalTooltip.style.position = 'fixed';
+  globalTooltip.style.left = (rect.left + rect.width / 2) + 'px';
+  globalTooltip.style.top = (rect.top - 10) + 'px';
+  globalTooltip.style.opacity = '1';
+}
+
+function hideTableTooltip() {
+  if (globalTooltip) {
+    globalTooltip.remove();
+    globalTooltip = null;
+  }
+}
 
 // ============== Búsqueda global ==============
 $('#searchInput').addEventListener('input', debounce((e) => {

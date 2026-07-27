@@ -336,27 +336,28 @@ th.sort-asc .sort-arrow,
 th.sort-desc .sort-arrow { color: #2563eb; }
 
 /* Tooltips en headers de tabla */
-th.has-tooltip { position: relative; }
+th.has-tooltip { cursor: help; }
 
-.table-tooltip {
-  position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
-  background: #1e3a5f; color: #fff; padding: 10px 14px;
-  border-radius: 6px; font-size: 12px; font-weight: normal;
-  white-space: normal; max-width: 300px; width: max-content;
-  pointer-events: none; z-index: 1000;
-  opacity: 0; transition: opacity 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+.table-tooltip-global {
+  position: fixed; z-index: 10000; pointer-events: none;
+  background: #1e3a5f; color: #fff;
+  padding: 10px 14px; border-radius: 6px;
+  font-size: 13px; font-weight: 500;
+  white-space: normal; max-width: 320px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
   line-height: 1.5; text-align: center;
-  padding: 8px 12px;
+  transform: translate(-50%, -100%);
+  opacity: 0;
+  animation: tooltipFadeIn 0.15s ease forwards;
 }
 
-.table-tooltip::after {
+.table-tooltip-global::after {
   content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
   border: 6px solid transparent; border-top-color: #1e3a5f;
 }
 
-th.has-tooltip:hover .table-tooltip {
-  opacity: 1;
+@keyframes tooltipFadeIn {
+  to { opacity: 1; }
 }
 
 tbody tr:hover { background: #f9fafb; }
