@@ -22,15 +22,26 @@ export function renderTable() {
   const tr = document.createElement('tr');
   for (const col of state.columns) {
     const th = document.createElement('th');
-    th.textContent = col.name;
+    // Contenedor para label + tooltip
+    const labelContainer = document.createElement('div');
+    labelContainer.style.position = 'relative';
+    labelContainer.style.display = 'inline-block';
+    labelContainer.textContent = col.name;
+
     // Agregar tooltip si existe descripción de la métrica
     const desc = METRIC_DESCRIPTIONS[col.name];
     if (desc) {
-      th.title = desc;
-      th.setAttribute('data-tooltip', desc);
       th.style.cursor = 'help';
       th.classList.add('has-tooltip');
+
+      const tooltip = document.createElement('div');
+      tooltip.className = 'table-tooltip';
+      tooltip.textContent = desc;
+      labelContainer.appendChild(tooltip);
     }
+
+    th.appendChild(labelContainer);
+
     if (state.sort.col === col.name) {
       th.classList.add('sort-' + state.sort.dir);
     }

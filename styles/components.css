@@ -337,23 +337,27 @@ th.sort-desc .sort-arrow { color: #2563eb; }
 
 /* Tooltips en headers de tabla */
 th.has-tooltip { position: relative; }
-th.has-tooltip::after {
-  content: attr(data-tooltip);
-  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-  background: #1e3a5f; color: #fff; padding: 8px 12px;
+
+.table-tooltip {
+  position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+  background: #1e3a5f; color: #fff; padding: 10px 14px;
   border-radius: 6px; font-size: 12px; font-weight: normal;
-  white-space: normal; max-width: 280px; width: max-content;
-  margin-bottom: 8px; pointer-events: none; z-index: 1000;
-  opacity: 0; transition: opacity 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  line-height: 1.4; text-align: center;
+  white-space: normal; max-width: 300px; width: max-content;
+  pointer-events: none; z-index: 1000;
+  opacity: 0; transition: opacity 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  line-height: 1.5; text-align: center;
+  padding: 8px 12px;
 }
-th.has-tooltip::before {
-  content: ''; position: absolute; bottom: calc(100% + -2px); left: 50%; transform: translateX(-50%);
+
+.table-tooltip::after {
+  content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
   border: 6px solid transparent; border-top-color: #1e3a5f;
-  opacity: 0; transition: opacity 0.2s; z-index: 1000;
 }
-th.has-tooltip:hover::after,
-th.has-tooltip:hover::before { opacity: 1; }
+
+th.has-tooltip:hover .table-tooltip {
+  opacity: 1;
+}
 
 tbody tr:hover { background: #f9fafb; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
