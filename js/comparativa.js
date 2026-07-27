@@ -40,7 +40,7 @@ function cell(content, cls = '') {
 
 // Descripciones de cómo se calcula cada métrica (mostradas en tooltip al hover)
 const TH_TOOLTIPS = {
-  'Vel. Venta': 'Mediana de unidades vendidas por mes, calculada de forma independiente para cada tipología. Se muestra "—" cuando esa tipología no registra ventas en toda la vida del proyecto.',
+  'Vel. Venta': 'Mediana de unidades vendidas por mes, calculada de forma independiente para cada tipología. 0.00 significa que la mayoría de los meses no tuvo ventas (no es un dato faltante).',
   'Disponibles': 'Número de unidades aún disponibles para venta.',
   'UF/m²': 'Precio por metro cuadrado útil, promedio de las unidades de esa tipología.',
   'Ticket UF': 'Precio promedio de venta de las unidades de esa tipología.',
@@ -366,13 +366,13 @@ export function renderComparativa() {
         html += cell(d?.sup    != null ? fmtDec(d.sup, 0)  : '—', 'comp-num comp-sep');
         html += cell(d?.ufm2   != null ? fmtDec(d.ufm2, 1) : '—', 'comp-num');
         html += cell(d?.ticket != null ? fmtInt(d.ticket)  : '—', 'comp-num');
-        html += cell(d?.velVenta != null ? fmtDec(d.velVenta, 1) : '—', 'comp-num');
+        html += cell(d?.velVenta != null ? fmtDec(d.velVenta, 2) : '—', 'comp-num');
       }
     } else {
       html += cell(p.overall?.sup    != null ? fmtDec(p.overall.sup, 0)  : '—', 'comp-num comp-sep');
       html += cell(p.overall?.ufm2   != null ? fmtDec(p.overall.ufm2, 1) : '—', 'comp-num');
       html += cell(p.overall?.ticket != null ? fmtInt(p.overall.ticket)  : '—', 'comp-num');
-      html += cell(p.overall?.velVenta != null ? fmtDec(p.overall.velVenta, 1) : '—', 'comp-num');
+      html += cell(p.overall?.velVenta != null ? fmtDec(p.overall.velVenta, 2) : '—', 'comp-num');
     }
     html += `</tr>`;
   }
@@ -394,13 +394,13 @@ export function renderComparativa() {
       html += `<td class="comp-num comp-sep"><strong>${d?.sup      != null ? fmtDec(d.sup, 0)      : '—'}</strong></td>`;
       html += `<td class="comp-num"><strong>${d?.ufm2     != null ? fmtDec(d.ufm2, 1)     : '—'}</strong></td>`;
       html += `<td class="comp-num"><strong>${d?.ticket   != null ? fmtInt(d.ticket)      : '—'}</strong></td>`;
-      html += `<td class="comp-num"><strong>${d?.velVenta != null ? fmtDec(d.velVenta, 1) : '—'}</strong></td>`;
+      html += `<td class="comp-num"><strong>${d?.velVenta != null ? fmtDec(d.velVenta, 2) : '—'}</strong></td>`;
     }
   } else {
     html += `<td class="comp-num comp-sep"><strong>${promedioOverall?.sup      != null ? fmtDec(promedioOverall.sup, 0)      : '—'}</strong></td>`;
     html += `<td class="comp-num"><strong>${promedioOverall?.ufm2     != null ? fmtDec(promedioOverall.ufm2, 1)     : '—'}</strong></td>`;
     html += `<td class="comp-num"><strong>${promedioOverall?.ticket   != null ? fmtInt(promedioOverall.ticket)      : '—'}</strong></td>`;
-    html += `<td class="comp-num"><strong>${promedioOverall?.velVenta != null ? fmtDec(promedioOverall.velVenta, 1) : '—'}</strong></td>`;
+    html += `<td class="comp-num"><strong>${promedioOverall?.velVenta != null ? fmtDec(promedioOverall.velVenta, 2) : '—'}</strong></td>`;
   }
   html += `</tr>`;
 

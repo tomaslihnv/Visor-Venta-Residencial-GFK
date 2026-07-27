@@ -173,9 +173,12 @@ function _recomputeVelVentaApi(filteredRows) {
     // Mediana de velocidades dentro de la MISMA tipología — más robusta que
     // el promedio frente a outliers y tipologías estancadas. Se agrupa por
     // edificio+tipología (no solo edificio) para que 1D y 3D del mismo
-    // proyecto no terminen compartiendo el mismo número.
-    const velocidades = rows.map(r => Number(r['__velTipoRate']) || 0).filter(v => v > 0);
-    const velMediana = velocidades.length ? +_median(velocidades).toFixed(2) : null;
+    // proyecto no terminen compartiendo el mismo número. No se descartan los
+    // valores en 0: una tipología que la mayoría de los meses no vendió nada
+    // tiene mediana 0 legítimamente — eso es información real, no un dato
+    // faltante, así que se muestra como "0.00" en vez de "—".
+    const velocidades = rows.map(r => Number(r['__velTipoRate']) || 0);
+    const velMediana = +_median(velocidades).toFixed(2);
     for (const r of rows) {
       r['Vel. Venta (un./mes)'] = velMediana;
     }
