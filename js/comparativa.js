@@ -38,20 +38,29 @@ function cell(content, cls = '') {
   return `<td class="${cls}">${content}</td>`;
 }
 
-function th(content, attrs = '') {
-  // Agregar tooltips para métricas conocidas
-  const TOOLTIPS = {
-    'Vel. Venta (un./mes)': 'Mediana de velocidad de venta por tipología. Métrica robusta que refleja el ritmo típico de ventas sin sesgos por outliers.',
-    'Disponibles': 'Número de unidades aún disponibles para venta.',
-    'UF/m²': 'Precio por metro cuadrado útil.',
-    'Ticket UF': 'Precio promedio de venta.',
-    'Útil m²': 'Superficie útil promedio en metros cuadrados.',
-    '% Stock disp.': 'Porcentaje de unidades disponibles respecto al stock total.',
-  };
+// Descripciones de cómo se calcula cada métrica (mostradas en tooltip al hover)
+const TH_TOOLTIPS = {
+  'Vel. Venta': 'Mediana de unidades vendidas por mes, calculada de forma independiente para cada tipología. Robusta frente a outliers: una tipología agotada o sin ventas recientes puede mostrar "—".',
+  'Disponibles': 'Número de unidades aún disponibles para venta.',
+  'UF/m²': 'Precio por metro cuadrado útil, promedio de las unidades de esa tipología.',
+  'Ticket UF': 'Precio promedio de venta de las unidades de esa tipología.',
+  'Útil m²': 'Superficie útil promedio en metros cuadrados.',
+  '% Stock disp.': 'Porcentaje de unidades disponibles respecto al stock total del proyecto.',
+};
 
-  const tooltip = TOOLTIPS[content];
-  const titleAttr = tooltip ? ` title="${tooltip}"` : '';
-  return `<th ${attrs}${titleAttr}>${content}</th>`;
+function th(content, attrs = '') {
+  const tooltip = TH_TOOLTIPS[content];
+  if (!tooltip) return `<th ${attrs}>${content}</th>`;
+
+  // Inyecta la clase has-tooltip dentro del class="" existente (si lo hay)
+  // en vez de agregar un segundo atributo class duplicado.
+  let mergedAttrs;
+  if (/class="/.test(attrs)) {
+    mergedAttrs = attrs.replace(/class="([^"]*)"/, 'class="$1 has-tooltip"');
+  } else {
+    mergedAttrs = `${attrs} class="has-tooltip"`;
+  }
+  return `<th ${mergedAttrs} data-tooltip="${tooltip}">${content}</th>`;
 }
 
 // Celda con % diferencia coloreada
@@ -451,4 +460,45 @@ export function renderComparativa() {
 
   html += `</tfoot></table></div>`;
   container.innerHTML = html;
+  _attachHeaderTooltips(container);
+}
+
+// ============== Tooltips flotantes en headers ==============
+let _compTooltipEl = null;
+
+function _showCompTooltip(e) {
+  _hideCompTooltip();
+  const text = e.currentTarget.getAttribute('data-tooltip');
+  if (!text) return;
+
+  _compTooltipEl = document.createElement('div');
+  _compTooltipEl.className = 'table-tooltip-global';
+  _compTooltipEl.innerHTML = `<strong>${e.currentTarget.textContent}</strong><br>${text}`;
+  document.body.appendChild(_compTooltipEl);
+
+  const rect = e.currentTarget.getBoundingClientRect();
+  const tooltipWidth = 320;
+  let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+  if (left < 10) left = 10;
+  if (left + tooltipWidth > window.innerWidth - 10) left = window.innerWidth - tooltipWidth - 10;
+
+  _compTooltipEl.style.position = 'fixed';
+  _compTooltipEl.style.left = left + 'px';
+  _compTooltipEl.style.top  = (rect.top - 12) + 'px';
+  _compTooltipEl.style.transform = 'translateY(-100%)';
+  _compTooltipEl.style.opacity = '1';
+}
+
+function _hideCompTooltip() {
+  if (_compTooltipEl) {
+    _compTooltipEl.remove();
+    _compTooltipEl = null;
+  }
+}
+
+function _attachHeaderTooltips(container) {
+  for (const th of container.querySelectorAll('th.has-tooltip')) {
+    th.onmouseenter = _showCompTooltip;
+    th.onmouseleave = _hideCompTooltip;
+  }
 }
