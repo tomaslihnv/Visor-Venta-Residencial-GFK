@@ -168,16 +168,11 @@ export function flattenEntities(entities) {
           // cargar los datos (antes de que corra ningún filtro), así que si
           // la clave no está presente en este punto la columna nunca aparece
           // y el resto de la app (comparativa, KPIs, mapa) no la encuentra.
-          'Vel. Venta Final (un./mes)': null,
-          'Vel. Venta Inicial (un./mes)': null,
-          'Vel. Venta Total (un./mes)': null,
+          'Vel. Venta (un./mes)': null,
           // Tasa mensual propia de ESTA tipología (no del proyecto entero) —
-          // campo interno que recomputeVelVenta() suma por proyecto sobre
-          // las filas actualmente filtradas para llenar 'Vel. Venta Final (un./mes)',
-          // 'Vel. Venta Inicial (un./mes)' y 'Vel. Venta Total (un./mes)'.
-          '__velTipoRate':        +((velByKey.get(velKey) ?? 0) / velDenom).toFixed(3),
-          '__velTipoRateInicial': +((velInitByKey.get(velKey) ?? 0) / velInitDenom).toFixed(3),
-          '__velTipoRateTotal':   +((velTotalByKey.get(velKey) ?? 0) / velTotalDenom).toFixed(3),
+          // campo interno que recomputeVelVenta() usa para calcular la mediana
+          // de velocidades por proyecto sobre las filas actualmente filtradas.
+          '__velTipoRate': +((velByKey.get(velKey) ?? 0) / velDenom).toFixed(3),
         };
       }).filter(r => r['Ticket UF'] != null && r['Ticket UF'] > 0);
     });

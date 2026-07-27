@@ -121,7 +121,7 @@ function normalizeInciti(rows) {
     // las tipologías — recomputeVelVenta() la recalcula sobre el subconjunto
     // filtrado cada vez que cambian los filtros, ver applyFilters()).
     const vel = _proyVel.get(String(row['Proyecto'] ?? '').trim());
-    if (vel !== undefined) out['Vel. Venta Final (un./mes)'] = vel;
+    if (vel !== undefined) out['Vel. Venta (un./mes)'] = vel;
     return out;
   });
 }
@@ -143,7 +143,7 @@ function normalizeInciti(rows) {
 export function recomputeVelVenta(filteredRows) {
   if (!filteredRows.length) return;
   if ('__velTipoRate' in filteredRows[0])            _recomputeVelVentaApi(filteredRows);
-  else if (state.source === 'inciti' && 'Vel. Venta Final (un./mes)' in filteredRows[0]) _recomputeVelVentaXlsx(filteredRows);
+  else if (state.source === 'inciti' && 'Vel. Venta (un./mes)' in filteredRows[0]) _recomputeVelVentaXlsx(filteredRows);
 }
 
 function _groupByEdificio(rows) {
@@ -157,19 +157,20 @@ function _groupByEdificio(rows) {
   return byProj;
 }
 
+function _median(arr) {
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 function _recomputeVelVentaApi(filteredRows) {
   for (const rows of _groupByEdificio(filteredRows).values()) {
-    // La tasa por tipología es aditiva (unidades/mes de cada una se suman
-    // al total del proyecto) — a diferencia de UF/m² o Ticket, que se
-    // promedian, acá promediar subestimaría la velocidad real cuando hay
-    // más de una tipología seleccionada.
-    const vel      = +rows.reduce((s, r) => s + (Number(r['__velTipoRate'])        || 0), 0).toFixed(2);
-    const velInit  = +rows.reduce((s, r) => s + (Number(r['__velTipoRateInicial']) || 0), 0).toFixed(2);
-    const velTotal = +rows.reduce((s, r) => s + (Number(r['__velTipoRateTotal'])   || 0), 0).toFixed(2);
+    // Mediana de velocidades por tipología — más robusta que el promedio
+    // frente a outliers y tipologías estancadas
+    const velocidades = rows.map(r => Number(r['__velTipoRate']) || 0).filter(v => v > 0);
+    const velMediana = velocidades.length ? +_median(velocidades).toFixed(2) : null;
     for (const r of rows) {
-      r['Vel. Venta Final (un./mes)']         = vel;
-      r['Vel. Venta Inicial (un./mes)'] = velInit;
-      r['Vel. Venta Total (un./mes)']   = velTotal;
+      r['Vel. Venta (un./mes)'] = velMediana;
     }
   }
 }
@@ -191,7 +192,7 @@ function _recomputeVelVentaXlsx(filteredRows) {
       const vendidas = stock - oferta;
       if (vendidas > 0) vel = +(vendidas / meses).toFixed(2);
     }
-    for (const r of rows) r['Vel. Venta Final (un./mes)'] = vel;
+    for (const r of rows) r['Vel. Venta (un./mes)'] = vel;
   }
 }
 

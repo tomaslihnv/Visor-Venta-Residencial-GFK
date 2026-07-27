@@ -1,6 +1,16 @@
 import { $, fmt, debounce } from './utils.js';
 import { state } from './data.js';
 
+// Descripciones de cómo se calculan las métricas (para tooltips)
+const METRIC_DESCRIPTIONS = {
+  'Vel. Venta (un./mes)': 'Mediana de velocidad de venta por tipología. Métrica robusta que refleja el ritmo típico de ventas sin sesgos por outliers.',
+  'Ticket UF': 'Precio promedio de venta.',
+  'UF/m²': 'Precio por metro cuadrado útil.',
+  '% Vendido': 'Porcentaje de unidades vendidas respecto al stock total.',
+  'Disponibles': 'Número de unidades aún disponibles para venta.',
+  'Stock Programa': 'Número total de unidades disponibles del proyecto.',
+};
+
 // ============== Tabla ==============
 export function renderTable() {
   const thead = $('#dataTable thead');
@@ -13,6 +23,11 @@ export function renderTable() {
   for (const col of state.columns) {
     const th = document.createElement('th');
     th.textContent = col.name;
+    // Agregar tooltip si existe descripción de la métrica
+    if (METRIC_DESCRIPTIONS[col.name]) {
+      th.title = METRIC_DESCRIPTIONS[col.name];
+      th.style.cursor = 'help';
+    }
     if (state.sort.col === col.name) {
       th.classList.add('sort-' + state.sort.dir);
     }

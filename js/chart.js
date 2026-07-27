@@ -104,8 +104,8 @@ export function renderKpis() {
     const display = a > 1 ? fmt(a) + '%' : (a * 100).toFixed(1) + '%';
     kpis.push({ label: '% Vendido promedio', value: display });
   }
-  if (state.columns.find(c => c.name === 'Vel. Venta Final (un./mes)')) {
-    kpis.push({ label: 'Vel. Venta Final promedio', value: fmt(avg('Vel. Venta Final (un./mes)')), sub: 'un./mes' });
+  if (state.columns.find(c => c.name === 'Vel. Venta (un./mes)')) {
+    kpis.push({ label: 'Vel. Venta mediana', value: fmt(avg('Vel. Venta (un./mes)')), sub: 'un./mes' });
   }
 
   for (const k of kpis) {
@@ -127,16 +127,14 @@ const palette = [
 let proyChart = null;
 let proyListenersReady = false;
 
-const PROY_UNITS = { ticket: 'UF', ufm2: 'UF/m²', util: 'm²', disp: 'un.', vel: 'un./mes', velIni: 'un./mes', velTot: 'un./mes', oferta: 'un.', pct: '' };
+const PROY_UNITS = { ticket: 'UF', ufm2: 'UF/m²', util: 'm²', disp: 'un.', vel: 'un./mes', oferta: 'un.', pct: '' };
 
 const PROY_METRICS = [
   { id: 'ticket', label: 'Ticket UF',            keys: ['ticket'],                      agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'ufm2',   label: 'UF/m²',               keys: ['uf/m', 'uf / m'],              agg: 'avg', fmt: v => v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) },
   { id: 'util',   label: 'Útil (m²)',            keys: ['útil', 'util', 'vendible'],    agg: 'avg', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'disp',   label: 'Disponibles',          keys: ['disponib'],                    agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
-  { id: 'vel',    label: 'Vel. Venta Final (un./mes)', keys: ['vel. venta', 'vel venta'],     agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
-  { id: 'velIni', label: 'Vel. Venta Inicial (un./mes)', keys: ['vel. venta inicial', 'vel venta inicial', 'velocidad inicial'], agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
-  { id: 'velTot', label: 'Vel. Venta Total (un./mes)',   keys: ['vel. venta total', 'vel venta total', 'velocidad total'],       agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
+  { id: 'vel',    label: 'Vel. Venta (un./mes)', keys: ['vel. venta', 'vel venta'],     agg: 'avg', fmt: v => v.toLocaleString('es-CL', { maximumFractionDigits: 1 }) },
   { id: 'oferta', label: 'Oferta total proyecto',keys: ['oferta total', 'oferta'],      agg: 'sum', fmt: v => Math.round(v).toLocaleString('es-CL') },
   { id: 'pct',    label: '% Vendido',            keys: ['% vendido', 'pct vendido', 'vendido'], agg: 'avg', fmt: v => {
     const pct = Math.abs(v) <= 1.05 ? v * 100 : v;
