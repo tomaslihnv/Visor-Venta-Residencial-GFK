@@ -39,7 +39,19 @@ function cell(content, cls = '') {
 }
 
 function th(content, attrs = '') {
-  return `<th ${attrs}>${content}</th>`;
+  // Agregar tooltips para métricas conocidas
+  const TOOLTIPS = {
+    'Vel. Venta (un./mes)': 'Mediana de velocidad de venta por tipología. Métrica robusta que refleja el ritmo típico de ventas sin sesgos por outliers.',
+    'Disponibles': 'Número de unidades aún disponibles para venta.',
+    'UF/m²': 'Precio por metro cuadrado útil.',
+    'Ticket UF': 'Precio promedio de venta.',
+    'Útil m²': 'Superficie útil promedio en metros cuadrados.',
+    '% Stock disp.': 'Porcentaje de unidades disponibles respecto al stock total.',
+  };
+
+  const tooltip = TOOLTIPS[content];
+  const titleAttr = tooltip ? ` title="${tooltip}"` : '';
+  return `<th ${attrs}${titleAttr}>${content}</th>`;
 }
 
 // Celda con % diferencia coloreada
