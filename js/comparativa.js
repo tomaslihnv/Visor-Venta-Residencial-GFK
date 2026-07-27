@@ -272,7 +272,7 @@ export function renderComparativa() {
       velVenta: colVelVenta ? avg(p.rows.map(r => numVal(r[colVelVenta]))) : null,
     };
 
-    return { ...p, disponibles, ofertaTotal, pctDisp, velVenta, byTipo, overall };
+    return { ...p, disponibles, ofertaTotal, pctDisp, byTipo, overall };
   });
 
   // Promedios de mercado
@@ -281,15 +281,17 @@ export function renderComparativa() {
   const promedioTipo = {};
   for (const tipo of tipologias) {
     promedioTipo[tipo] = {
-      sup:    avg(proyectos.map(p => p.byTipo[tipo]?.sup).filter(v => v !== null)),
-      ufm2:   avg(proyectos.map(p => p.byTipo[tipo]?.ufm2).filter(v => v !== null)),
-      ticket: avg(proyectos.map(p => p.byTipo[tipo]?.ticket).filter(v => v !== null)),
+      sup:      avg(proyectos.map(p => p.byTipo[tipo]?.sup).filter(v => v !== null)),
+      ufm2:     avg(proyectos.map(p => p.byTipo[tipo]?.ufm2).filter(v => v !== null)),
+      ticket:   avg(proyectos.map(p => p.byTipo[tipo]?.ticket).filter(v => v !== null)),
+      velVenta: avg(proyectos.map(p => p.byTipo[tipo]?.velVenta).filter(v => v !== null)),
     };
   }
   const promedioOverall = tipologias.length ? null : {
-    sup:    avg(proyectos.map(p => p.overall?.sup).filter(v => v !== null)),
-    ufm2:   avg(proyectos.map(p => p.overall?.ufm2).filter(v => v !== null)),
-    ticket: avg(proyectos.map(p => p.overall?.ticket).filter(v => v !== null)),
+    sup:      avg(proyectos.map(p => p.overall?.sup).filter(v => v !== null)),
+    ufm2:     avg(proyectos.map(p => p.overall?.ufm2).filter(v => v !== null)),
+    ticket:   avg(proyectos.map(p => p.overall?.ticket).filter(v => v !== null)),
+    velVenta: avg(proyectos.map(p => p.overall?.velVenta).filter(v => v !== null)),
   };
 
   const hasTipos       = tipologias.length > 0;
@@ -380,14 +382,16 @@ export function renderComparativa() {
   if (hasTipos) {
     for (const tipo of tipologias) {
       const d = promedioTipo[tipo];
-      html += `<td class="comp-num comp-sep"><strong>${d?.sup    != null ? fmtDec(d.sup, 0)  : '—'}</strong></td>`;
-      html += `<td class="comp-num"><strong>${d?.ufm2   != null ? fmtDec(d.ufm2, 1) : '—'}</strong></td>`;
-      html += `<td class="comp-num"><strong>${d?.ticket != null ? fmtInt(d.ticket)  : '—'}</strong></td>`;
+      html += `<td class="comp-num comp-sep"><strong>${d?.sup      != null ? fmtDec(d.sup, 0)      : '—'}</strong></td>`;
+      html += `<td class="comp-num"><strong>${d?.ufm2     != null ? fmtDec(d.ufm2, 1)     : '—'}</strong></td>`;
+      html += `<td class="comp-num"><strong>${d?.ticket   != null ? fmtInt(d.ticket)      : '—'}</strong></td>`;
+      html += `<td class="comp-num"><strong>${d?.velVenta != null ? fmtDec(d.velVenta, 1) : '—'}</strong></td>`;
     }
   } else {
-    html += `<td class="comp-num comp-sep"><strong>${promedioOverall?.sup    != null ? fmtDec(promedioOverall.sup, 0)  : '—'}</strong></td>`;
-    html += `<td class="comp-num"><strong>${promedioOverall?.ufm2   != null ? fmtDec(promedioOverall.ufm2, 1) : '—'}</strong></td>`;
-    html += `<td class="comp-num"><strong>${promedioOverall?.ticket != null ? fmtInt(promedioOverall.ticket)  : '—'}</strong></td>`;
+    html += `<td class="comp-num comp-sep"><strong>${promedioOverall?.sup      != null ? fmtDec(promedioOverall.sup, 0)      : '—'}</strong></td>`;
+    html += `<td class="comp-num"><strong>${promedioOverall?.ufm2     != null ? fmtDec(promedioOverall.ufm2, 1)     : '—'}</strong></td>`;
+    html += `<td class="comp-num"><strong>${promedioOverall?.ticket   != null ? fmtInt(promedioOverall.ticket)      : '—'}</strong></td>`;
+    html += `<td class="comp-num"><strong>${promedioOverall?.velVenta != null ? fmtDec(promedioOverall.velVenta, 1) : '—'}</strong></td>`;
   }
   html += `</tr>`;
 
@@ -406,12 +410,14 @@ export function renderComparativa() {
         html += cell(t?.sup  != null ? fmtDec(t.sup, 0)  : '—', 'comp-num comp-sep');
         html += cell(t?.ufm2 != null ? fmtDec(t.ufm2, 1) : '—', 'comp-num');
         html += cell(t?.sup != null && t?.ufm2 != null ? fmtInt(t.sup * t.ufm2) : '—', 'comp-num');
+        html += cell('—', 'comp-num');
       }
     } else {
       const t = mp.tipologias[0];
       html += cell(t?.sup  != null ? fmtDec(t.sup, 0)  : '—', 'comp-num comp-sep');
       html += cell(t?.ufm2 != null ? fmtDec(t.ufm2, 1) : '—', 'comp-num');
       html += cell(t?.sup != null && t?.ufm2 != null ? fmtInt(t.sup * t.ufm2) : '—', 'comp-num');
+      html += cell('—', 'comp-num');
     }
     html += `</tr>`;
 
@@ -430,6 +436,7 @@ export function renderComparativa() {
         html += vsCell('comp-num',           t?.ufm2,   prom?.ufm2);
         const mpTicket = t?.sup != null && t?.ufm2 != null ? t.sup * t.ufm2 : null;
         html += vsCell('comp-num', mpTicket, prom?.ticket);
+        html += cell('—', 'comp-num');
       }
     } else {
       const t = mp.tipologias[0];
@@ -437,6 +444,7 @@ export function renderComparativa() {
       html += vsCell('comp-num comp-sep', t?.sup,  promedioOverall?.sup);
       html += vsCell('comp-num',           t?.ufm2, promedioOverall?.ufm2);
       html += vsCell('comp-num',           mpTicket, promedioOverall?.ticket);
+      html += cell('—', 'comp-num');
     }
     html += `</tr>`;
   }
