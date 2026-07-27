@@ -50,10 +50,8 @@ function _gridPartition(polygon) {
 
 // ── Normalización ──────────────────────────────────────────────────────────
 
-function _median(arr) {
-  const sorted = arr.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+function _average(arr) {
+  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 }
 
 export function flattenEntities(entities) {
@@ -69,13 +67,21 @@ export function flattenEntities(entities) {
     const totalStock  = stages.reduce((s, st) => s + (st.totalStock     ?? 0), 0);
     const totalOferta = stages.reduce((s, st) => s + (st.availableUnits ?? 0), 0);
 
-    // Mediana de netSales por (etapa, programa) sobre la vida VENDIBLE del
+    // Promedio de netSales por (etapa, programa) sobre la vida VENDIBLE del
     // proyecto (desde su primer período hasta el mes en que se agota esa
     // tipología — available llega a 0 — o hasta el último período reportado
     // si nunca se agota). netSales ya viene mensual y neto por tipología
-    // directo de Inciti (no es acumulado); se guarda la serie mensual y se
-    // toma la MEDIANA (no el promedio) para que un mes con una venta
-    // atípicamente alta o baja no distorsione el número.
+    // directo de Inciti (no es acumulado).
+    //
+    // Se usa PROMEDIO, no mediana: con tipologías de poco stock (típico en
+    // 1D, con 5-30 unidades repartidas en 30-70+ meses) la venta es tan
+    // dispersa que más de la mitad de los meses da 0 aunque el proyecto
+    // venda de forma constante — la mediana estructuralmente da 0 en esos
+    // casos sin importar qué tan bien venda en términos absolutos. El
+    // promedio (total vendido / meses de vida vendible) sí refleja ese
+    // ritmo real, y el corte al agotarse (abajo) ya elimina el sesgo
+    // opuesto (la cola de meses muertos post-agotamiento inflaría la
+    // cantidad de meses sin bajar el numerador, deprimiendo el promedio).
     //
     // Corte al agotarse: Inciti sigue reportando una tipología agotada
     // (available=0, netSales=0) durante meses o años después de venderse
@@ -141,13 +147,13 @@ export function flattenEntities(entities) {
           // la clave no está presente en este punto la columna nunca aparece
           // y el resto de la app (comparativa, KPIs, mapa) no la encuentra.
           'Vel. Venta (un./mes)': null,
-          // Mediana mensual propia de ESTA tipología (no del proyecto
-          // entero) sobre toda la vida reportada del proyecto — campo
-          // interno que recomputeVelVenta() usa para calcular la mediana
-          // final por tipología sobre las filas actualmente filtradas
-          // (relevante cuando un edificio tiene varias etapas con la misma
-          // tipología nominal).
-          '__velTipoRate': +_median(velSeriesByKey.get(velKey) ?? [0]).toFixed(3),
+          // Promedio mensual propio de ESTA tipología (no del proyecto
+          // entero) sobre su vida vendible — campo interno que
+          // recomputeVelVenta() usa para calcular el promedio final por
+          // tipología sobre las filas actualmente filtradas (relevante
+          // cuando un edificio tiene varias etapas con la misma tipología
+          // nominal).
+          '__velTipoRate': +_average(velSeriesByKey.get(velKey) ?? [0]).toFixed(3),
         };
       }).filter(r => r['Ticket UF'] != null && r['Ticket UF'] > 0);
     });

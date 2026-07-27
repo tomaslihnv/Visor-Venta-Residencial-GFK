@@ -105,7 +105,7 @@ export function renderKpis() {
     kpis.push({ label: '% Vendido promedio', value: display });
   }
   if (state.columns.find(c => c.name === 'Vel. Venta (un./mes)')) {
-    kpis.push({ label: 'Vel. Venta mediana', value: fmt(avg('Vel. Venta (un./mes)')), sub: 'un./mes' });
+    kpis.push({ label: 'Vel. Venta promedio', value: fmt(avg('Vel. Venta (un./mes)')), sub: 'un./mes' });
   }
 
   for (const k of kpis) {

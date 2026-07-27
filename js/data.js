@@ -168,25 +168,27 @@ function _groupByEdificioTipo(rows) {
   return byKey;
 }
 
-function _median(arr) {
-  const sorted = arr.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+function _average(arr) {
+  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 }
 
 function _recomputeVelVentaApi(filteredRows) {
   for (const rows of _groupByEdificioTipo(filteredRows).values()) {
-    // Mediana de velocidades dentro de la MISMA tipología — más robusta que
-    // el promedio frente a outliers y tipologías estancadas. Se agrupa por
+    // Promedio de velocidades dentro de la MISMA tipología. Se agrupa por
     // edificio+tipología (no solo edificio) para que 1D y 3D del mismo
-    // proyecto no terminen compartiendo el mismo número. No se descartan los
-    // valores en 0: una tipología que la mayoría de los meses no vendió nada
-    // tiene mediana 0 legítimamente — eso es información real, no un dato
-    // faltante, así que se muestra como "0.00" en vez de "—".
+    // proyecto no terminen compartiendo el mismo número (relevante cuando
+    // un edificio tiene varias etapas con la misma tipología nominal, cada
+    // una con su propio __velTipoRate). Se usa promedio y no mediana: con
+    // tipologías de poco stock (1D típicamente) la venta mensual es tan
+    // dispersa que la mediana da 0 aunque el proyecto venda de forma
+    // constante — ver commit que cambió esto en api.js para el detalle.
+    // No se descartan los valores en 0: una tipología que casi no vendió
+    // sigue aportando su promedio real (bajo, pero no un dato faltante),
+    // así que se muestra como "0.XX" en vez de "—".
     const velocidades = rows.map(r => Number(r['__velTipoRate']) || 0);
-    const velMediana = +_median(velocidades).toFixed(2);
+    const velProm = +_average(velocidades).toFixed(2);
     for (const r of rows) {
-      r['Vel. Venta (un./mes)'] = velMediana;
+      r['Vel. Venta (un./mes)'] = velProm;
     }
   }
 }

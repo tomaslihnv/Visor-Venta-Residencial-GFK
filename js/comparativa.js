@@ -40,7 +40,7 @@ function cell(content, cls = '') {
 
 // Descripciones de cómo se calcula cada métrica (mostradas en tooltip al hover)
 const TH_TOOLTIPS = {
-  'Vel. Venta': 'Mediana de unidades vendidas por mes, calculada de forma independiente para cada tipología. 0.00 significa que la mayoría de los meses no tuvo ventas (no es un dato faltante).',
+  'Vel. Venta': 'Promedio de unidades vendidas por mes desde el inicio de venta hasta agotar stock (o hasta hoy si aún no se agota), calculado de forma independiente para cada tipología.',
   'Disponibles': 'Número de unidades aún disponibles para venta.',
   'UF/m²': 'Precio por metro cuadrado útil, promedio de las unidades de esa tipología.',
   'Ticket UF': 'Precio promedio de venta de las unidades de esa tipología.',
