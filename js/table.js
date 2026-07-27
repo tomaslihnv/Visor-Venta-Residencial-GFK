@@ -24,9 +24,12 @@ export function renderTable() {
     const th = document.createElement('th');
     th.textContent = col.name;
     // Agregar tooltip si existe descripción de la métrica
-    if (METRIC_DESCRIPTIONS[col.name]) {
-      th.title = METRIC_DESCRIPTIONS[col.name];
+    const desc = METRIC_DESCRIPTIONS[col.name];
+    if (desc) {
+      th.title = desc;
+      th.setAttribute('data-tooltip', desc);
       th.style.cursor = 'help';
+      th.classList.add('has-tooltip');
     }
     if (state.sort.col === col.name) {
       th.classList.add('sort-' + state.sort.dir);
