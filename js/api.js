@@ -50,8 +50,12 @@ function _gridPartition(polygon) {
 
 // ── Normalización ──────────────────────────────────────────────────────────
 
-// Ventana de meses para promediar 'netSales' al estimar velocidad de venta.
-// Se usa la cola PROPIA de cada proyecto (periods.slice(-N)), no los últimos
+function _median(arr) {
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 export function flattenEntities(entities) {
   return entities.flatMap(entity => {
     const loc     = entity.location ?? {};
@@ -65,26 +69,27 @@ export function flattenEntities(entities) {
     const totalStock  = stages.reduce((s, st) => s + (st.totalStock     ?? 0), 0);
     const totalOferta = stages.reduce((s, st) => s + (st.availableUnits ?? 0), 0);
 
-    // Promedio de netSales por (etapa, programa) sobre TODA la vida reportada
+    // Mediana de netSales por (etapa, programa) sobre TODA la vida reportada
     // del proyecto (desde su primer período hasta el último que Inciti
     // encuestó, sin importar si dejó de reportar hace años — ver 'Última
     // Actualización' para saber cuándo fue eso). netSales ya viene mensual y
-    // neto por tipología directo de Inciti (no es acumulado), así que
-    // promediarlo evita el problema clásico de inferir velocidad desde
-    // Stock-Disponible: un programa que queda con 1 unidad disponible para
-    // siempre no arrastra la velocidad a un número artificialmente bajo,
-    // porque acá se mide venta real reportada mes a mes, no el remanente
-    // de stock.
-    const velByKey = new Map();
+    // neto por tipología directo de Inciti (no es acumulado); se guarda la
+    // serie mensual completa y se toma la MEDIANA (no el promedio) para que
+    // un mes con una venta atípicamente alta o baja no distorsione el
+    // número — a diferencia de inferir velocidad desde Stock-Disponible, un
+    // programa que queda con 1 unidad disponible para siempre tampoco
+    // arrastra la velocidad hacia abajo, porque acá se mide venta real
+    // reportada mes a mes, no el remanente de stock.
+    const velSeriesByKey = new Map();
     for (const p of periods) {
       for (const st of (p.stages ?? [])) {
         for (const prog of (st.programs ?? [])) {
           const key = `${st.stageCode}::${prog.program}`;
-          velByKey.set(key, (velByKey.get(key) ?? 0) + (Number(prog.netSales) || 0));
+          if (!velSeriesByKey.has(key)) velSeriesByKey.set(key, []);
+          velSeriesByKey.get(key).push(Number(prog.netSales) || 0);
         }
       }
     }
-    const velDenom = periods.length || 1;
 
     const base = {
       'Edificio':    entity.name         ?? entity.id ?? '',
@@ -130,11 +135,13 @@ export function flattenEntities(entities) {
           // la clave no está presente en este punto la columna nunca aparece
           // y el resto de la app (comparativa, KPIs, mapa) no la encuentra.
           'Vel. Venta (un./mes)': null,
-          // Tasa mensual propia de ESTA tipología (no del proyecto entero),
-          // promediada sobre toda la vida reportada del proyecto — campo
-          // interno que recomputeVelVenta() usa para calcular la mediana por
-          // tipología sobre las filas actualmente filtradas.
-          '__velTipoRate': +((velByKey.get(velKey) ?? 0) / velDenom).toFixed(3),
+          // Mediana mensual propia de ESTA tipología (no del proyecto
+          // entero) sobre toda la vida reportada del proyecto — campo
+          // interno que recomputeVelVenta() usa para calcular la mediana
+          // final por tipología sobre las filas actualmente filtradas
+          // (relevante cuando un edificio tiene varias etapas con la misma
+          // tipología nominal).
+          '__velTipoRate': +_median(velSeriesByKey.get(velKey) ?? [0]).toFixed(3),
         };
       }).filter(r => r['Ticket UF'] != null && r['Ticket UF'] > 0);
     });
