@@ -58,27 +58,19 @@
           <span class="mp-chevron" id="mpChevron">▾</span>
         </div>
         <div id="mpPanelBody" class="mp-panel-body">
-          <div class="mp-field">
-            <label class="mp-label">Edificio</label>
-            <input type="text" id="mpEdificio" class="mp-input" placeholder="Ej: SITÛ Los Laureles" />
-          </div>
-          <div class="mp-field">
-            <label class="mp-label">Dirección</label>
-            <input type="text" id="mpDireccion" class="mp-input" placeholder="Calle 123, Comuna, Chile" />
+          <p id="mpNoneHint" class="hint">Ningún proyecto seleccionado.</p>
+          <div id="mpSelectedInfo" class="hidden" style="margin-bottom:10px;">
+            <strong id="mpSelectedNombre" style="display:block;"></strong>
+            <span id="mpSelectedDireccion" class="muted"></span>
             <span class="mp-geo-status" id="mpGeoStatus"></span>
           </div>
-
-          <div class="mp-tipos-header">
-            <span class="mp-label">Unidades Tipo</span>
-            <button id="mpAddTipo" class="mp-add-btn">+ Agregar</button>
-          </div>
-          <div id="mpTiposContainer" class="mp-tipos-container"></div>
-          <div class="filter-io-row">
-            <button id="exportTiposBtn" class="filter-io-btn" title="Exportar unidades tipo como JSON. También puedes arrastrar un .json aquí para cargarlas.">&#x21E9; Exportar unidades tipo</button>
-            <span id="tiposIOFeedback" class="filter-io-feedback" style="display:none"></span>
+          <div style="display:flex; gap:8px;">
+            <button id="mpOpenModalBtn" class="area-btn primary" style="flex:1;">Elegir proyecto</button>
+            <button id="mpEditBtn" class="area-btn hidden" title="Editar proyecto">Editar</button>
+            <button id="mpRemoveBtn" class="area-btn cancel hidden" title="Quitar proyecto">Quitar</button>
           </div>
 
-          <div class="mp-includes">
+          <div id="mpIncludes" class="mp-includes hidden">
             <span class="mp-label">Incluir en:</span>
             <label class="mp-check-row">
               <input type="checkbox" id="mpInComp" />
@@ -109,15 +101,15 @@
         <div class="mp-panel-header" id="filtrosPanelHeader">
           <span class="mp-panel-title">Filtros</span>
           <span id="filterCount" class="badge">0 / 0</span>
+          <span class="mp-header-actions">
+            <button type="button" id="saveFiltersBtn" class="mp-icon-btn" title="Guardar filtros con nombre (atado a Mi Proyecto)">&#x1F4BE;</button>
+            <button type="button" id="loadFiltersBtn" class="mp-icon-btn" title="Cargar un filtro guardado">&#x1F4C2;</button>
+          </span>
           <span class="mp-chevron" id="filtrosChevron">▾</span>
         </div>
         <div id="filtrosPanelBody" class="mp-panel-body">
           <div id="filtersContainer" class="filters">
             <p class="hint">Carga un Excel para empezar.</p>
-          </div>
-          <div class="filter-io-row">
-            <button id="exportFiltersBtn" class="filter-io-btn" title="Exportar filtros como JSON. También puedes arrastrar un .json aquí para cargar filtros.">&#x21E9; Exportar filtros</button>
-            <span id="filterIOFeedback" class="filter-io-feedback" style="display:none"></span>
           </div>
         </div>
       </div>

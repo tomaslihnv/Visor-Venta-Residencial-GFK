@@ -297,15 +297,15 @@ export function renderProyectos() {
     };
     if (metricId === 'ticket') {
       const items = tipos.filter(t => t.sup != null && t.ufm2 != null)
-        .map(t => [t.sup * t.ufm2, Number(t.cuantity) || 0]);
+        .map(t => [t.sup * t.ufm2, Number(t.cantidad) || 0]);
       mpVal = _wavg(items);
     } else if (metricId === 'ufm2') {
       const items = tipos.filter(t => t.ufm2 != null)
-        .map(t => [t.ufm2, Number(t.cuantity) || 0]);
+        .map(t => [t.ufm2, Number(t.cantidad) || 0]);
       mpVal = _wavg(items);
     } else if (metricId === 'util') {
       const items = tipos.filter(t => t.sup != null)
-        .map(t => [t.sup, Number(t.cuantity) || 0]);
+        .map(t => [t.sup, Number(t.cantidad) || 0]);
       mpVal = _wavg(items);
     }
     if (mpVal !== null) {

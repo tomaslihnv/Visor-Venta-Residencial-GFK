@@ -308,7 +308,7 @@ function onDataLoaded(rows) {
   $('#dashboard').classList.remove('hidden');
 
   // Importar y llamar funciones de otros módulos
-  import('./miProyecto.js').then(({ initMpPanel }) => initMpPanel());
+  // (Mi Proyecto ya se inicializa eager desde main.js — no depende de datos)
   import('./filters.js').then(({ buildFilters }) => buildFilters());
   import('./chart.js').then(({ populateDistribSelectors, populateSvpSelectors, populateProyectosSelectors }) => {
     populateDistribSelectors();

@@ -1,13 +1,17 @@
 import { $, $$ } from '../core/utils.js';
 import { resetFilters, ensureFilterOption } from './filters-modern.js';
-import { exportCsv, exportJson } from '../core/export.js';
+import { exportCsv } from '../core/export.js';
 import { initFilterIO } from '../core/filter-io.js';
-import { initTiposIO } from '../core/tipos-io.js';
+import { initSavedFilters } from '../../shared/savedFilters.js';
+import { initSavedFiltersModal } from '../../shared/savedFiltersModal.js';
 import { state, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, onDataLoaded } from './data.js';
-import { initMpPanel } from './miProyecto.js';
+import { initMpPanel, getSelectedProjectId } from './miProyecto.js';
 import { queryArea, flattenEntities, calcAreaKm2 } from './api.js';
 import * as RQ from './recurringQueries.js';
 import { initFiltersDrawer } from './filters-drawer.js';
+
+const SavedFilters      = initSavedFilters();
+const SavedFiltersModal = initSavedFiltersModal();
 
 // Mostrar Mi Proyecto siempre, sin esperar a que carguen datos
 initMpPanel();
@@ -45,14 +49,6 @@ document.addEventListener('mpchange', async () => {
 $('#filtrosPanelHeader')?.addEventListener('click', () => {
   const body    = $('#filtrosPanelBody');
   const chevron = $('#filtrosChevron');
-  body?.classList.toggle('mp-collapsed');
-  if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
-});
-
-// ── Datasets guardados collapse ────────────────────────────────────────────
-$('#savedDatasetsPanelHeader')?.addEventListener('click', () => {
-  const body    = $('#savedDatasetsPanelBody');
-  const chevron = $('#savedDatasetsChevron');
   body?.classList.toggle('mp-collapsed');
   if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
 });
@@ -141,14 +137,30 @@ import('./filters-modern.js').then(({ getFilterState, applyFilterState }) => {
   });
 });
 
-// ── Tipos IO ──────────────────────────────────────────────────────────────
-import('./miProyecto.js').then(({ getTiposState, applyTiposState }) => {
-  initTiposIO({
-    visorId:    'multifamily',
-    visorLabel: 'Multifamily',
-    getState:   getTiposState,
-    applyState: applyTiposState,
-    panelEl:    document.getElementById('mpPanelBody'),
+// ── Filtros guardados (1 Mi Proyecto : N filtros) ──────────────────────────
+$('#saveFiltersBtn')?.addEventListener('click', async (e) => {
+  e.stopPropagation(); // no disparar el collapse del panel de Filtros
+  const projectId = getSelectedProjectId();
+  if (!projectId) { alert('Selecciona un proyecto en "Mi Proyecto" primero.'); return; }
+  const nombre = prompt('Nombre del filtro:');
+  if (!nombre?.trim()) return;
+  const { getFilterState } = await import('./filters-modern.js');
+  try {
+    await SavedFilters.addFilter({ projectId, visorId: 'multifamily', nombre: nombre.trim(), filters: getFilterState(state) });
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$('#loadFiltersBtn')?.addEventListener('click', async (e) => {
+  e.stopPropagation(); // no disparar el collapse del panel de Filtros
+  const projectId = getSelectedProjectId();
+  if (!projectId) { alert('Selecciona un proyecto en "Mi Proyecto" primero.'); return; }
+  const { getFilterState, applyFilterState } = await import('./filters-modern.js');
+  SavedFiltersModal.open({
+    projectId, visorId: 'multifamily',
+    getState:   () => getFilterState(state),
+    applyState: (data) => applyFilterState(data, state),
   });
 });
 
@@ -910,13 +922,3 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
   document.getElementById('rqAddBtn')?.addEventListener('click', () => _openRQForm(null));
   document.getElementById('rqBackBtn')?.addEventListener('click', () => _showScreen(state.raw.length ? 'dashboard' : 'dropzone'));
 }
-
-// ── Guardar JSON (para data/multifamily/) ──────────────────────────────────
-$('#saveJsonBtn')?.addEventListener('click', () => {
-  if (!state.raw.length) { alert('Carga un Excel primero.'); return; }
-  const name = prompt('Nombre del archivo (sin extensión):', CSV_FILENAME);
-  if (!name) return;
-  const safeName = name.trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
-  if (!safeName) return;
-  exportJson(state, safeName);
-});
