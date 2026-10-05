@@ -235,8 +235,8 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
   function _initMapIfNeeded() {
     if (!areaMap) {
       areaMap = L.map('areaDrawMap', { doubleClickZoom: false }).setView([-33.45, -70.65], 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap © CARTO', maxZoom: 19,
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 19,
       }).addTo(areaMap);
       areaMap.on('click', e => {
         if (drawState !== 'drawing') return;
