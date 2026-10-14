@@ -1,4 +1,4 @@
-import { $, fmt } from './utils.js';
+import { $, fmt, num } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 import { getActiveTipoFilter } from './filters.js';
@@ -59,7 +59,7 @@ export function renderKpis() {
 
   const sum = (col) => rows.reduce((a, r) => a + (Number(r[col]) || 0), 0);
   const avg = (col) => {
-    const nums = rows.map(r => Number(r[col])).filter(v => !isNaN(v));
+    const nums = rows.map(r => num(r[col])).filter(v => !isNaN(v));
     return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
   };
   const dispCol = state.columns.find(c => c.name === 'Disponibles')?.name;
@@ -67,7 +67,7 @@ export function renderKpis() {
     if (!dispCol) return avg(col);
     let sw = 0, swv = 0;
     for (const r of rows) {
-      const v = Number(r[col]);
+      const v = num(r[col]);
       const w = Number(r[dispCol]) || 0;
       if (!isNaN(v) && w > 0) { swv += v * w; sw += w; }
     }
@@ -257,7 +257,7 @@ export function renderProyectos() {
   for (const r of state.filtered) {
     const edif = String(r[edifCol] ?? '').trim();
     if (!edif) continue;
-    const val = Number(r[metricCol]);
+    const val = num(r[metricCol]);
     if (isNaN(val)) continue;
     const w = (unidCol && metric.agg !== 'sum') ? (Number(r[unidCol]) || 1) : 1;
     if (!byEdif[edif]) byEdif[edif] = [];
@@ -1266,7 +1266,7 @@ function _computeSmoothCDF(sortedVals, nPoints = 200) {
 
 // Curva de cuantiles: X = percentil (0–100%), Y = valor
 function computeQuantileCurve(rows, col) {
-  const vals = rows.map(r => Number(r[col])).filter(v => !isNaN(v));
+  const vals = rows.map(r => num(r[col])).filter(v => !isNaN(v));
   if (vals.length < 2) return [];
   vals.sort((a, b) => a - b);
   const n = vals.length;
@@ -1346,7 +1346,7 @@ export function renderDistrib() {
   const ctx = $('#distribChart').getContext('2d');
 
   const sortedVals = state.filtered
-    .map(r => Number(r[col]))
+    .map(r => num(r[col]))
     .filter(v => !isNaN(v))
     .sort((a, b) => a - b);
 
@@ -1375,7 +1375,7 @@ export function renderDistrib() {
     const useWeight = col !== 'Disponibles' && state.columns.some(c => c.name === 'Disponibles');
     const histPairs = state.filtered
       .map(r => ({
-        v: Number(r[col]),
+        v: num(r[col]),
         w: useWeight ? Math.max(1, Math.round(Number(r['Disponibles']) || 0)) : 1,
       }))
       .filter(p => !isNaN(p.v) &&

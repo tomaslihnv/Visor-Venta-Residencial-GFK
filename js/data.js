@@ -70,11 +70,14 @@ const INCITI_TRANSFORMS = {
 };
 
 function normalizeInciti(rows) {
-  // Eliminar tipologías sin disponibilidad ni precio (ya vendidas / sin datos)
-  const active = rows.filter(r => {
-    const oferta = Number(r['Oferta Programa']);
-    const precio  = r['Precio UF'];
-    return !(oferta === 0 && (precio === '' || precio == null));
+  // Las tipologías agotadas (0 disponibles, sin precio) se CONSERVAN: su
+  // stock existe aunque no haya precio publicado. El precio vacío o en 0
+  // queda en null ("sin dato") para no bajar los promedios.
+  const active = rows.map(r => {
+    for (const c of ['Precio UF', 'UF/m2']) {
+      if (c in r && !(Number(r[c]) > 0)) r[c] = null;
+    }
+    return r;
   });
 
   // ── Pre-pase: velocidad de venta a nivel proyecto (sobre TODAS las filas, no solo active) ──

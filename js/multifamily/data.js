@@ -41,13 +41,19 @@ function _normalizeRow(row) {
   return out;
 }
 
+const _pos = v => v !== '' && v != null && !isNaN(Number(v)) && Number(v) > 0;
+const RENT_COLS = ['Arriendo UF', 'Arriendo', 'UF/m²'];
+
+// Un programa 100% arrendado trae renta 0/vacía pero su stock existe: se
+// conserva la fila con la renta en null ("sin dato") — mismo criterio que
+// flattenEntities en api.js. Solo se descartan filas sin renta NI stock.
 function _normalizeRows(rows) {
   return rows
     .map(_normalizeRow)
-    .filter(r => {
-      // Filtrar filas sin datos de arriendo
-      const v = r['Arriendo UF'] ?? r['Arriendo'];
-      return v !== '' && v != null && !isNaN(Number(v)) && Number(v) > 0;
+    .filter(r => _pos(r['Arriendo UF'] ?? r['Arriendo']) || _pos(r['Stock']))
+    .map(r => {
+      for (const c of RENT_COLS) if (c in r && !_pos(r[c])) r[c] = null;
+      return r;
     });
 }
 

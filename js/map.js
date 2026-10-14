@@ -1,5 +1,5 @@
 import { state } from './data.js';
-import { $, fmt, norm } from './utils.js';
+import { $, fmt, norm, num } from './utils.js';
 import { mp } from './miProyecto.js';
 
 // ============== Cache y estado ==============
@@ -889,7 +889,7 @@ export function renderMap() {
   let priceMin = 0, priceMax = 1;
   if (inPriceMode) {
     const allPrices = points.flatMap(p =>
-      p.rows.map(r => Number(r[ufm2Col])).filter(v => !isNaN(v))
+      p.rows.map(r => num(r[ufm2Col])).filter(v => !isNaN(v))
     );
     if (allPrices.length) {
       priceMin = Math.min(...allPrices);
@@ -913,7 +913,7 @@ export function renderMap() {
     let marker;
 
     if (inPriceMode) {
-      const prices = rows.map(r => Number(r[ufm2Col])).filter(v => !isNaN(v));
+      const prices = rows.map(r => num(r[ufm2Col])).filter(v => !isNaN(v));
       const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
       const color = avg !== null ? priceToColor(avg, priceMin, priceMax) : '#60a5fa';
       marker = L.circleMarker([lat, lng], {
