@@ -12,6 +12,9 @@ export const fmt = (v) => {
 };
 
 export const isNumeric = (v) => v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
+// Como Number(), pero null/'' → NaN en vez de 0: un precio vacío (tipología
+// agotada) es "sin dato" y lo descartan los filtros !isNaN de los promedios.
+export const num = (v) => (v === null || v === undefined || v === '') ? NaN : Number(v);
 
 export function detectColType(values) {
   let nums = 0, total = 0;

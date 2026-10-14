@@ -1,4 +1,4 @@
-import { $, debounce, fmt, norm, fmtTipo, monthKeyToQuarter, quarterSortKey } from './utils.js';
+import { $, debounce, fmt, norm, num, fmtTipo, monthKeyToQuarter, quarterSortKey } from './utils.js';
 import { state, recomputeVelVenta } from './data.js';
 
 // ============== Resolución de columnas ==============
@@ -251,7 +251,7 @@ function _buildSupTipo(key, supCol, tipoCol, label, container) {
 
 // --- Min / Max inputs simples ---
 function _buildMinMax(key, colName, label, container) {
-  const nums = state.raw.map(r => Number(r[colName])).filter(v => !isNaN(v));
+  const nums = state.raw.map(r => num(r[colName])).filter(v => !isNaN(v));
   if (!nums.length) return;
   const dMin = Math.floor(Math.min(...nums));
   const dMax = Math.ceil(Math.max(...nums));
@@ -311,7 +311,7 @@ function _buildMinMax(key, colName, label, container) {
 
 // --- Slider dual ---
 function _buildSlider(key, colName, label, container) {
-  const nums = state.raw.map(r => Number(r[colName])).filter(v => !isNaN(v));
+  const nums = state.raw.map(r => num(r[colName])).filter(v => !isNaN(v));
   if (!nums.length) return;
   const dMin = Math.floor(Math.min(...nums)), dMax = Math.ceil(Math.max(...nums));
 
@@ -495,12 +495,12 @@ export function applyFilters() {
       }
     }
     if (cols.ticket) {
-      const v = Number(row[cols.ticket]);
+      const v = num(row[cols.ticket]);
       if (F.ticketMin !== null && (isNaN(v) || v < F.ticketMin)) return false;
       if (F.ticketMax !== null && (isNaN(v) || v > F.ticketMax)) return false;
     }
     if (cols.ufm2) {
-      const v = Number(row[cols.ufm2]);
+      const v = num(row[cols.ufm2]);
       if (F.ufm2Min !== null && (isNaN(v) || v < F.ufm2Min)) return false;
       if (F.ufm2Max !== null && (isNaN(v) || v > F.ufm2Max)) return false;
     }
@@ -555,7 +555,7 @@ function _updateRangeLimits() {
     const ref = refs[key];
     if (!ref) continue;
 
-    const nums = state.filtered.map(r => Number(r[ref.colName])).filter(v => !isNaN(v));
+    const nums = state.filtered.map(r => num(r[ref.colName])).filter(v => !isNaN(v));
     if (!nums.length) continue;
     const newMin = Math.floor(Math.min(...nums));
     const newMax = Math.ceil(Math.max(...nums));

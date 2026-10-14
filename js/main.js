@@ -1,10 +1,19 @@
 import { $, $$ } from './utils.js';
 import { resetFilters } from './filters.js';
-import { initFilterIO } from './core/filter-io.js';
-import { initTiposIO } from './core/tipos-io.js';
+import { initSavedFilters } from '../shared/savedFilters.js';
+import { initSavedFiltersModal } from '../shared/savedFiltersModal.js';
 import { queryArea, flattenEntities, calcAreaKm2 } from './api.js';
 import { state, onDataLoaded } from './data.js';
+import { initMpPanel } from './miProyecto.js';
 import * as RQ from './recurringQueries.js';
+
+const SavedFilters      = initSavedFilters();
+const SavedFiltersModal = initSavedFiltersModal();
+
+// Mostrar Mi Proyecto siempre, sin esperar a que se cargue un Excel o se
+// consulte a Inciti — así se puede elegir el proyecto ANTES de consultar
+// (mismo comportamiento que ya tenía Multifamily).
+initMpPanel();
 
 // Re-renderizar la pestaña activa cuando cambia Mi Proyecto
 document.addEventListener('mpchange', () => {
@@ -77,25 +86,29 @@ $('#exportCompBtn').addEventListener('click', async () => {
   }
 });
 
-// ============== Filter IO ==============
-import('./filters.js').then(({ getFilterState, applyFilterState }) => {
-  initFilterIO({
-    visorId:    'venta',
-    getState:   getFilterState,
-    applyState: applyFilterState,
-    panelEl:    document.getElementById('filtrosPanelBody'),
-  });
+// ============== Filtros guardados (1 Mi Proyecto : N filtros) ==============
+$('#saveFiltersBtn')?.addEventListener('click', async (e) => {
+  e.stopPropagation(); // no disparar el collapse del panel de Filtros
+  const { getSelectedProjectId } = await import('./miProyecto.js');
+  const projectId = getSelectedProjectId();
+  if (!projectId) { alert('Selecciona un proyecto en "Mi Proyecto" primero.'); return; }
+  const nombre = prompt('Nombre del filtro:');
+  if (!nombre?.trim()) return;
+  const { getFilterState } = await import('./filters.js');
+  try {
+    await SavedFilters.addFilter({ projectId, visorId: 'venta', nombre: nombre.trim(), filters: getFilterState() });
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
-// ============== Tipos IO ==============
-import('./miProyecto.js').then(({ getTiposState, applyTiposState }) => {
-  initTiposIO({
-    visorId:    'venta',
-    visorLabel: 'Venta',
-    getState:   getTiposState,
-    applyState: applyTiposState,
-    panelEl:    document.getElementById('mpPanelBody'),
-  });
+$('#loadFiltersBtn')?.addEventListener('click', async (e) => {
+  e.stopPropagation(); // no disparar el collapse del panel de Filtros
+  const { getSelectedProjectId } = await import('./miProyecto.js');
+  const projectId = getSelectedProjectId();
+  if (!projectId) { alert('Selecciona un proyecto en "Mi Proyecto" primero.'); return; }
+  const { getFilterState, applyFilterState } = await import('./filters.js');
+  SavedFiltersModal.open({ projectId, visorId: 'venta', getState: getFilterState, applyState: applyFilterState });
 });
 
 // ============== Visual options toggle panels ==============

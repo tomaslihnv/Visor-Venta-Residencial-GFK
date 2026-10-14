@@ -129,8 +129,11 @@ export function flattenEntities(entities) {
           ...base,
           'Tipología':           (prog.program ?? '').replace(/^(\d+D)\d+B$/i, '$1'),
           'Disponibles':         _num(prog.available),
-          'Ticket UF':           _num(prog.priceUF),
-          'UF/m²':               _num(prog.ufPerM2),
+          // Inciti manda priceUF/ufPerM2 = 0 en tipologías agotadas (0
+          // disponibles, no hay precio publicado). El stock existe, el
+          // precio no: null ("sin dato") en vez de 0 para no bajar promedios.
+          'Ticket UF':           _price(prog.priceUF),
+          'UF/m²':               _price(prog.ufPerM2),
           'Útil (m²)':           _num(prog.avgUsefulM2),
           'Interior (m²)':       _num(prog.avgUsefulM2),
           'Terraza (m²)':        _num(prog.avgTerraceM2),
@@ -155,7 +158,9 @@ export function flattenEntities(entities) {
           // nominal).
           '__velTipoRate': +_average(velSeriesByKey.get(velKey) ?? [0]).toFixed(3),
         };
-      }).filter(r => r['Ticket UF'] != null && r['Ticket UF'] > 0);
+      });
+      // Antes se descartaban las filas con Ticket UF ≤ 0, lo que borraba del
+      // Resumen las tipologías agotadas junto con su stock. Ahora se conservan.
     });
   });
 }
@@ -175,6 +180,11 @@ function _num(v) {
   if (v == null || v === '') return null;
   const n = Number(v);
   return isNaN(n) ? null : n;
+}
+
+function _price(v) {
+  const n = _num(v);
+  return n != null && n > 0 ? n : null;
 }
 
 // ── Fetch ──────────────────────────────────────────────────────────────────

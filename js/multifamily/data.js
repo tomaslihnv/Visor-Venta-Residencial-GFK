@@ -1,5 +1,5 @@
 import { detectColType } from '../core/utils.js';
-import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME, SAVED_DATASETS } from './config.js';
+import { COLUMN_MAP, FILTERS, KPIS, PROYECTOS_METRICS, SVP, CRUZ, DISTRIB_COLS, MAP, COMPARATIVA, CSV_FILENAME } from './config.js';
 import { attachStarMetrics } from './estrellas.js';
 
 // ── Estado global del visor ────────────────────────────────────────────────
@@ -41,13 +41,19 @@ function _normalizeRow(row) {
   return out;
 }
 
+const _pos = v => v !== '' && v != null && !isNaN(Number(v)) && Number(v) > 0;
+const RENT_COLS = ['Arriendo UF', 'Arriendo', 'UF/m²'];
+
+// Un programa 100% arrendado trae renta 0/vacía pero su stock existe: se
+// conserva la fila con la renta en null ("sin dato") — mismo criterio que
+// flattenEntities en api.js. Solo se descartan filas sin renta NI stock.
 function _normalizeRows(rows) {
   return rows
     .map(_normalizeRow)
-    .filter(r => {
-      // Filtrar filas sin datos de arriendo
-      const v = r['Arriendo UF'] ?? r['Arriendo'];
-      return v !== '' && v != null && !isNaN(Number(v)) && Number(v) > 0;
+    .filter(r => _pos(r['Arriendo UF'] ?? r['Arriendo']) || _pos(r['Stock']))
+    .map(r => {
+      for (const c of RENT_COLS) if (c in r && !_pos(r[c])) r[c] = null;
+      return r;
     });
 }
 
@@ -100,86 +106,6 @@ function loadFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// ── Datasets guardados (JSON pre-cargados) ─────────────────────────────────
-function loadSavedDataset(entry) {
-  const fileNameEl = document.getElementById('fileName');
-  fetch(entry.file)
-    .then(r => {
-      if (!r.ok) throw new Error(`No se encontró ${entry.file}`);
-      return r.json();
-    })
-    .then(rows => attachStarMetrics(rows))
-    .then(rows => {
-      if (fileNameEl) fileNameEl.textContent = entry.label;
-      onDataLoaded(rows);
-    })
-    .catch(err => {
-      console.error(err);
-      alert('Error cargando dataset guardado: ' + err.message);
-    });
-}
-
-function _renderSavedDatasetsList() {
-  const cont = document.getElementById('savedDatasetsList');
-  if (!cont) return;
-  if (!SAVED_DATASETS.length) {
-    cont.innerHTML = '<p class="hint">Sin datasets guardados todavía.</p>';
-    return;
-  }
-
-  const selected = new Set();
-
-  cont.innerHTML = SAVED_DATASETS.map((entry, i) => `
-    <button type="button" class="saved-dataset-btn" data-idx="${i}">${entry.label}</button>
-  `).join('');
-
-  async function _loadSelected() {
-    if (!selected.size) {
-      document.getElementById('dashboard')?.classList.add('hidden');
-      document.getElementById('dropzone')?.classList.remove('hidden');
-      const fileNameEl = document.getElementById('fileName');
-      if (fileNameEl) fileNameEl.textContent = '';
-      return;
-    }
-    const entries = [...selected].map(i => SAVED_DATASETS[i]);
-    cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.disabled = true);
-    try {
-      const results = await Promise.all(
-        entries.map(e => fetch(e.file).then(r => {
-          if (!r.ok) throw new Error(`No se encontró ${e.file}`);
-          return r.json();
-        }))
-      );
-      const merged = results.flat();
-      const label  = entries.map(e => e.label).join(' + ');
-      const fileNameEl = document.getElementById('fileName');
-      if (fileNameEl) fileNameEl.textContent = label;
-      const withStars = await attachStarMetrics(merged);
-      onDataLoaded(withStars);
-    } catch (err) {
-      console.error(err);
-      alert('Error cargando datasets: ' + err.message);
-    } finally {
-      cont.querySelectorAll('.saved-dataset-btn').forEach(b => b.disabled = false);
-    }
-  }
-
-  cont.querySelectorAll('.saved-dataset-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = +btn.dataset.idx;
-      if (selected.has(idx)) {
-        selected.delete(idx);
-        btn.classList.remove('active');
-      } else {
-        selected.add(idx);
-        btn.classList.add('active');
-      }
-      _loadSelected();
-    });
-  });
-}
-_renderSavedDatasetsList();
-
 // ── onDataLoaded ───────────────────────────────────────────────────────────
 export function onDataLoaded(rows) {
   state.raw      = rows;
@@ -187,9 +113,9 @@ export function onDataLoaded(rows) {
   state.excludedProjects = new Set();
 
   // El histórico solo tiene sentido sobre una consulta a Inciti reciente
-  // (trae la serie de períodos completa). Si este load es un Excel o un
-  // dataset guardado, no hay periods[] disponibles — limpiar la fuente
-  // anterior para no mostrar histórico de una consulta que ya no aplica.
+  // (trae la serie de períodos completa). Si este load es un Excel, no hay
+  // periods[] disponibles — limpiar la fuente anterior para no mostrar
+  // histórico de una consulta que ya no aplica.
   // (main.js vuelve a fijarla justo después de esta llamada cuando el
   // load sí viene de una consulta Inciti recién confirmada.)
   window._mfHistoricoSource = null;

@@ -10,7 +10,6 @@ export function initFiltersDrawer() {
   const sidebar = document.getElementById('sidebar');
   const drawer  = document.getElementById('filtrosDrawer');
   const btn     = document.getElementById('mobileFiltersBtn');
-  const savedDatasets = document.getElementById('savedDatasetsPanel');
   if (!panel || !sidebar || !drawer || !btn) return;
 
   let inDrawer = false;
@@ -21,8 +20,7 @@ export function initFiltersDrawer() {
       drawer.appendChild(panel);
       inDrawer = true;
     } else if (!narrow && inDrawer) {
-      if (savedDatasets) sidebar.insertBefore(panel, savedDatasets);
-      else sidebar.appendChild(panel);
+      sidebar.appendChild(panel);
       drawer.hide?.();
       inDrawer = false;
     }

@@ -87,7 +87,6 @@
       <button id="btnAreaQuery" class="ghost-btn" title="Dibujar un polígono en el mapa">&#128205; Dibujar Área</button>
       <button id="btnComunaQuery" class="ghost-btn" title="Consultar por límites de una comuna entera">&#127969; Por Comuna</button>
       <button id="btnRecurringQuery" class="ghost-btn" title="Consultas guardadas a Inciti (comunas y proyecto propio)">&#128257; Consultas Recurrentes</button>
-      <button id="saveJsonBtn" class="ghost-btn" title="Descargar los datos cargados como JSON para guardarlos en data/multifamily/">Guardar JSON</button>
       <button id="resetBtn" class="ghost-btn" title="Limpiar filtros">Limpiar filtros</button>
     </div>
   </header>
@@ -102,52 +101,43 @@
           <span class="mp-chevron" id="mpChevron">▾</span>
         </div>
         <div id="mpPanelBody" class="mp-panel-body">
-          <div class="mp-field">
-            <label class="mp-label">Proyecto</label>
-            <input type="text" id="mpEdificio" class="mp-input" placeholder="Ej: Torre Norte" />
-          </div>
-          <div class="mp-field">
-            <label class="mp-label">Dirección</label>
-            <input type="text" id="mpDireccion" class="mp-input" placeholder="Calle 123, Comuna, Chile" />
+          <p id="mpNoneHint" class="hint">Ningún proyecto seleccionado.</p>
+          <div id="mpSelectedInfo" class="hidden" style="margin-bottom:10px;">
+            <strong id="mpSelectedNombre" style="display:block;"></strong>
+            <span id="mpSelectedDireccion" class="muted"></span>
             <span class="mp-geo-status" id="mpGeoStatus"></span>
           </div>
-
-          <!-- Métricas del edificio -->
-          <div class="mp-field">
-            <label class="mp-label">Métricas del edificio</label>
-            <div class="mp-tipo-metrics">
-              <label class="mp-metric-row">
-                <span>Stock</span>
-                <input type="number" id="mpStock" class="mp-metric-input mp-input" min="0" step="1" placeholder="—" />
-              </label>
-              <label class="mp-metric-row">
-                <span>Vacancia (%)</span>
-                <input type="number" id="mpVacancia" class="mp-metric-input mp-input" min="0" max="100" step="0.1" placeholder="—" />
-              </label>
-            </div>
+          <div style="display:flex; gap:8px;">
+            <button id="mpOpenModalBtn" class="area-btn primary" style="flex:1;">Elegir proyecto</button>
+            <button id="mpEditBtn" class="area-btn hidden" title="Editar proyecto">Editar</button>
+            <button id="mpRemoveBtn" class="area-btn cancel hidden" title="Quitar proyecto">Quitar</button>
           </div>
 
-          <!-- Unidades / tipologías -->
-          <div class="mp-field">
-            <div class="mp-tipos-header">
-              <label class="mp-label">Unidades por tipología</label>
-              <button id="mpAddTipo" class="mp-add-btn" type="button">+ Agregar</button>
+          <div id="mpExtras" class="hidden">
+            <div class="mp-field" style="margin-top:10px;">
+              <label class="mp-label">Métricas del edificio</label>
+              <div class="mp-tipo-metrics">
+                <div class="mp-metric-row">
+                  <span>Stock (calculado)</span>
+                  <span class="mp-metric-computed" id="mpStockValue">—</span>
+                </div>
+                <label class="mp-metric-row">
+                  <span>Vacancia (%)</span>
+                  <input type="number" id="mpVacancia" class="mp-metric-input mp-input" min="0" max="100" step="0.1" placeholder="—" />
+                </label>
+              </div>
+              <p class="muted-small" style="margin-top:4px;">Vacancia es un dato local tuyo — no se comparte con otros usuarios del proyecto.</p>
             </div>
-            <div id="mpTiposContainer" class="mp-tipos-container"></div>
-            <div class="filter-io-row">
-              <button id="exportTiposBtn" class="filter-io-btn" title="Exportar unidades tipo como JSON. También puedes arrastrar un .json aquí para cargarlas.">&#x21E9; Exportar unidades tipo</button>
-              <span id="tiposIOFeedback" class="filter-io-feedback" style="display:none"></span>
-            </div>
-          </div>
 
-          <div class="mp-includes">
-            <span class="mp-label">Incluir en:</span>
-            <label class="mp-check-row"><input type="checkbox" id="mpInComp" /><span>Tabla comparativa</span></label>
-            <label class="mp-check-row"><input type="checkbox" id="mpInMapa" /><span>Mapa</span></label>
-            <label class="mp-check-row"><input type="checkbox" id="mpInDistrib" /><span>Distribución</span></label>
-            <label class="mp-check-row"><input type="checkbox" id="mpInSvp" /><span>Sup. vs Arriendo</span></label>
-            <label class="mp-check-row"><input type="checkbox" id="mpInCruz" /><span>Cruz</span></label>
-            <label class="mp-check-row"><input type="checkbox" id="mpInProy" /><span>Proyectos</span></label>
+            <div class="mp-includes">
+              <span class="mp-label">Incluir en:</span>
+              <label class="mp-check-row"><input type="checkbox" id="mpInComp" /><span>Tabla comparativa</span></label>
+              <label class="mp-check-row"><input type="checkbox" id="mpInMapa" /><span>Mapa</span></label>
+              <label class="mp-check-row"><input type="checkbox" id="mpInDistrib" /><span>Distribución</span></label>
+              <label class="mp-check-row"><input type="checkbox" id="mpInSvp" /><span>Sup. vs Arriendo</span></label>
+              <label class="mp-check-row"><input type="checkbox" id="mpInCruz" /><span>Cruz</span></label>
+              <label class="mp-check-row"><input type="checkbox" id="mpInProy" /><span>Proyectos</span></label>
+            </div>
           </div>
         </div>
       </div>
@@ -157,6 +147,10 @@
         <div class="mp-panel-header" id="filtrosPanelHeader">
           <span class="mp-panel-title">Filtros</span>
           <span id="filterCount" class="badge">0 / 0</span>
+          <span class="mp-header-actions">
+            <button type="button" id="saveFiltersBtn" class="mp-icon-btn" title="Guardar filtros con nombre (atado a Mi Proyecto)">&#x1F4BE;</button>
+            <button type="button" id="loadFiltersBtn" class="mp-icon-btn" title="Cargar un filtro guardado">&#x1F4C2;</button>
+          </span>
           <span class="mp-chevron" id="filtrosChevron">▾</span>
         </div>
         <div id="filtrosPanelBody" class="mp-panel-body">
@@ -173,17 +167,6 @@
           </div>
         </div>
       </div>
-
-      <!-- DATASETS GUARDADOS -->
-      <div class="mp-panel" id="savedDatasetsPanel">
-        <div class="mp-panel-header" id="savedDatasetsPanelHeader">
-          <span class="mp-panel-title">Datasets guardados</span>
-          <span class="mp-chevron" id="savedDatasetsChevron">▾</span>
-        </div>
-        <div id="savedDatasetsPanelBody" class="mp-panel-body">
-          <div id="savedDatasetsList" class="saved-datasets-sidebar-list"></div>
-        </div>
-      </div>
     </aside>
 
     <button id="mobileFiltersBtn" class="mobile-filters-btn" type="button">
@@ -196,7 +179,7 @@
       <div id="dropzone" class="dropzone">
         <div class="dropzone-inner">
           <h2>Arrastra tu Excel aquí</h2>
-          <p id="dropzoneHint"> Usa el botón <strong>Cargar Excel</strong> o selecciona un dataset guardado.</p>
+          <p id="dropzoneHint"> Usa el botón <strong>Cargar Excel</strong> para empezar.</p>
         </div>
       </div>
 

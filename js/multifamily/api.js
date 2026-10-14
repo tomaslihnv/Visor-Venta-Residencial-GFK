@@ -114,19 +114,29 @@ function _flattenProject(entity) {
       'Vacancia (%)':   vacPct,
       'Ocupación (%)':  vacPct != null ? Math.round((100 - vacPct) * 10) / 10 : null,
       'Útil (m²)':      _num(prog.usefulM2),
-      'Arriendo UF':    _num(prog.rentUF),
-      'UF/m²':          _num(prog.rentUfPerM2),
+      'Arriendo UF':    _rent(prog.rentUF),
+      'UF/m²':          _rent(prog.rentUfPerM2),
       'Estado Prog.':   prog.status ?? '',
     });
   }
   return rows;
 }
 
+// Inciti reporta rentUF=0 cuando un programa no tiene unidades disponibles
+// (100% arrendado → no hay precio publicado que observar). El stock existe,
+// la renta no: se guarda como null ("sin dato") en vez de 0, para que la
+// fila siga aportando Stock/Disponibilidad/Vacancia sin bajar los promedios
+// de renta (los agregados de core/ ignoran null y valores ≤ 0).
+function _rent(v) {
+  const n = _num(v);
+  return n != null && n > 0 ? n : null;
+}
+
+// Antes se descartaban las filas con Arriendo UF ≤ 0, lo que borraba del
+// Resumen programas completos (con su stock) solo por estar 100% ocupados —
+// ej. el ESTUDIO de Somma Plaza Ñuñoa. Ahora se conservan todas.
 export function flattenEntities(entities) {
-  return entities.flatMap(_flattenProject).filter(r => {
-    const v = r['Arriendo UF'];
-    return v != null && !isNaN(v) && v > 0;
-  });
+  return entities.flatMap(_flattenProject);
 }
 
 // ── Histórico: a diferencia de flattenEntities (que solo toma el último
