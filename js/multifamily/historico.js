@@ -861,7 +861,12 @@ function _labelOffsetFor(mode, key) {
 
 function _tryPlaceLabel(chart, ctx, text, x, y, baseline, key) {
   const w = ctx.measureText(text).width;
-  const h = (parseInt(ctx.font, 10) || 11) + 2;
+  // ctx.font puede traer el peso antes del tamaño (ej: "600 10px system-ui..."),
+  // así que parseInt(ctx.font) agarraba el "600" en vez del tamaño real — un
+  // salto de ~600px en vez de ~12px, que disparaba el clamp de abajo a
+  // maxY en el primer paso del anti-solape para casi cualquier etiqueta.
+  const fontSizeMatch = /(\d+(?:\.\d+)?)px/.exec(ctx.font);
+  const h = (fontSizeMatch ? parseFloat(fontSizeMatch[1]) : 11) + 2;
   const off = key ? _labelOffsetFor(_histMode, key) : null;
   let placedX = x, placedY = y;
 

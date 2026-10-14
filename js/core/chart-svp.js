@@ -603,7 +603,9 @@ export function renderSvp(state, svpConfig, mp) {
         if (f.agg === 'countUnique') {
           val = new Set(rows.map(r => r[col.name]).filter(v => v != null && v !== '')).size;
         } else {
-          const nums = rows.map(r => Number(r[col.name])).filter(v => !isNaN(v));
+          // null/'' = sin dato (ej. renta de un programa sin unidades disponibles),
+          // no 0 — Number(null) daría 0 y arrastraría el promedio hacia abajo.
+          const nums = rows.map(r => r[col.name]).filter(v => v != null && v !== '').map(Number).filter(v => !isNaN(v));
           if (!nums.length) return null;
           val = f.agg === 'sum' ? nums.reduce((s, v) => s + v, 0) : nums.reduce((s, v) => s + v, 0) / nums.length;
         }

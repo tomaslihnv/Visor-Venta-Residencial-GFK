@@ -1,19 +1,26 @@
-import { $, debounce } from './utils.js';
+import { $ } from './utils.js';
+import { initMyProjects } from '../shared/myProjects.js';
+import { initMyProjectsModal } from '../shared/myProjectsModal.js';
 
-const STORAGE_KEY = 'visor_mp_v1';
+const SELECTED_ID_KEY = 'visor_mp_selected_id_v1';
+const TOGGLES_KEY     = 'visor_mp_toggles_v1';
 
-// Date.now() puede repetirse si se agregan dos tipologías en el mismo milisegundo
-// (ej. doble click), dejando ids duplicados y rompiendo los lookups por id.
-let _idCounter = 0;
-const _nextId = () => `${Date.now()}_${_idCounter++}`;
+const MyProjects      = initMyProjects();
+const MyProjectsModal = initMyProjectsModal();
 
 // ── Global state ───────────────────────────────────────────────────────────
+// Mismo contrato que antes (edificio, propietario, direccion, tipologias,
+// geocoords, inComp/inMapa/inDistrib/inSvp/inProy) para no tener que tocar
+// comparativa.js / map.js / chart.js, que ya leen `mp` por referencia. Lo
+// único que cambia es CÓMO se llena: antes venía de inputs editables acá
+// mismo, ahora viene de un proyecto elegido en el modal compartido
+// (shared/myProjectsModal.js), respaldado en Firestore (shared/myProjects.js).
 export const mp = {
   edificio:    '',
-  propietario: '',
+  propietario: '', // no viene de Firestore — reservado por si algún consumidor lo usa
   direccion:   '',
-  tipologias:  [], // [{ id, nombre, sup, ufm2, cuantity }]
-  geocoords:   null, // { lat, lng } — never persisted
+  tipologias:  [], // [{ id, nombre, sup, ufm2, cantidad, arriendoUfM2Mes }]
+  geocoords:   null, // { lat, lng } — nunca persistido, se recalcula al seleccionar
   inComp:      false,
   inMapa:      false,
   inDistrib:   false,
@@ -21,23 +28,33 @@ export const mp = {
   inProy:      false,
 };
 
+let _selectedId = null;
+// Usado por Filtros Guardados para saber a qué proyecto atar el filtro
+// (relación 1:N, un proyecto tiene muchos filtros guardados).
+export function getSelectedProjectId() { return _selectedId; }
 let _initialized = false;
 
-// ── Persistence ────────────────────────────────────────────────────────────
-function _save() {
+// ── Toggles "incluir en" — preferencia LOCAL del navegador, independiente
+// del proyecto elegido (si fueran parte del documento compartido, dos
+// personas viendo el mismo proyecto en pestañas distintas pelearían por
+// ese estado) ────────────────────────────────────────────────────────────
+function _saveToggles() {
   try {
-    const { geocoords, ...toSave } = mp; // eslint-disable-line no-unused-vars
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    localStorage.setItem(TOGGLES_KEY, JSON.stringify({
+      inComp: mp.inComp, inMapa: mp.inMapa, inDistrib: mp.inDistrib, inSvp: mp.inSvp, inProy: mp.inProy,
+    }));
   } catch {}
-  document.dispatchEvent(new CustomEvent('mpchange'));
 }
 
-function _load() {
+function _loadToggles() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(TOGGLES_KEY);
     if (raw) Object.assign(mp, JSON.parse(raw));
   } catch {}
-  mp.geocoords = null;
+}
+
+function _notifyChange() {
+  document.dispatchEvent(new CustomEvent('mpchange'));
 }
 
 // ── Geocoding ──────────────────────────────────────────────────────────────
@@ -46,7 +63,7 @@ async function _geocode(addr) {
   if (!addr || addr.trim().length < 5) {
     mp.geocoords = null;
     if (statusEl) { statusEl.textContent = ''; statusEl.className = 'mp-geo-status'; }
-    document.dispatchEvent(new CustomEvent('mpchange'));
+    _notifyChange();
     return;
   }
   if (statusEl) { statusEl.textContent = 'Buscando…'; statusEl.className = 'mp-geo-status mp-geo-searching'; }
@@ -65,157 +82,115 @@ async function _geocode(addr) {
     mp.geocoords = null;
     if (statusEl) { statusEl.textContent = '✗ Error de red'; statusEl.className = 'mp-geo-status mp-geo-err'; }
   }
-  document.dispatchEvent(new CustomEvent('mpchange'));
+  _notifyChange();
 }
 
-const _debouncedGeocode = debounce(_geocode, 1200);
-
-// ── Typology card rendering ────────────────────────────────────────────────
-function _esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Convención de Venta: 'S' para Estudio, '1D'/'2D'/'3D'/'4D' para el resto
+// (los baños no se usan acá, Venta nunca los trackeó por tipología).
+function _tipoNombreVenta(t) {
+  if (t.dormitorios === 'Estudio') return 'S';
+  return t.dormitorios ? `${t.dormitorios}D` : '';
 }
 
-function _fmtTicket(tipo) {
-  if (tipo.sup == null || tipo.ufm2 == null) return '—';
-  const ticket = tipo.sup * tipo.ufm2;
-  return `${ticket.toLocaleString('es-CL', { maximumFractionDigits: 0 })} UF`;
+// ── Selección de proyecto ────────────────────────────────────────────────
+function _applyProject(project) {
+  mp.edificio    = project?.nombre ?? '';
+  mp.direccion   = project?.direccion ?? '';
+  mp.tipologias  = (project?.tipologias ?? []).map(t => ({
+    id: t.id, nombre: _tipoNombreVenta(t), sup: t.sup ?? null, ufm2: t.ufm2 ?? null,
+    cantidad: t.cantidad ?? null, arriendoUfM2Mes: t.arriendoUfM2Mes ?? null,
+  }));
+  mp.geocoords = null; // se recalcula abajo
 }
 
-function _renderTipos() {
-  const container = $('#mpTiposContainer');
-  if (!container) return;
-  container.innerHTML = '';
+function _renderSelector() {
+  const noneHint = $('#mpNoneHint');
+  const info     = $('#mpSelectedInfo');
+  const nombreEl = $('#mpSelectedNombre');
+  const direccionEl = $('#mpSelectedDireccion');
+  const removeBtn = $('#mpRemoveBtn');
+  const editBtn   = $('#mpEditBtn');
+  const includes  = $('#mpIncludes');
 
-  for (const tipo of mp.tipologias) {
-    const card = document.createElement('div');
-    card.className = 'mp-tipo-card';
-    const typeOptions = ['S', '1D', '2D', '3D', '4D'].map(opt =>
-      `<option value="${opt}"${tipo.nombre === opt ? ' selected' : ''}>${opt}</option>`
-    ).join('');
-    card.innerHTML = `
-      <button class="mp-remove-tipo" data-id="${tipo.id}" title="Eliminar">×</button>
-      <div class="mp-tipo-metrics">
-        <div class="mp-metric-row">
-          <span>Tipología</span>
-          <select class="mp-tipo-name mp-tipo-select mp-input">
-            <option value="">—</option>
-            ${typeOptions}
-          </select>
-        </div>
-        <label class="mp-metric-row">
-          <span>Cantidad</span>
-          <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
-            data-id="${tipo.id}" data-metric="cuantity" value="${tipo.cuantity ?? ''}" />
-        </label>
-        <label class="mp-metric-row">
-          <span>Útil m²</span>
-          <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
-            data-id="${tipo.id}" data-metric="sup" value="${tipo.sup ?? ''}" />
-        </label>
-        <label class="mp-metric-row">
-          <span>UF/m²</span>
-          <input type="number" class="mp-metric-input mp-input" step="any" placeholder="—"
-            data-id="${tipo.id}" data-metric="ufm2" value="${tipo.ufm2 ?? ''}" />
-        </label>
-        <div class="mp-metric-row">
-          <span>Ticket UF</span>
-          <span class="mp-metric-computed" data-ticket-id="${tipo.id}">${_fmtTicket(tipo)}</span>
-        </div>
-      </div>`;
-
-    card.querySelector('.mp-tipo-name').addEventListener('change', e => {
-      const t = mp.tipologias.find(t => t.id === tipo.id);
-      if (t) { t.nombre = e.target.value; _save(); }
-    });
-
-    card.querySelector('.mp-remove-tipo').addEventListener('click', () => {
-      mp.tipologias = mp.tipologias.filter(t => t.id !== tipo.id);
-      _renderTipos();
-      _save();
-    });
-
-    card.querySelectorAll('.mp-metric-input').forEach(input => {
-      input.addEventListener('input', e => {
-        const t = mp.tipologias.find(t => t.id === tipo.id);
-        if (t) {
-          const v = e.target.value.trim();
-          t[e.target.dataset.metric] = v === '' ? null : Number(v);
-          _save();
-          const ticketEl = card.querySelector(`[data-ticket-id="${tipo.id}"]`);
-          if (ticketEl) ticketEl.textContent = _fmtTicket(t);
-        }
-      });
-    });
-
-    container.appendChild(card);
-  }
+  const hasProject = !!mp.edificio;
+  if (noneHint) noneHint.classList.toggle('hidden', hasProject);
+  if (info)     info.classList.toggle('hidden', !hasProject);
+  if (removeBtn) removeBtn.classList.toggle('hidden', !hasProject);
+  if (editBtn)   editBtn.classList.toggle('hidden', !hasProject || !MyProjects.canEdit(MyProjects.getProject(_selectedId)));
+  if (includes) includes.classList.toggle('hidden', !hasProject);
+  if (nombreEl) nombreEl.textContent = mp.edificio;
+  if (direccionEl) direccionEl.textContent = mp.direccion || 'Sin dirección';
 }
 
-// ── Unidades tipo import/export ─────────────────────────────────────────────
-export function getTiposState() {
-  return { proyecto: mp.edificio, tipologias: mp.tipologias };
+function _selectProject(project) {
+  _selectedId = project.id;
+  try { localStorage.setItem(SELECTED_ID_KEY, _selectedId); } catch {}
+  _applyProject(project);
+  _renderSelector();
+  if (mp.direccion) _geocode(mp.direccion);
+  else _notifyChange();
 }
 
-export function applyTiposState(tipologias) {
-  // Regenerar ids: evita colisiones con las tipologías ya cargadas en el panel.
-  mp.tipologias = (tipologias ?? []).map(t => ({ ...t, id: _nextId() }));
-  _renderTipos();
-  _save();
+function _removeProject() {
+  _selectedId = null;
+  try { localStorage.removeItem(SELECTED_ID_KEY); } catch {}
+  mp.edificio = ''; mp.direccion = ''; mp.tipologias = []; mp.geocoords = null;
+  _renderSelector();
+  _notifyChange();
 }
 
 // ── Public init (called once after data loads) ─────────────────────────────
 export function initMpPanel() {
   if (_initialized) {
-    // On subsequent file loads, just make sure the panel is visible
     $('#miProyectoSection')?.classList.remove('hidden');
     return;
   }
   _initialized = true;
-  _load();
-  mp.propietario = '';
+  _loadToggles();
 
   $('#miProyectoSection')?.classList.remove('hidden');
-
-  // Restore field values
-  const set = (id, val) => { const el = $(`#${id}`); if (el) el.value = val ?? ''; };
-  set('mpEdificio',  mp.edificio);
-  set('mpDireccion', mp.direccion);
   if ($('#mpInComp'))    $('#mpInComp').checked    = mp.inComp;
   if ($('#mpInMapa'))    $('#mpInMapa').checked    = mp.inMapa;
   if ($('#mpInDistrib')) $('#mpInDistrib').checked = mp.inDistrib;
   if ($('#mpInSvp'))     $('#mpInSvp').checked     = mp.inSvp;
   if ($('#mpInProy'))    $('#mpInProy').checked    = mp.inProy;
 
-  // Trigger geocoding if address is already saved
-  if (mp.direccion) _geocode(mp.direccion);
+  $('#mpInComp')?.addEventListener('change',    e => { mp.inComp    = e.target.checked; _saveToggles(); _notifyChange(); });
+  $('#mpInMapa')?.addEventListener('change',    e => { mp.inMapa    = e.target.checked; _saveToggles(); _notifyChange(); });
+  $('#mpInDistrib')?.addEventListener('change', e => { mp.inDistrib = e.target.checked; _saveToggles(); _notifyChange(); });
+  $('#mpInSvp')?.addEventListener('change',     e => { mp.inSvp     = e.target.checked; _saveToggles(); _notifyChange(); });
+  $('#mpInProy')?.addEventListener('change',    e => { mp.inProy    = e.target.checked; _saveToggles(); _notifyChange(); });
 
-  // Collapse toggle
+  $('#mpOpenModalBtn')?.addEventListener('click', () => {
+    MyProjectsModal.open({ onSelect: _selectProject });
+  });
+  $('#mpEditBtn')?.addEventListener('click', () => {
+    if (!_selectedId) return;
+    MyProjectsModal.open({ onSelect: _selectProject, editProjectId: _selectedId });
+  });
+
+  // Collapse toggle del panel
   $('#mpPanelHeader')?.addEventListener('click', () => {
     const body    = $('#mpPanelBody');
     const chevron = $('#mpChevron');
     body?.classList.toggle('mp-collapsed');
     if (chevron) chevron.textContent = body?.classList.contains('mp-collapsed') ? '▸' : '▾';
   });
+  $('#mpRemoveBtn')?.addEventListener('click', _removeProject);
 
-  // Field bindings
-  $('#mpEdificio')?.addEventListener('input', e => { mp.edificio = e.target.value; _save(); });
-  $('#mpDireccion')?.addEventListener('input', e => {
-    mp.direccion = e.target.value;
-    _save();
-    _debouncedGeocode(mp.direccion);
-  });
+  // Restaurar el proyecto elegido la última vez, apenas Firestore lo traiga.
+  try { _selectedId = localStorage.getItem(SELECTED_ID_KEY); } catch { _selectedId = null; }
+  if (_selectedId) {
+    MyProjects.onChange(() => {
+      if (!_selectedId) return;
+      const project = MyProjects.getProject(_selectedId);
+      if (project && !mp.edificio) {
+        _applyProject(project);
+        _renderSelector();
+        if (mp.direccion) _geocode(mp.direccion);
+      }
+    });
+  }
 
-  $('#mpInComp')?.addEventListener('change',    e => { mp.inComp    = e.target.checked; _save(); });
-  $('#mpInMapa')?.addEventListener('change',    e => { mp.inMapa    = e.target.checked; _save(); });
-  $('#mpInDistrib')?.addEventListener('change', e => { mp.inDistrib = e.target.checked; _save(); });
-  $('#mpInSvp')?.addEventListener('change',     e => { mp.inSvp     = e.target.checked; _save(); });
-  $('#mpInProy')?.addEventListener('change',    e => { mp.inProy    = e.target.checked; _save(); });
-
-  $('#mpAddTipo')?.addEventListener('click', () => {
-    mp.tipologias.push({ id: _nextId(), nombre: '', sup: null, ufm2: null, cuantity: null });
-    _renderTipos();
-    _save();
-  });
-
-  _renderTipos();
+  _renderSelector();
 }

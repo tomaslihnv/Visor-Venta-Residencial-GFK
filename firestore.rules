@@ -38,6 +38,48 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid;
     }
 
+    // 'Mi Proyecto' — transversal a todos los visores (no se filtra por
+    // market como recurringQueries: el mismo proyecto se puede usar para
+    // comparar en Venta, Renta, Multifamily, etc. al mismo tiempo). A
+    // diferencia de recurringQueries, además del dueño se permite una
+    // lista de editores explícitos (editorEmails) con permiso de
+    // editar/borrar — pensado para que el dueño pueda delegar sin
+    // transferir la propiedad del documento.
+    match /myProjects/{projectId} {
+      allow read: if isAllowedUser();
+
+      allow create: if isAllowedUser()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      // Editar (incluye agregar/quitar tipologías) — dueño o un editor
+      // explícitamente autorizado.
+      allow update: if isAllowedUser() && (
+        resource.data.ownerUid == request.auth.uid ||
+        request.auth.token.email in resource.data.editorEmails
+      );
+
+      // Eliminar el proyecto completo — solo el dueño. Se le puede delegar
+      // la edición a alguien sin entregarle la potestad de borrarlo.
+      allow delete: if isAllowedUser()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Filtros guardados — 1 myProjects : N savedFilters (projectId apunta
+    // al proyecto padre). Mismo patrón simple que recurringQueries (dueño
+    // único, sin editorEmails): un preset de filtro es un artefacto liviano,
+    // no amerita delegación de edición. El cascade delete al borrar el
+    // proyecto padre lo hace shared/myProjects.js del lado del cliente
+    // (borra los hijos antes que el padre), no una regla de Firestore.
+    match /savedFilters/{filterId} {
+      allow read: if isAllowedUser();
+
+      allow create: if isAllowedUser()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      allow update, delete: if isAllowedUser()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
     // Todo lo demás, denegado por defecto.
     match /{document=**} {
       allow read, write: if false;
