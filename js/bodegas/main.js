@@ -227,8 +227,8 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
   function _initMapIfNeeded() {
     if (!areaMap) {
       areaMap = L.map('areaDrawMap', { doubleClickZoom: false }).setView([-33.45, -70.65], 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap © CARTO', maxZoom: 19,
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 19,
       }).addTo(areaMap);
 
       areaMap.on('click', e => {
@@ -377,12 +377,15 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
     comunaBtnQuery.disabled = true;
     _setStatus(`Buscando límites geográficos de ${comuna}…`, 'loading');
     try {
-      const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Región+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=1`;
+      const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Región+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=6`;
       const res  = await fetch(url, { headers: { 'Accept-Language': 'es' } });
       if (!res.ok) throw new Error('No se pudo conectar con el servicio geográfico.');
       const data = await res.json();
-      if (!data?.length || !data[0].geojson) throw new Error(`No se encontró el contorno de ${comuna}.`);
-      const geojson = data[0].geojson;
+      // limit=1 no alcanza: para "Santiago" el primer resultado es el Point de la ciudad,
+      // no el polígono de la comuna. Se toma el primer candidato que sea un área.
+      const match = (data ?? []).find(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon');
+      if (!match) throw new Error(`No se encontró el contorno de ${comuna}.`);
+      const geojson = match.geojson;
       let rawCoords = [];
       if (geojson.type === 'Polygon') {
         rawCoords = geojson.coordinates[0];
