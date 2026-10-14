@@ -398,12 +398,15 @@ document.querySelectorAll('.ctrl-opts-btn').forEach(btn => {
   }
 
   async function _resolveComunaPolygon(comuna) {
-    const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Región+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=1`;
+    const url  = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(comuna)},+Región+Metropolitana,+Chile&format=json&polygon_geojson=1&limit=6`;
     const res  = await fetch(url, { headers: { 'Accept-Language': 'es' } });
     if (!res.ok) throw new Error('No se pudo conectar con el servicio geográfico.');
     const data = await res.json();
-    if (!data?.length || !data[0].geojson) throw new Error(`No se encontró el contorno para la comuna de ${comuna}.`);
-    const geojson = data[0].geojson;
+    // limit=1 no alcanza: para "Santiago" el primer resultado es el Point de la ciudad,
+    // no el polígono de la comuna. Se toma el primer candidato que sea un área.
+    const match = (data ?? []).find(r => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon');
+    if (!match) throw new Error(`No se encontró el contorno para la comuna de ${comuna}.`);
+    const geojson = match.geojson;
     let rawCoords = [];
     if (geojson.type === 'Polygon') {
       rawCoords = geojson.coordinates[0];
