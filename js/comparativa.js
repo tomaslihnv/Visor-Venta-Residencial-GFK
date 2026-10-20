@@ -157,6 +157,25 @@ function _cellInlineStyle(srcEl) {
   return s.join(';');
 }
 
+// Nota al pie para la tabla copiada: deja explícito hasta qué % de stock
+// vendido se calculó la Vel. Venta (input de la pestaña Resumen). Solo si la
+// tabla tiene esa columna y los datos vienen de la API — con Excel la
+// velocidad se estima distinto y el corte no aplica.
+function _velVentaNota(table) {
+  const headers  = [...table.querySelectorAll('th')].map(th => th.textContent.trim());
+  const tieneVel = headers.some(h => h.startsWith('Vel. Venta'));
+  if (!tieneVel || !state.raw.length || !('__velSerie' in state.raw[0])) return '';
+  const notaProyecto = headers.includes('Vel. Venta Proyecto')
+    ? ' Vel. Venta Proyecto: promedio ponderado por stock de cada tipología.' : '';
+  const pct = state.velUmbralPct;
+  const corte = pct >= 100
+    ? 'hasta agotar su stock'
+    : `hasta que se vendió el ${pct}% de su stock (quedando ${100 - pct}% disponible)`;
+  return `<p style="font-family:'Roboto',Arial,sans-serif;font-size:7pt;color:#6b7280;margin:4px 0 0;">`
+    + `* Vel. Venta: promedio de unidades vendidas por mes de cada tipología, desde su inicio de venta ${corte}, `
+    + `o hasta la fecha si aún no llega a ese punto.${notaProyecto}</p>`;
+}
+
 export async function copyComparativaHtml() {
   const table = document.querySelector('#comparativaContent .comp-table');
   if (!table) return;
@@ -196,7 +215,7 @@ export async function copyComparativaHtml() {
     });
   }
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${clone.outerHTML}</body></html>`;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${clone.outerHTML}${_velVentaNota(table)}</body></html>`;
 
   try {
     await navigator.clipboard.write([
