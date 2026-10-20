@@ -3,7 +3,7 @@ import { state } from './data.js';
 
 // Descripciones de cómo se calculan las métricas (para tooltips)
 const METRIC_DESCRIPTIONS = {
-  'Vel. Venta (un./mes)': 'Mediana de velocidad de venta por tipología. Métrica robusta que refleja el ritmo típico de ventas sin sesgos por outliers.',
+  'Vel. Venta (un./mes)': 'Promedio de unidades vendidas por mes de cada tipología, desde su inicio de venta hasta que se vende el % de stock elegido en la pestaña Resumen (o hasta hoy si aún no llega).',
   'Ticket UF': 'Precio promedio de venta.',
   'UF/m²': 'Precio por metro cuadrado útil.',
   '% Vendido': 'Porcentaje de unidades vendidas respecto al stock total.',

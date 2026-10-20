@@ -51,7 +51,7 @@ function cell(content, cls = '') {
 
 // Descripciones de cómo se calcula cada métrica (mostradas en tooltip al hover)
 const TH_TOOLTIPS = {
-  'Vel. Venta': 'Promedio de unidades vendidas por mes desde el inicio de venta hasta agotar stock (o hasta hoy si aún no se agota), calculado de forma independiente para cada tipología.',
+  'Vel. Venta': 'Promedio de unidades vendidas por mes desde el inicio de venta hasta que se vende el % de stock elegido arriba en "Vel. Venta: corte al % vendido" (o hasta hoy si aún no llega), calculado de forma independiente para cada tipología.',
   'Vel. Venta Proyecto': 'Promedio de las velocidades de cada tipología del proyecto, ponderado por la cantidad de unidades (stock) de cada una — una tipología con más unidades pesa más en el número final.',
   'Disponibles': 'Número de unidades aún disponibles para venta.',
   'UF/m²': 'Precio por metro cuadrado útil, promedio de las unidades de esa tipología.',
