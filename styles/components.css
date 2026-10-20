@@ -327,14 +327,6 @@
 .vel-umbral-field input::-webkit-outer-spin-button,
 .vel-umbral-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .vel-umbral-suffix { color: #6b7280; font-weight: 600; margin-left: 2px; }
-.vel-umbral-info {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; border-radius: 50%;
-  border: 1px solid #9ca3af; color: #6b7280;
-  font-size: 10px; font-weight: 700; font-style: italic; font-family: Georgia, serif;
-  cursor: help;
-}
-.vel-umbral-info:hover, .vel-umbral-info:focus { border-color: #2563eb; color: #2563eb; outline: 0; }
 
 /* ========== Tabla ========== */
 .table-wrap {
