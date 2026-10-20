@@ -1,9 +1,9 @@
 import { $, $$ } from './utils.js';
-import { resetFilters } from './filters.js';
+import { resetFilters, applyFilters } from './filters.js';
 import { initSavedFilters } from '../shared/savedFilters.js';
 import { initSavedFiltersModal } from '../shared/savedFiltersModal.js';
 import { queryArea, flattenEntities, calcAreaKm2 } from './api.js';
-import { state, onDataLoaded } from './data.js';
+import { state, onDataLoaded, VEL_UMBRAL_KEY } from './data.js';
 import { initMpPanel } from './miProyecto.js';
 import * as RQ from './recurringQueries.js';
 
@@ -74,6 +74,20 @@ $$('.tab').forEach(tab => {
 });
 
 // ============== Copiar tabla comparativa ==============
+// Corte de Vel. Venta: % del stock de cada tipología vendido (ver velRate en
+// api.js). Al cambiar, applyFilters() recalcula la velocidad sobre las filas
+// filtradas y redibuja KPIs, Resumen, tabla y el gráfico activo.
+const velUmbralInput = $('#velUmbralInput');
+velUmbralInput.value = state.velUmbralPct;
+velUmbralInput.addEventListener('change', () => {
+  const v = Math.round(Number(velUmbralInput.value));
+  if (!(v >= 1 && v <= 100)) { velUmbralInput.value = state.velUmbralPct; return; }
+  velUmbralInput.value = v;
+  state.velUmbralPct = v;
+  try { localStorage.setItem(VEL_UMBRAL_KEY, String(v)); } catch {}
+  if (state.raw.length) applyFilters();
+});
+
 $('#exportCompBtn').addEventListener('click', async () => {
   const btn = $('#exportCompBtn');
   const { copyComparativaHtml } = await import('./comparativa.js');

@@ -54,6 +54,27 @@ function _average(arr) {
   return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 }
 
+// Velocidad de venta de una tipología: promedio mensual de netSales desde su
+// primer período hasta el mes en que se consume `umbral` (0–1) de su stock —
+// es decir, cuando quedan disponibles ≤ stock × (1 − umbral) — inclusive, por
+// si esa fue la venta que cruzó el corte. Si nunca llega al umbral, se usa
+// hasta el último período reportado. umbral = 1 equivale a "hasta agotar".
+//
+// Por qué cortar antes de agotar: las últimas unidades de una tipología se
+// venden mucho más lento (cola de rezagados), y esos meses deprimen el
+// promedio sin representar el ritmo comercial real del producto.
+//
+// serie: [{ sales, available, stock }, ...] en orden cronológico.
+export function velRate(serie, umbral) {
+  const ventas = [];
+  for (const m of serie ?? []) {
+    ventas.push(m.sales);
+    const limite = m.stock > 0 ? m.stock * (1 - umbral) : 0;
+    if (m.available <= limite + 1e-9) break;
+  }
+  return _average(ventas);
+}
+
 export function flattenEntities(entities) {
   return entities.flatMap(entity => {
     const loc     = entity.location ?? {};
@@ -83,22 +104,23 @@ export function flattenEntities(entities) {
     // opuesto (la cola de meses muertos post-agotamiento inflaría la
     // cantidad de meses sin bajar el numerador, deprimiendo el promedio).
     //
-    // Corte al agotarse: Inciti sigue reportando una tipología agotada
-    // (available=0, netSales=0) durante meses o años después de venderse
-    // por completo — esos meses no son "el proyecto no vendió", son "ya no
-    // quedaba nada que vender", así que no deben contar como parte del
-    // ritmo de ventas. Se corta la serie en el primer mes que llega a 0
-    // disponibles (inclusive, por si esa fue la venta que la agotó).
+    // Corte: Inciti sigue reportando una tipología agotada (available=0,
+    // netSales=0) durante meses o años después de venderse — esos meses no
+    // son "no vendió", son "ya no quedaba nada que vender". El corte ya no
+    // es fijo al agotarse: se guarda la serie mensual COMPLETA y velRate()
+    // la corta según el % de stock consumido que el usuario elige en el
+    // input de "Vel. Venta" (ver recomputeVelVenta en data.js).
     const velSeriesByKey = new Map();
-    const agotado = new Set();
     for (const p of periods) {
       for (const st of (p.stages ?? [])) {
         for (const prog of (st.programs ?? [])) {
           const key = `${st.stageCode}::${prog.program}`;
-          if (agotado.has(key)) continue;
           if (!velSeriesByKey.has(key)) velSeriesByKey.set(key, []);
-          velSeriesByKey.get(key).push(Number(prog.netSales) || 0);
-          if ((Number(prog.available) || 0) <= 0) agotado.add(key);
+          velSeriesByKey.get(key).push({
+            sales:     Number(prog.netSales)  || 0,
+            available: Number(prog.available) || 0,
+            stock:     Number(prog.stock)     || 0,
+          });
         }
       }
     }
@@ -125,7 +147,7 @@ export function flattenEntities(entities) {
       const dates = stage.dates ?? {};
       return (stage.programs ?? []).map(prog => {
         const velKey = `${stage.stageCode}::${prog.program}`;
-        return {
+        const row = {
           ...base,
           'Tipología':           (prog.program ?? '').replace(/^(\d+D)\d+B$/i, '$1'),
           'Disponibles':         _num(prog.available),
@@ -150,14 +172,13 @@ export function flattenEntities(entities) {
           // la clave no está presente en este punto la columna nunca aparece
           // y el resto de la app (comparativa, KPIs, mapa) no la encuentra.
           'Vel. Venta (un./mes)': null,
-          // Promedio mensual propio de ESTA tipología (no del proyecto
-          // entero) sobre su vida vendible — campo interno que
-          // recomputeVelVenta() usa para calcular el promedio final por
-          // tipología sobre las filas actualmente filtradas (relevante
-          // cuando un edificio tiene varias etapas con la misma tipología
-          // nominal).
-          '__velTipoRate': +_average(velSeriesByKey.get(velKey) ?? [0]).toFixed(3),
         };
+        // Serie mensual propia de ESTA etapa+tipología — recomputeVelVenta()
+        // la corta con velRate() según el % de stock consumido elegido y
+        // promedia por tipología sobre las filas filtradas. No enumerable:
+        // no aparece como columna en la tabla ni en el CSV exportado.
+        Object.defineProperty(row, '__velSerie', { value: velSeriesByKey.get(velKey) ?? [] });
+        return row;
       });
       // Antes se descartaban las filas con Ticket UF ≤ 0, lo que borraba del
       // Resumen las tipologías agotadas junto con su stock. Ahora se conservan.
