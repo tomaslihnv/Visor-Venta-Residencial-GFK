@@ -1,4 +1,18 @@
 import { $, detectColType } from './utils.js';
+import { velRate } from './api.js';
+
+// % del stock de una tipología que debe venderse para cortar el cálculo de
+// su velocidad de venta (ver velRate en api.js). Lo elige el usuario en el
+// input de la pestaña Resumen; se recuerda por navegador.
+export const VEL_UMBRAL_KEY = 'visor_vel_umbral_pct_v1';
+const VEL_UMBRAL_DEFAULT = 85;
+function _loadVelUmbral() {
+  try {
+    const v = Number(localStorage.getItem(VEL_UMBRAL_KEY));
+    if (v >= 1 && v <= 100) return v;
+  } catch {}
+  return VEL_UMBRAL_DEFAULT;
+}
 
 // ============== Estado global ==============
 export const state = {
@@ -18,6 +32,7 @@ export const state = {
   // construir la serie mensual de ventas netas; flattenEntities() colapsa esta
   // info a una fila por tipología y no sirve para reconstruir el histórico.
   rawEntities: [],
+  velUmbralPct: _loadVelUmbral(), // 1–100: % de stock vendido en que se corta Vel. Venta
 };
 
 // ============== Normalización Inciti → GFK ==============
@@ -144,14 +159,15 @@ function normalizeInciti(rows) {
 // siga activo). Dos fuentes, dos métodos de estimación:
 //  - xlsx/Inciti (snapshot único): (Stock - Disponibles) / meses desde el
 //    inicio de ventas más temprano entre las tipologías filtradas.
-//  - API/Inciti (serie mensual completa): suma de la tasa mensual propia de
-//    cada tipología filtrada (__velTipoRate, ver flattenEntities en api.js),
-//    ya promediada sobre su propia ventana de meses — no una inferencia
-//    desde stock, así que no se ve afectada por una tipología que queda
-//    estancada con 1 unidad disponible para siempre.
+//  - API/Inciti (serie mensual completa): promedio mensual de netSales de
+//    cada tipología filtrada (__velSerie, ver flattenEntities en api.js),
+//    cortado cuando se vende state.velUmbralPct % de su stock (velRate) —
+//    no una inferencia desde stock, así que no se ve afectada por una
+//    tipología que queda estancada con 1 unidad disponible para siempre.
+//    El umbral NO aplica a xlsx: un snapshot no tiene serie mensual.
 export function recomputeVelVenta(filteredRows) {
   if (!filteredRows.length) return;
-  if ('__velTipoRate' in filteredRows[0])            _recomputeVelVentaApi(filteredRows);
+  if ('__velSerie' in filteredRows[0])               _recomputeVelVentaApi(filteredRows);
   else if (state.source === 'inciti' && 'Vel. Venta (un./mes)' in filteredRows[0]) _recomputeVelVentaXlsx(filteredRows);
 }
 
@@ -176,19 +192,20 @@ function _average(arr) {
 }
 
 function _recomputeVelVentaApi(filteredRows) {
+  const umbral = state.velUmbralPct / 100;
   for (const rows of _groupByEdificioTipo(filteredRows).values()) {
     // Promedio de velocidades dentro de la MISMA tipología. Se agrupa por
     // edificio+tipología (no solo edificio) para que 1D y 3D del mismo
     // proyecto no terminen compartiendo el mismo número (relevante cuando
     // un edificio tiene varias etapas con la misma tipología nominal, cada
-    // una con su propio __velTipoRate). Se usa promedio y no mediana: con
+    // una con su propia serie). Se usa promedio y no mediana: con
     // tipologías de poco stock (1D típicamente) la venta mensual es tan
     // dispersa que la mediana da 0 aunque el proyecto venda de forma
     // constante — ver commit que cambió esto en api.js para el detalle.
     // No se descartan los valores en 0: una tipología que casi no vendió
     // sigue aportando su promedio real (bajo, pero no un dato faltante),
     // así que se muestra como "0.XX" en vez de "—".
-    const velocidades = rows.map(r => Number(r['__velTipoRate']) || 0);
+    const velocidades = rows.map(r => velRate(r['__velSerie'], umbral));
     const velProm = +_average(velocidades).toFixed(2);
     for (const r of rows) {
       r['Vel. Venta (un./mes)'] = velProm;
