@@ -16,6 +16,22 @@ export const isNumeric = (v) => v !== null && v !== undefined && v !== '' && !is
 // agotada) es "sin dato" y lo descartan los filtros !isNaN de los promedios.
 export const num = (v) => (v === null || v === undefined || v === '') ? NaN : Number(v);
 
+// Posiciona un tooltip (ya agregado al DOM, position: fixed) arriba del
+// elemento `anchorRect`; si no cabe arriba en la ventana, lo pone abajo
+// (clase .below invierte la flecha). Mide la altura real del tooltip en vez
+// de asumir una fija, para que los textos largos no queden cortados.
+export function placeTooltip(el, anchorRect, width = 320) {
+  const gap = 10;
+  let left = anchorRect.left + anchorRect.width / 2 - width / 2;
+  left = Math.max(gap, Math.min(left, window.innerWidth - width - gap));
+  const h = el.offsetHeight;
+  const below = anchorRect.top - h - gap < 0;
+  el.classList.toggle('below', below);
+  el.style.transform = 'none';
+  el.style.left = left + 'px';
+  el.style.top  = (below ? anchorRect.bottom + gap : anchorRect.top - h - gap) + 'px';
+}
+
 export function detectColType(values) {
   let nums = 0, total = 0;
   for (const v of values) {

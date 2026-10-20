@@ -1,4 +1,4 @@
-import { $, fmt, debounce } from './utils.js';
+import { $, fmt, debounce, placeTooltip } from './utils.js';
 import { state } from './data.js';
 
 // Descripciones de cómo se calculan las métricas (para tooltips)
@@ -114,15 +114,7 @@ function showTableTooltip(event, text) {
   globalTooltip.innerHTML = `<strong>${event.target.textContent}</strong><br>${text}`;
   document.body.appendChild(globalTooltip);
 
-  const rect = event.target.getBoundingClientRect();
-  const tooltipWidth = 320;
-  let left = rect.left + rect.width / 2 - tooltipWidth / 2;
-  if (left < 10) left = 10;
-  if (left + tooltipWidth > window.innerWidth - 10) left = window.innerWidth - tooltipWidth - 10;
-
-  globalTooltip.style.position = 'fixed';
-  globalTooltip.style.left = left + 'px';
-  globalTooltip.style.top = (rect.top - 80) + 'px';
+  placeTooltip(globalTooltip, event.target.getBoundingClientRect());
   globalTooltip.style.opacity = '1';
   globalTooltip.style.display = 'block';
 }
