@@ -1,4 +1,4 @@
-import { $, norm, fmtTipo } from './utils.js';
+import { $, norm, fmtTipo, placeTooltip } from './utils.js';
 import { state } from './data.js';
 import { mp } from './miProyecto.js';
 import { getMapOrder } from './map.js';
@@ -507,16 +507,7 @@ function _showCompTooltip(e) {
   _compTooltipEl.innerHTML = `<strong>${e.currentTarget.textContent}</strong><br>${text}`;
   document.body.appendChild(_compTooltipEl);
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  const tooltipWidth = 320;
-  let left = rect.left + rect.width / 2 - tooltipWidth / 2;
-  if (left < 10) left = 10;
-  if (left + tooltipWidth > window.innerWidth - 10) left = window.innerWidth - tooltipWidth - 10;
-
-  _compTooltipEl.style.position = 'fixed';
-  _compTooltipEl.style.left = left + 'px';
-  _compTooltipEl.style.top  = (rect.top - 12) + 'px';
-  _compTooltipEl.style.transform = 'translateY(-100%)';
+  placeTooltip(_compTooltipEl, e.currentTarget.getBoundingClientRect());
   _compTooltipEl.style.opacity = '1';
 }
 
