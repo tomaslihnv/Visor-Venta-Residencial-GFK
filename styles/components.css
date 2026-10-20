@@ -306,6 +306,36 @@
 }
 .primary-btn:hover { background: #1d4ed8; }
 
+/* ========== Corte de Vel. Venta (pestaña Resumen, Venta) ========== */
+.vel-umbral {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #374151;
+}
+.vel-umbral label, .vel-umbral-text { font-weight: 500; white-space: nowrap; }
+.vel-umbral-field {
+  display: inline-flex; align-items: center;
+  border: 1px solid #d1d5db; border-radius: 6px; background: #fff;
+  padding: 0 8px 0 2px; height: 30px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.vel-umbral-field:focus-within { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.vel-umbral-field input {
+  width: 38px; border: 0; outline: 0; background: transparent;
+  font: inherit; font-weight: 600; color: #111827; text-align: right;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.vel-umbral-field input::-webkit-outer-spin-button,
+.vel-umbral-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.vel-umbral-suffix { color: #6b7280; font-weight: 600; margin-left: 2px; }
+.vel-umbral-info {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid #9ca3af; color: #6b7280;
+  font-size: 10px; font-weight: 700; font-style: italic; font-family: Georgia, serif;
+  cursor: help;
+}
+.vel-umbral-info:hover, .vel-umbral-info:focus { border-color: #2563eb; color: #2563eb; outline: 0; }
+
 /* ========== Tabla ========== */
 .table-wrap {
   flex: 1; overflow: auto;

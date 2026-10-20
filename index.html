@@ -275,9 +275,14 @@
         <!-- TAB: COMPARATIVA -->
         <div class="tab-panel" data-panel="comparativa">
           <div class="panel-toolbar">
-            <div class="ctrl" title="La velocidad de venta de cada tipología se calcula desde su inicio de ventas hasta que se vende este % de su stock (o hasta hoy si aún no llega). 100% = hasta agotar. Solo aplica a datos consultados a Inciti, no a Excel.">
-              <label for="velUmbralInput">Vel. Venta: corte al % vendido</label>
-              <input type="number" id="velUmbralInput" min="1" max="100" step="1" style="width:90px; padding:6px 8px; border:1px solid #d1d5db; border-radius:5px; font-size:13px">
+            <div class="vel-umbral">
+              <label for="velUmbralInput">Vel. Venta hasta</label>
+              <span class="vel-umbral-field">
+                <input type="number" id="velUmbralInput" min="1" max="100" step="1" inputmode="numeric" aria-describedby="velUmbralInfo">
+                <span class="vel-umbral-suffix">%</span>
+              </span>
+              <span class="vel-umbral-text">vendido</span>
+              <span class="vel-umbral-info" id="velUmbralInfo" tabindex="0" title="La velocidad de venta de cada tipología se calcula desde su inicio de ventas hasta que se vende este % de su stock (o hasta hoy si aún no llega). 100% = hasta agotar. Solo aplica a datos consultados a Inciti, no a Excel.">i</span>
             </div>
             <button id="exportCompBtn" class="primary-btn">Copiar tabla</button>
           </div>
