@@ -1,5 +1,6 @@
 import { $, detectColType } from './utils.js';
 import { velRate } from './api.js';
+import { isMercadoSombra, adaptMercadoSombra } from './mercadoSombra.js';
 
 // % del stock de una tipología que debe venderse para cortar el cálculo de
 // su velocidad de venta (ver velRate en api.js). Lo elige el usuario en el
@@ -25,7 +26,7 @@ export const state = {
   page: 1,
   pageSize: 50,
   chart: null,
-  source: 'gfk',     // 'gfk' | 'inciti'
+  source: 'gfk',     // 'gfk' | 'inciti' | 'sombra' (Resumen por Programa, mercado sombra)
   // Entidades crudas de la API de Inciti (con periods/stages/programs/netSales
   // completos) — solo se llenan cuando los datos vienen de una consulta API
   // (Dibujar Área / Por Comuna), NO desde Excel. Las usa absorcion.js para
@@ -272,6 +273,21 @@ function loadFile(file) {
     try {
       const data = new Uint8Array(e.target.result);
       const wb = XLSX.read(data, { type: 'array', cellDates: true });
+
+      // Mercado sombra (Resumen por Programa) se reconoce por sus columnas, no
+      // por la fuente elegida: comparte el nombre de hoja "Datos" con GFK, así
+      // que sin esto se cargaría como GFK y se rompería en silencio.
+      const sombraSheet = wb.SheetNames.includes('Datos') ? 'Datos' : wb.SheetNames[0];
+      const sombraRaw = XLSX.utils.sheet_to_json(wb.Sheets[sombraSheet], { defval: '', raw: true });
+      if (isMercadoSombra(sombraRaw)) {
+        const rows = adaptMercadoSombra(sombraRaw, file.name);
+        if (!rows.length) { alert('El resumen de mercado sombra no tiene programas con publicaciones.'); return; }
+        state.source = 'sombra';
+        onDataLoaded(rows);
+        // Sin coordenadas el mapa queda vacío: abrir directo el Resumen.
+        document.querySelector('.tab[data-tab="comparativa"]')?.click();
+        return;
+      }
 
       let rows;
       if (source === 'inciti') {
