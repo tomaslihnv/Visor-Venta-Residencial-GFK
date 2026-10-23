@@ -11,7 +11,7 @@ API_KEY = os.getenv("INCITI_API_URL")   # el UUID
 API_URL = os.getenv("INCITI_API_KEY")   # la URL base
 
 ENDPOINT = API_URL.rstrip("/") + "/get_insights_pro"
-TILES_FILE = Path(__file__).parent / "data" / "comunas_tiles.json"
+TILES_FILE = Path(__file__).parent.parent / "data" / "comunas_tiles.json"
 
 
 def call(market, polygon, tile_idx, total):
